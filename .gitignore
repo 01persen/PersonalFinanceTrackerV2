@@ -1,0 +1,21 @@
+# Repo git + setup awal
+node_modules/
+.opencode/
+.agent_context/
+.env
+.env.local
+.env.*.local
+*.log
+*.pyc
+__pycache__/
+.DS_Store
+/tmp/
+dist/
+build/
+.next/
+out/
+.venv/
+venv/
+*.swp
+.idea/
+.vscode/

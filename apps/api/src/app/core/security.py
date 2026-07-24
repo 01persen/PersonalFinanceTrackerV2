@@ -12,7 +12,8 @@ from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 import bcrypt
-from jose import JWTError, jwt
+import jwt as pyjwt
+from jwt import PyJWTError
 
 from app.core.config import get_settings
 
@@ -55,7 +56,7 @@ def _encode_token(
         "iat": int(now.timestamp()),
         "exp": int((now + expires_delta).timestamp()),
     }
-    return str(jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm))
+    return str(pyjwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm))
 
 
 def create_access_token(user_id: uuid.UUID | str) -> str:
@@ -84,8 +85,12 @@ def decode_token(token: str, *, expected_type: TokenType) -> uuid.UUID:
     """Decode a JWT and return the user id (UUID) when valid for ``expected_type``."""
     settings = get_settings()
     try:
-        payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
-    except JWTError as exc:
+        payload = pyjwt.decode(
+            token,
+            settings.jwt_secret,
+            algorithms=[settings.jwt_algorithm],
+        )
+    except PyJWTError as exc:
         raise TokenError("invalid token") from exc
 
     token_type = payload.get("type")

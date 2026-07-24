@@ -5,7 +5,8 @@ from __future__ import annotations
 import os
 
 os.environ.setdefault("APP_ENV", "test")
-os.environ.setdefault("JWT_SECRET", "test-secret")
+# 32+ bytes so pyjwt doesn't complain the HMAC key is too short for SHA256.
+os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production-32b-min")
 
 from collections.abc import Iterator
 

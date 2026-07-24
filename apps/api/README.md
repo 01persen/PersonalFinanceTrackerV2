@@ -1,7 +1,7 @@
 # pft-api
 
 Backend API untuk Personal Finance Tracker — FastAPI + SQLAlchemy 2 + Alembic,
-dengan Supabase Auth untuk JWT.
+dengan JWT-based auth (email + password, hashed via bcrypt).
 
 Lihat epic detail: `docs/product/epics/epic-0001-foundation-auth-and-data-model.md`.
 
@@ -24,6 +24,22 @@ uv run uvicorn app.main:app --reload
 
 Server jalan di `http://localhost:8000`. OpenAPI docs di `/docs`, health di
 `/health`.
+
+## Auth endpoints
+
+JWT-based, signed dengan `JWT_SECRET` (HS256). Access token dikirim via
+`Authorization: Bearer <token>`.
+
+| Method | Path                  | Auth     | Body / Response                          |
+|--------|-----------------------|----------|------------------------------------------|
+| POST   | `/api/v1/auth/register` | —        | `{email, password}` → `TokenPair`        |
+| POST   | `/api/v1/auth/login`    | —        | `{email, password}` → `TokenPair`        |
+| POST   | `/api/v1/auth/refresh`  | —        | `{refresh_token}` → `AccessToken`        |
+| POST   | `/api/v1/auth/logout`   | Bearer   | — → 204 No Content                       |
+| GET    | `/api/v1/auth/me`       | Bearer   | — → `UserPublic` (profil sendiri)        |
+
+Logout MVP-nya stateless — client discard token, server return 204. Token
+revocation / blacklist masuk post-MVP.
 
 ## Schema & migrations
 
@@ -58,9 +74,13 @@ src/app/
 ├── main.py                # FastAPI app factory
 ├── core/
 │   ├── config.py          # settings (pydantic-settings)
-│   └── logging.py
+│   ├── logging.py
+│   └── security.py        # bcrypt + JWT helpers
 ├── api/
-│   └── router.py          # v1 router aggregator
+│   ├── router.py          # v1 router aggregator
+│   ├── schemas.py         # Pydantic request/response models
+│   └── v1/
+│       └── auth.py        # /auth endpoints
 └── db/
     ├── base.py            # DeclarativeBase + naming convention
     ├── session.py         # engine + sessionmaker
@@ -70,5 +90,4 @@ alembic/                   # Alembic migrations + env.py
 └── versions/              # migration scripts
 ```
 
-Sub-issue `sub-0001-03` nambahin `app/api/v1/auth.py` yang di-include oleh
-`router.py`. Sub-issue `sub-0001-08` nambahin default seed saat register.
+Sub-issue `sub-0001-08` nambahin default seed saat register.

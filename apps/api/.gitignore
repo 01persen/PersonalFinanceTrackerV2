@@ -18,6 +18,11 @@ htmlcov/
 .env
 .env.local
 
+# Local DB for migration scratch / autogenerate
+*.db
+*.sqlite
+*.sqlite3
+
 # IDE
 .idea/
 .vscode/

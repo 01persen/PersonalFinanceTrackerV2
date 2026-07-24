@@ -2,6 +2,7 @@
 node_modules/
 .opencode/
 .agent_context/
+.multica/
 .env
 .env.local
 .env.*.local

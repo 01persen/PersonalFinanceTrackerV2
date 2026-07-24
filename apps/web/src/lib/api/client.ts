@@ -163,13 +163,27 @@ export async function logoutRequest(): Promise<void> {
   await apiRequest<void>("/auth/logout", { method: "POST" });
 }
 
-export async function fetchMe(accessToken: string | null): Promise<AuthUser> {
+export async function fetchMe(accessToken: string | null): Promise<AuthUser | null> {
   const data = await apiRequest<{
     id: string;
     email: string;
     created_at: string;
     updated_at: string;
-  }>("/auth/me", { accessToken });
+  } | null>("/auth/me", { accessToken });
+
+  if (data === null) {
+    return null;
+  }
+
+  if (
+    !data ||
+    typeof data.id !== "string" ||
+    typeof data.email !== "string" ||
+    typeof data.created_at !== "string" ||
+    typeof data.updated_at !== "string"
+  ) {
+    return null;
+  }
 
   return {
     id: data.id,

@@ -21,7 +21,7 @@ import {
   type AuthUser,
 } from "@/lib/api/client";
 
-export type AuthStatus = "loading" | "authenticated" | "unauthenticated";
+export type AuthStatus = "loading" | "authenticated" | "unauthenticated" | "error";
 
 interface AuthContextValue {
   status: AuthStatus;
@@ -31,6 +31,7 @@ interface AuthContextValue {
   login: (payload: { email: string; password: string }) => Promise<void>;
   register: (payload: { email: string; password: string }) => Promise<void>;
   logout: () => Promise<void>;
+  retrySession: () => Promise<void>;
   clearError: () => void;
 }
 
@@ -45,27 +46,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const bootstrap = useCallback(async () => {
     const accessToken = tokenStore.getAccessToken();
+    setError(null);
+
     if (!accessToken) {
       setUser(null);
       setStatus("unauthenticated");
       return;
     }
 
+    setStatus("loading");
+
     try {
       const profile = await fetchMe(accessToken);
       setUser(profile);
       setStatus("authenticated");
     } catch (err) {
-      // Token invalid / expired / backend down — drop lokal state biar guard
-      // bounce ke /login. Refresh flow dipasang di epic berikutnya.
-      tokenStore.clear();
       setUser(null);
-      setStatus("unauthenticated");
-      if (err instanceof ApiError) {
-        // Hanya log untuk diagnosa; tidak munculkan ke UI saat bootstrap.
-        // eslint-disable-next-line no-console
-        console.warn("[auth] bootstrap gagal:", err.status, err.message);
+
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+        tokenStore.clear();
+        setStatus("unauthenticated");
+        return;
       }
+
+      setError("Sesi tidak dapat dimuat. Periksa koneksi lalu coba lagi.");
+      setStatus("error");
     }
   }, []);
 
@@ -147,9 +152,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login,
       register,
       logout,
+      retrySession: bootstrap,
       clearError,
     }),
-    [status, user, isLoading, error, login, register, logout, clearError],
+    [status, user, isLoading, error, login, register, logout, bootstrap, clearError],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

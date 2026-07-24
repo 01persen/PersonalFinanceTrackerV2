@@ -3,7 +3,8 @@
 Frontend Personal Finance Tracker — Next.js (App Router) + TypeScript + Tailwind
 CSS.
 
-Bagian dari sub-issue `sub-0001-04`: inisialisasi frontend + auth UI + guard.
+Fondasi auth dibuat pada `sub-0001-04`; shell responsif dan navigasi dasar
+dilanjutkan pada `sub-0001-05`.
 
 ## Stack
 
@@ -57,15 +58,21 @@ src/
 │   ├── globals.css       # Tailwind base + component classes
 │   ├── layout.tsx        # Root layout, mount <AppProviders>
 │   ├── providers.tsx     # Client-only wrapper untuk AuthProvider
-│   ├── page.tsx          # Halaman utama (private, dibungkus AuthGuard)
+│   ├── page.tsx          # Halaman utama di dalam AppShell + AuthGuard
 │   ├── login/page.tsx    # Form login
 │   └── register/page.tsx # Form daftar
+├── components/shell/
+│   ├── app-shell.tsx     # Komposisi sidebar, header, dan konten
+│   ├── app-header.tsx    # Identitas user dari /me + logout
+│   ├── sidebar.tsx       # Navigasi desktop dan drawer mobile
+│   └── icons.tsx         # Ikon shell tanpa dependency tambahan
 └── lib/
     ├── env.ts            # API base URL + key storage
+    ├── navigation.ts     # Config menu dan helper active route
     ├── api/client.ts     # fetch wrapper + endpoints auth
     └── auth/
         ├── auth-context.tsx  # Context + provider (login/register/logout/me)
-        ├── auth-guard.tsx    # Redirect ke /login saat belum auth
+        ├── auth-guard.tsx    # Loading/error/empty + redirect auth
         └── guest-only.tsx    # Redirect ke / saat sudah auth
 ```
 
@@ -73,7 +80,8 @@ src/
 
 1. **Bootstrap** — saat aplikasi mount, `AuthProvider` cek access token di
    `localStorage`. Kalau ada, panggil `GET /api/v1/auth/me`. Sukses → state
-   `authenticated`. Gagal (401/expired) → bersihkan token, state `unauthenticated`.
+   `authenticated`. Respons 401/403 → bersihkan token dan pindah ke login;
+   kendala jaringan/server → tampilkan error dengan aksi coba lagi.
 2. **Login/Register** — POST ke `/api/v1/auth/login` atau
    `/api/v1/auth/register`, simpan `access_token` + `refresh_token`, lalu
    panggil `/me` untuk dapat profil. Sukses → redirect ke `/`.
@@ -94,5 +102,6 @@ Lihat `apps/api/src/app/api/v1/auth.py` untuk definisi pasti. Ringkasan:
 | POST   | `/api/v1/auth/logout`   | Bearer → 204                                   |
 | GET    | `/api/v1/auth/me`       | Bearer → `UserPublic`                          |
 
-Refresh otomatis (silent retry saat access expired) dipasang di epic berikutnya
-— saat ini jika bootstrap `/me` gagal, token di-drop dan UI bounce ke `/login`.
+Refresh otomatis (silent retry saat access expired) dipasang di epic berikutnya.
+Saat ini respons `/me` 401/403 menghapus token, sedangkan kendala sementara bisa
+dicoba ulang dari error state.

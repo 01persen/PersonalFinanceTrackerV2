@@ -164,7 +164,8 @@ def test_login_rejects_unknown_email(client: TestClient, fresh_db: Session) -> N
 
 def test_me_requires_bearer_token(client: TestClient) -> None:
     resp = client.get("/api/v1/auth/me")
-    assert resp.status_code == 403  # HTTPBearer auto_error returns 403 on missing
+    assert resp.status_code == 401  # HTTPBearer auto_error -> 401 w/ WWW-Authenticate
+    assert resp.headers.get("www-authenticate", "").lower().startswith("bearer")
 
 
 def test_me_rejects_garbage_token(client: TestClient) -> None:
@@ -198,7 +199,8 @@ def test_logout_returns_204_and_keeps_endpoint_protected(
 
 def test_logout_requires_auth(client: TestClient) -> None:
     resp = client.post("/api/v1/auth/logout")
-    assert resp.status_code == 403
+    assert resp.status_code == 401
+    assert resp.headers.get("www-authenticate", "").lower().startswith("bearer")
 
 
 def test_refresh_returns_new_access_token(client: TestClient, fresh_db: Session) -> None:

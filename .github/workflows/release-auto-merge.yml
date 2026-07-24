@@ -4,6 +4,7 @@ on:
   pull_request_target:
     types:
       - labeled
+      - unlabeled
       - synchronize
       - reopened
 
@@ -22,3 +23,14 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPOSITORY: ${{ github.repository }}
         run: gh pr merge "$PR_NUMBER" --repo "$REPOSITORY" --auto --squash --delete-branch
+
+  disable-auto-merge:
+    if: startsWith(github.event.pull_request.base.ref, 'release/') && !contains(github.event.pull_request.labels.*.name, 'epic-ready')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Disable auto-merge
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPOSITORY: ${{ github.repository }}
+        run: gh pr merge "$PR_NUMBER" --repo "$REPOSITORY" --disable-auto || true

@@ -1,0 +1,15 @@
+node_modules
+.next
+out
+build
+dist
+coverage
+pnpm-lock.yaml
+yarn.lock
+# package-lock.json is tracked so CI can use `npm ci` and cache the dependency tree.
+*.log
+.env
+.env.local
+.env.*.local
+.DS_Store
+*.tsbuildinfo

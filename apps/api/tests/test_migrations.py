@@ -26,6 +26,7 @@ EXPECTED_TABLES = {
     "goals",
     "debts",
     "debt_payments",
+    "user_preferences",
 }
 
 EXPECTED_INDEXES = {
@@ -39,6 +40,7 @@ EXPECTED_INDEXES = {
     ("debts", "ix_debts_user_id"),
     ("goals", "ix_goals_user_id"),
     ("debt_payments", "ix_debt_payments_debt_id"),
+    ("user_preferences", "ix_user_preferences_user_id"),
 }
 
 

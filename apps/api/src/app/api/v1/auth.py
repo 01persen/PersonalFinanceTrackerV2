@@ -36,6 +36,7 @@ from app.core.security import (
 )
 from app.db.models.user import User
 from app.db.session import get_session
+from app.services.seed import seed_defaults_for_user
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -86,7 +87,12 @@ def get_current_user(
     status_code=status.HTTP_201_CREATED,
 )
 def register(payload: RegisterRequest, db: Session = Depends(get_db)) -> TokenPair:
-    """Create a new account and return an access/refresh token pair."""
+    """Create a new account and return an access/refresh token pair.
+
+    Also seeds the user's default categories (income + expense grouped, per PRD
+    §14) and preference row (locale id-ID, currency IDR, EF multiplier = 3).
+    The seed is idempotent — safe to retry on transient errors.
+    """
     email = payload.email.lower()
     existing = db.query(User).filter(User.email == email).one_or_none()
     if existing is not None:
@@ -97,6 +103,8 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)) -> TokenPa
 
     user = User(email=email, password_hash=hash_password(payload.password))
     db.add(user)
+    db.flush()
+    seed_defaults_for_user(db, user)
     db.commit()
     db.refresh(user)
     return _issue_pair(user)

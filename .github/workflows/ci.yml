@@ -74,12 +74,18 @@ jobs:
 
       - name: Install web dependencies
         if: matrix.app == 'web'
-        uses: nick-fields/retry@v3
-        with:
-          max_attempts: 3
-          timeout_minutes: 10
-          retry_on: error
-          command: npm ci --no-audit --no-fund --prefer-offline
+        run: |
+          for i in 1 2 3; do
+            echo "::group::npm ci attempt $i"
+            if npm ci --no-audit --no-fund --prefer-offline; then
+              echo "::endgroup::"
+              break
+            fi
+            echo "::endgroup::"
+            if [ "$i" -eq 3 ]; then exit 1; fi
+            echo "Attempt $i failed, retrying in 10s..."
+            sleep 10
+          done
 
       - name: Web lint
         if: matrix.app == 'web'

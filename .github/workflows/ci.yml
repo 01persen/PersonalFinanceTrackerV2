@@ -68,13 +68,18 @@ jobs:
         if: matrix.app == 'web'
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '22.11.0'
           cache: npm
           cache-dependency-path: apps/web/package-lock.json
 
       - name: Install web dependencies
         if: matrix.app == 'web'
-        run: npm ci
+        uses: nick-fields/retry@v3
+        with:
+          max_attempts: 3
+          timeout_minutes: 10
+          retry_on: error
+          command: npm ci --no-audit --no-fund --prefer-offline
 
       - name: Web lint
         if: matrix.app == 'web'

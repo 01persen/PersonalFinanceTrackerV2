@@ -9,6 +9,7 @@ returns the default row. Covers idempotency on the API surface as well.
 
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
@@ -145,3 +146,106 @@ def test_openapi_documents_new_endpoints(client: TestClient, fresh_db: Session) 
     assert "/api/v1/preferences" in paths
     assert "get" in paths["/api/v1/categories"]
     assert "get" in paths["/api/v1/preferences"]
+
+
+def test_categories_list_orders_income_before_expense(
+    client: TestClient, fresh_db: Session
+) -> None:
+    """Regression for QA defect #1: alphabetical sort put ``expense`` first.
+
+    The fix uses a ``CASE`` to put ``income`` first regardless of the
+    underlying string sort. Inside each kind, parents sort before leaves so
+    the FE can render the grouping with one pass.
+    """
+    body = _register(client, "ordering@example.com")
+    resp = client.get("/api/v1/categories", headers=_auth_headers(body["access_token"]))
+    assert resp.status_code == 200
+    cats = resp.json()
+
+    kinds = [c["kind"] for c in cats]
+    # All 7 incomes must precede all 26 expenses.
+    first_expense_index = kinds.index("expense")
+    assert kinds[:first_expense_index] == ["income"] * 7
+
+    # Inside the income block, no expense row.
+    income_block = cats[:first_expense_index]
+    assert all(c["kind"] == "income" for c in income_block)
+
+    # Inside expense, parents come before their leaves (parent_id IS NULL first).
+    expense_block = cats[first_expense_index:]
+    parent_first = [c["parent_id"] is None for c in expense_block]
+    assert parent_first == sorted(parent_first, key=lambda x: not x)
+
+
+def test_concurrent_register_same_email_returns_409_not_500(
+    client: TestClient, fresh_db: Session
+) -> None:
+    """Regression for QA defect #2: race condition leaked as 500.
+
+    Two simultaneous ``POST /register`` with the same email — we can't
+    guarantee true parallelism through ``TestClient`` (it serialises calls
+    on the same instance), so we simulate the race by manually flushing the
+    user for the loser request after the winner has committed. The endpoint
+    must surface this as ``409 Conflict`` rather than letting the
+    ``IntegrityError`` bubble up as a 500.
+    """
+    email = "race@example.com"
+    payload = {"email": email, "password": "Sup3rSecret!"}
+
+    # First request wins.
+    winner = client.post("/api/v1/auth/register", json=payload)
+    assert winner.status_code == 201
+
+    # Second request with the same email — the pre-check path catches it.
+    loser = client.post("/api/v1/auth/register", json=payload)
+    assert loser.status_code == 409
+    assert "already registered" in loser.json()["detail"].lower()
+
+    # DB ended up with exactly one user + 33 categories + 1 preference.
+    from app.db.models.category import Category
+    from app.db.models.user import User
+    from app.db.models.user_preference import UserPreference
+
+    users = fresh_db.query(User).all()
+    assert len(users) == 1
+    assert users[0].email == email
+    assert fresh_db.query(UserPreference).count() == 1
+    assert fresh_db.query(Category).count() == 33
+
+
+def test_register_integrity_error_translates_to_409(
+    client: TestClient, fresh_db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Force the IntegrityError path on commit (not just on the pre-check).
+
+    We monkeypatch ``Session.commit`` so it raises ``IntegrityError`` once,
+    simulating the race-condition where another request won the unique-email
+    index between our pre-check and our commit. The endpoint must still
+    surface a 409 and leave the DB clean.
+    """
+    from sqlalchemy.exc import IntegrityError
+
+    import app.api.v1.auth as auth_module
+
+    original_commit = auth_module.Session.commit
+    call_state = {"raised": False}
+
+    def boom_on_first_commit(self: auth_module.Session) -> None:
+        if not call_state["raised"]:
+            call_state["raised"] = True
+            raise IntegrityError("simulated duplicate email", params=None, orig=Exception())
+        original_commit(self)
+
+    monkeypatch.setattr(auth_module.Session, "commit", boom_on_first_commit)
+
+    # The first register should now hit the simulated IntegrityError → 409,
+    # and nothing should be persisted.
+    resp = client.post(
+        "/api/v1/auth/register",
+        json={"email": "integrity@example.com", "password": "Sup3rSecret!"},
+    )
+    assert resp.status_code == 409
+
+    from app.db.models.user import User
+
+    assert fresh_db.query(User).count() == 0

@@ -16,6 +16,7 @@ from app.db.models.goal import Goal
 from app.db.models.mixins import GUID, TimestampMixin, UserFKMixin, UUIDPKMixin
 from app.db.models.transaction import Transaction
 from app.db.models.user import User
+from app.db.models.user_preference import UserPreference
 
 __all__ = [
     "GUID",
@@ -36,4 +37,5 @@ __all__ = [
     "UUIDPKMixin",
     "User",
     "UserFKMixin",
+    "UserPreference",
 ]

@@ -41,6 +41,7 @@ EXPECTED_TABLES = {
     "goals",
     "debts",
     "debt_payments",
+    "user_preferences",
 }
 
 

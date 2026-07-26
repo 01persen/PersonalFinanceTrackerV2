@@ -1,6 +1,7 @@
 # Project Tracker — Personal Finance Tracker
 
-> **Status:** DRAFT v1.0 — menunggu klarifikasi OQ1–OQ5 (lihat PRD §13)
+> **Status:** v1.4 — epic-0001 **DONE** (8/8 sub-task done); epic-0002 +
+> epic-0008 siap dipromosikan paralel.
 > **Owner:** Tech Leader (Engineering Squad)
 
 Tracker mengikuti urutan dependency graph (bukan urgency bisnis), sesuai SOP.
@@ -10,7 +11,7 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
 
 | ID | Judul | Prioritas | Status | Dependency | Owner Area |
 |----|-------|-----------|--------|-----------|-----------|
-| epic-0001 | Foundation, Auth & Data Model | P-FOUNDATION | **IN_PROGRESS** | — | Backend |
+| epic-0001 | Foundation, Auth & Data Model | P-FOUNDATION | **DONE** | — | Backend |
 | epic-0002 | Multi-Account Management | P-CORE | NOT_STARTED | 0001 | Backend + Frontend |
 | epic-0003 | Transaction Core | P-CORE | NOT_STARTED | 0001, 0002 | Backend + Frontend |
 | epic-0004 | Categorization & Search | P-CORE | NOT_STARTED | 0003 | Backend + Frontend |
@@ -23,7 +24,7 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
 ## Dependency Graph
 
 ```
-0001 Foundation
+0001 Foundation  ✅ DONE
 ├── 0002 Multi-Account
 │   ├── 0003 Transaction Core
 │   │   ├── 0004 Categorization & Search
@@ -36,8 +37,9 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
 
 ## Stage Plan (saat eksekusi dimulai)
 
-- **Stage 1:** epic-0001 (Foundation) — **IN PROGRESS**
-- **Stage 2:** epic-0002 + epic-0008 (paralel — keduanya butuh 0001)
+- **Stage 1:** epic-0001 (Foundation) — **DONE**
+- **Stage 2:** epic-0002 + epic-0008 (paralel — keduanya butuh 0001) — ready
+  to start
 - **Stage 3:** epic-0003
 - **Stage 4 (paralel):** epic-0004 + epic-0005 + epic-0006
 - **Stage 5:** epic-0007
@@ -52,15 +54,29 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
 
 ## Catatan
 
-- epic **0001** sudah IN_PROGRESS (parent issue dibuat, Backend Engineer
-  ditugaskan).
-- epic **0009** sekarang NOT_STARTED dengan scope sempit: recurring untuk
-  tagihan tetap (CC, langganan, cicilan fixed amount) + reminder. Gaji tetap
-  manual (input sendiri setiap bulan, amount variabel).
+- epic **0001** sekarang **DONE** (8/8 sub-task merged). Sub-task list:
+  - ✅ sub-0001-01 — Init backend project (PR #1 merged).
+  - ✅ sub-0001-02 — Schema + migration + seed kosong (PR #2 merged).
+  - ✅ sub-0001-03 — Endpoint auth (PR #3 merged).
+  - ✅ sub-0001-04 — Init frontend + auth UI (PR #5 merged).
+  - ✅ sub-0001-05 — Shell layout (PR #6 merged).
+  - ✅ sub-0001-06 — PWA setup (PR #7 merged).
+  - ✅ sub-0001-07 — CI/CD skeleton (PR #8 merged via Option B: local pre-commit +
+    label gate auto-merge, tanpa branch protection required status checks).
+  - ✅ sub-0001-08 — Default seed data (PR #9 merged; seed ke trigger register).
+- epic **0009** NOT_STARTED dengan scope sempit: recurring untuk tagihan tetap
+  (CC, langganan, cicilan fixed amount) + reminder. Gaji tetap manual (input
+  sendiri setiap bulan, amount variabel).
 - epic **0007** (dashboard) sengaja di stage terakhir karena butuh data dari
   0003 (transaction), 0005 (goal tracker), dan 0006 (debt tracker).
 - epic **0008** (export & settings) bisa paralel dengan 0002 karena berdiri
   sendiri di atas data model 0001.
+- **CI/CD approach (2026-07-26):** Repo `01persen/PersonalFinanceTrackerV2`
+  tetap public (gratis), tapi **drop CI enforcement + branch protection
+  required checks**. Yang aktif: local pre-commit hook
+  (`.githooks/pre-commit` + `scripts/setup-hooks.sh`) + GitHub Actions
+  advisory-only + `release-auto-merge.yml` label gate. Rationale + trade-off
+  lihat Epic Detail Doc sub-0001-07 section Notes.
 
 ## Riwayat Perubahan
 
@@ -72,3 +88,11 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
   spreadsheet; epic-0009 disempitkan ke recurring tagihan tetap saja.
 - v1.2 (2026-07-23) — Tech Leader: lock tech stack PWA + Supabase + FastAPI
   (PRD §9). epic-0001 → IN_PROGRESS, epic-0009 → NOT_STARTED (scope sempit).
+- v1.3 (2026-07-26) — Tech Leader: CI/CD approach berubah ke **Option B**
+  (local pre-commit + label gate). Sub-0001-07 merged; sub-0001-08 promoted
+  ke TODO. Epic Detail Doc `epic-0001-foundation-auth-and-data-model.md`
+  di-update untuk reflect architectural change.
+- v1.4 (2026-07-26) — Backend Engineer: epic-0001 → DONE. 8/8 sub-task
+  closed, semua PR sudah merged ke `release/epic-0001`. Tinggal CI/CD
+  Engineer buka PR `release/epic-0001 → main` untuk finalize. epic-0002 +
+  epic-0008 siap dipromosikan paralel.

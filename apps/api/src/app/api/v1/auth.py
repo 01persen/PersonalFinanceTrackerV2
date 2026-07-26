@@ -15,6 +15,7 @@ from collections.abc import Iterator
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.schemas import (
@@ -36,6 +37,7 @@ from app.core.security import (
 )
 from app.db.models.user import User
 from app.db.session import get_session
+from app.services.seed import seed_defaults_for_user
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -64,6 +66,13 @@ def _credentials_exception(detail: str) -> HTTPException:
     )
 
 
+def _email_conflict_exception() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail="email already registered",
+    )
+
+
 def get_current_user(
     creds: HTTPAuthorizationCredentials = Depends(_bearer),
     db: Session = Depends(get_db),
@@ -86,18 +95,39 @@ def get_current_user(
     status_code=status.HTTP_201_CREATED,
 )
 def register(payload: RegisterRequest, db: Session = Depends(get_db)) -> TokenPair:
-    """Create a new account and return an access/refresh token pair."""
+    """Create a new account and return an access/refresh token pair.
+
+    Also seeds the user's default categories (income + expense grouped, per PRD
+    §14) and preference row (locale id-ID, currency IDR, EF multiplier = 3).
+    The seed is idempotent — safe to retry on transient errors.
+
+    Race-condition handling: two simultaneous requests for the same email can
+    both pass the pre-check ``SELECT``. The actual uniqueness is enforced by
+    the ``users.email`` unique index — the loser of the race gets an
+    ``IntegrityError`` on commit, which we translate to ``409 Conflict``
+    instead of leaking as ``500``.
+    """
     email = payload.email.lower()
     existing = db.query(User).filter(User.email == email).one_or_none()
     if existing is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="email already registered",
-        )
+        raise _email_conflict_exception()
 
     user = User(email=email, password_hash=hash_password(payload.password))
     db.add(user)
-    db.commit()
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        # Pre-check missed a row that another request just committed.
+        raise _email_conflict_exception() from exc
+
+    seed_defaults_for_user(db, user)
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise _email_conflict_exception() from exc
+
     db.refresh(user)
     return _issue_pair(user)
 

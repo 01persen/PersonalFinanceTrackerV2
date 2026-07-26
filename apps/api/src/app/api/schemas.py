@@ -10,6 +10,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
+from app.db.models.enums import CategoryKind
+
 
 class RegisterRequest(BaseModel):
     email: EmailStr
@@ -44,4 +46,27 @@ class UserPublic(BaseModel):
     id: uuid.UUID
     email: EmailStr
     created_at: datetime
+    updated_at: datetime
+
+
+class CategoryPublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    kind: CategoryKind
+    parent_id: uuid.UUID | None = None
+    color: str | None = None
+    archived: bool = False
+
+
+class UserPreferencePublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    locale: str
+    currency: str
+    emergency_fund_multiplier: int
+    dependents_count: int
+    theme: str
     updated_at: datetime

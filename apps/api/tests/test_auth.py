@@ -1,65 +1,18 @@
 """Auth endpoint tests — happy path + invalid credentials + token validation.
 
-The ``client`` fixture is provided by ``conftest.py`` and uses FastAPI's
-``TestClient``. These tests are fully self-contained — no external Supabase
-call, no Postgres connection. The DB session used by the app falls back to the
-default SQLite path because the test env doesn't override ``DATABASE_URL``.
+The ``client`` + ``fresh_db`` fixtures come from ``conftest.py``. ``fresh_db``
+swaps the app's DB engine to a throwaway in-memory SQLite so we don't need a
+real Postgres to run the suite.
 """
 
 from __future__ import annotations
 
 import uuid
-from collections.abc import Iterator
 
-import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, event
-from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.pool import StaticPool
+from sqlalchemy.orm import Session
 
-from app.db.base import Base
 from app.db.models import User
-
-
-@pytest.fixture()
-def fresh_db(monkeypatch: pytest.MonkeyPatch) -> Iterator[Session]:
-    """Fresh in-memory SQLite with the schema created and the app pointed at it.
-
-    ``StaticPool`` keeps a single shared connection open so every session the
-    app opens against this engine sees the same in-memory DB (otherwise each
-    new connection would create its own private DB and the schema we'd just
-    written would vanish).
-
-    We then swap the module-level ``_engine`` and ``_SessionLocal`` in
-    ``app.db.session`` so requests open sessions against our throwaway DB
-    instead of whatever ``DATABASE_URL`` points at in the environment.
-    """
-    engine = create_engine(
-        "sqlite://",
-        future=True,
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-
-    @event.listens_for(engine, "connect")
-    def _fk_on(dbapi_conn, _):
-        cur = dbapi_conn.cursor()
-        cur.execute("PRAGMA foreign_keys=ON")
-        cur.close()
-
-    Base.metadata.create_all(engine)
-    session_factory = sessionmaker(bind=engine, expire_on_commit=False)
-
-    from app.db import session as session_module
-
-    monkeypatch.setattr(session_module, "_engine", engine)
-    monkeypatch.setattr(session_module, "_SessionLocal", session_factory)
-
-    with session_factory() as session:
-        yield session
-
-    Base.metadata.drop_all(engine)
-    engine.dispose()
 
 
 def _register(client: TestClient, email: str, password: str = "Sup3rSecret!") -> dict:

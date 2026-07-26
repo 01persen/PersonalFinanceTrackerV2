@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from app.db.models.debt import Debt
     from app.db.models.goal import Goal
     from app.db.models.transaction import Transaction
+    from app.db.models.user_preference import UserPreference
 
 
 class User(Base, UUIDPKMixin, TimestampMixin):
@@ -39,6 +40,9 @@ class User(Base, UUIDPKMixin, TimestampMixin):
     )
     goals: Mapped[list[Goal]] = relationship(back_populates="user", cascade="all, delete-orphan")
     debts: Mapped[list[Debt]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    preferences: Mapped[UserPreference | None] = relationship(
+        back_populates="user", cascade="all, delete-orphan", uselist=False
+    )
 
     def __repr__(self) -> str:
         return f"User(id={self.id!r}, email={self.email!r})"

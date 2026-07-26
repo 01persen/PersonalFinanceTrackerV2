@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - release/epic-0001
+      - main
+  push:
+    branches:
+      - 'release/*'
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: ${{ matrix.app }} quality
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app:
+          - api
+          - web
+    defaults:
+      run:
+        working-directory: apps/${{ matrix.app }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        if: matrix.app == 'api'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Set up uv
+        if: matrix.app == 'api'
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: 'latest'
+          enable-cache: true
+          cache-dependency-glob: apps/api/uv.lock
+
+      - name: Install API dependencies
+        if: matrix.app == 'api'
+        run: uv sync --extra dev --frozen
+
+      - name: API lint
+        if: matrix.app == 'api'
+        run: uv run ruff check .
+
+      - name: API typecheck
+        if: matrix.app == 'api'
+        run: uv run mypy src
+
+      - name: API tests
+        if: matrix.app == 'api'
+        run: uv run pytest
+
+      - name: Set up Node.js
+        if: matrix.app == 'web'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.11.0'
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install web dependencies
+        if: matrix.app == 'web'
+        run: |
+          for i in 1 2 3; do
+            echo "::group::npm ci attempt $i"
+            if npm ci --no-audit --no-fund --prefer-offline; then
+              echo "::endgroup::"
+              break
+            fi
+            echo "::endgroup::"
+            if [ "$i" -eq 3 ]; then exit 1; fi
+            echo "Attempt $i failed, retrying in 10s..."
+            sleep 10
+          done
+
+      - name: Web lint
+        if: matrix.app == 'web'
+        run: npm run lint
+
+      - name: Web typecheck
+        if: matrix.app == 'web'
+        run: npm run typecheck
+
+      - name: Web build
+        if: matrix.app == 'web'
+        run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'

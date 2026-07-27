@@ -68,7 +68,7 @@ jobs:
         if: matrix.app == 'web'
         uses: actions/setup-node@v4
         with:
-          node-version: '22.11.0'
+          node-version: '22.13.0'  # bump untuk satisfy eslint-visitor-keys@5.0.1 engines requirement (^22.13.0)
           cache: npm
           cache-dependency-path: apps/web/package-lock.json
 
@@ -77,7 +77,7 @@ jobs:
         run: |
           for i in 1 2 3; do
             echo "::group::npm ci attempt $i"
-            if npm ci --no-audit --no-fund --prefer-offline; then
+            if npm ci --no-audit --no-fund --prefer-offline --registry=https://registry.npmjs.org/; then
               echo "::endgroup::"
               break
             fi

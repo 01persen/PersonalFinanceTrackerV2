@@ -6,8 +6,9 @@ grafik, dan view "Pendapatan & Pengeluaran Bulanan" seperti spreadsheet.
 
 ## Status
 
-- **Kickoff:** in progress (issue GRE-2)
-- **Epic-0001 Foundation:** in progress (issue GRE-3, Backend Engineer ditugaskan)
+- **Kickoff:** review (issue GRE-2, awaiting Greenendra sign-off)
+- **Epic-0001 Foundation:** DONE (8/8 sub-task merged ke `main`)
+- **Epic-0002 Multi-Account:** DONE (5/5 sub-task merged ke `release/epic-0002`; release → `main` PR in-flight)
 - **PRD:** v1.2 FINAL
 
 ## Tech Stack (locked)
@@ -45,8 +46,8 @@ grafik, dan view "Pendapatan & Pengeluaran Bulanan" seperti spreadsheet.
 
 | ID | Judul | Prioritas | Status |
 |----|-------|-----------|--------|
-| 0001 | Foundation, Auth & Data Model | P-FOUNDATION | IN_PROGRESS |
-| 0002 | Multi-Account Management | P-CORE | NOT_STARTED |
+| 0001 | Foundation, Auth & Data Model | P-FOUNDATION | **DONE** |
+| 0002 | Multi-Account Management | P-CORE | **DONE** |
 | 0003 | Transaction Core | P-CORE | NOT_STARTED |
 | 0004 | Categorization & Search | P-CORE | NOT_STARTED |
 | 0005 | Goal Trackers (Saving & Emergency Fund) | P-CORE | NOT_STARTED |

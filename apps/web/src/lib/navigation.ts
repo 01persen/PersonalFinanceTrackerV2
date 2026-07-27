@@ -30,7 +30,7 @@ export const navigationItems: readonly NavigationItem[] = [
     href: "/accounts",
     description: "Kelola kas, bank, dompet digital, dan akun lainnya.",
     icon: "accounts",
-    available: false,
+    available: true,
   },
   {
     label: "Transaksi",

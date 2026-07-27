@@ -17,7 +17,7 @@ Acceptance criteria addressed (from sub-0002-05):
 * (b) all tests pass.
 * (c) performance smoke: 5K rows < 200ms — see ``test_perf_5k_rows_under_200ms``.
 * (d) test report is posted in the PR by this run.
-* (e) negative test: transfer A→B 100rb → balance A = opening−100rb,
+* (e) negative test: transfer A→B 100rb → balance A = opening-100rb,
       balance B = opening+100rb, networth unchanged — see
       ``test_negative_transfer_ab_100rb_keeps_networth``.
 
@@ -27,7 +27,7 @@ Risk notes (R1/R2/R3 from the sub-task brief):
   expression inside ``_calculate_balances`` is exercised at least once
   with a known-good expected value.
 * R2 — hand-crafted matrix: ``test_matrix_*`` covers the
-  income × expense × transfer × opening × archived cartesian at the
+  income x expense x transfer x opening x archived cartesian at the
   level the engine actually sees, not what the FE sends.
 * R3 — engine determinism only: there is no service-layer auto-update
   here; transactions are inserted directly per the brief.
@@ -50,7 +50,6 @@ from app.services.balance import (
     calculate_account_balance,
     calculate_user_balances,
 )
-
 
 # ---------------------------------------------------------------------------
 # Shared helpers (kept local to the file so the suite is self-contained).
@@ -208,7 +207,7 @@ def test_income_is_added(fresh_db: Session) -> None:
 
 
 def test_expense_is_subtracted(fresh_db: Session) -> None:
-    """expense row: balance = opening − amount."""
+    """expense row: balance = opening - amount."""
     user = _make_user(fresh_db)
     account = _make_account(
         fresh_db, user_id=user.id, opening_balance_cents=500_000
@@ -301,7 +300,7 @@ def test_multiple_income_and_expense_rows_accumulate(fresh_db: Session) -> None:
         fresh_db, user_id=user.id, account_id=account.id, as_of=date.today()
     )
 
-    # 1_000_000 + 350_000 (income) − 50_000 (expense) = 1_300_000
+    # 1_000_000 + 350_000 (income) - 50_000 (expense) = 1_300_000
     assert balance is not None
     assert balance.balance_cents == 1_300_000
 
@@ -818,18 +817,18 @@ def test_regression_prd_section_8_realistic_first_month(
 
     The engine applies the same sign convention to every account type
     (income +, expense -, transfer signed). For the credit card this
-    means the displayed balance is ``opening + transfer_in − expense``,
+    means the displayed balance is ``opening + transfer_in - expense``,
     and the ``total_liabilities_cents`` sum treats that value as the
     liability. Whether the credit card balance represents "amount owed"
     vs "remaining credit" is a product decision the engine doesn't
     make — the math is consistent either way.
 
     Expected final balance (as_of = today):
-      bank     = 1_000_000 + 5_000_000 − 2_000_000 − 500_000 + 250_000
+      bank     = 1_000_000 + 5_000_000 - 2_000_000 - 500_000 + 250_000
               = 3_750_000
-      card     = 1_500_000 + 500_000 − 200_000
+      card     = 1_500_000 + 500_000 - 200_000
               = 1_800_000
-      total    = 3_750_000 − 1_800_000 = 1_950_000
+      total    = 3_750_000 - 1_800_000 = 1_950_000
     """
     user = _make_user(fresh_db)
     bank = _make_account(
@@ -955,7 +954,7 @@ def test_regression_prd_section_8_realistic_first_month(
             150_000,
         ),
         # liability — credit_card with opening + expense (engine applies
-        # the same −amount convention to liabilities; see
+        # the same -amount convention to liabilities; see
         # ``test_regression_prd_section_8_realistic_first_month`` for the
         # rationale).
         (
@@ -977,8 +976,8 @@ def test_matrix_engine_branch_for_every_transaction_type(
 ) -> None:
     """Cartesian of (account type, transaction type) — engine is correct.
 
-    Financial calc has zero tolerance (R1). Every cell of the 2×3
-    account-type × transaction-type matrix is hit at least once.
+    Financial calc has zero tolerance (R1). Every cell of the 2x3
+    account-type x transaction-type matrix is hit at least once.
     """
     user = _make_user(fresh_db)
     account = _make_account(
@@ -1073,7 +1072,7 @@ def test_perf_5k_rows_under_200ms(fresh_db: Session) -> None:
 def test_negative_transfer_ab_100rb_keeps_networth(
     fresh_db: Session,
 ) -> None:
-    """AC (e): transfer A→B 100rb → balance A = opening−100rb, B = opening+100rb.
+    """AC (e): transfer A→B 100rb → balance A = opening-100rb, B = opening+100rb.
 
     Networth must be unchanged. This is the single non-negotiable rule
     of the saldo engine — if this test ever fails, the sign convention

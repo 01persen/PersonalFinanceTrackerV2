@@ -25,17 +25,25 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Iterator
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.schemas import AccountCreate, AccountPublic, AccountUpdate
+from app.api.schemas import (
+    AccountBalancePublic,
+    AccountBalancesPublic,
+    AccountCreate,
+    AccountPublic,
+    AccountUpdate,
+)
 from app.api.v1.auth import get_current_user
 from app.db.models.account import Account
 from app.db.models.enums import AccountType
 from app.db.models.user import User
 from app.db.session import get_session
+from app.services.balance import calculate_account_balance, calculate_user_balances
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
 
@@ -121,6 +129,60 @@ def list_accounts(
         ).scalars()
     )
     return [AccountPublic.from_account(a) for a in accounts]
+
+
+@router.get("/balances", response_model=AccountBalancesPublic)
+def list_account_balances(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> AccountBalancesPublic:
+    as_of = datetime.now(UTC)
+    balances = calculate_user_balances(db, user_id=current_user.id, as_of=as_of.date())
+    return AccountBalancesPublic(
+        accounts=[
+            AccountBalancePublic(
+                account_id=account.account_id,
+                balance_cents=account.balance_cents,
+                as_of=as_of,
+            )
+            for account in balances.accounts
+        ],
+        total_assets_cents=balances.total_assets_cents,
+        total_liabilities_cents=balances.total_liabilities_cents,
+        networth_cents=balances.networth_cents,
+    )
+
+
+@router.get("/{account_id}/balance", response_model=AccountBalancePublic)
+def get_account_balance(
+    account_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> AccountBalancePublic:
+    account = _get_owned_account(db, account_id=account_id, current_user=current_user)
+    if account.archived:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="account not found",
+        )
+
+    as_of = datetime.now(UTC)
+    balance = calculate_account_balance(
+        db,
+        user_id=current_user.id,
+        account_id=account_id,
+        as_of=as_of.date(),
+    )
+    if balance is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="account not found",
+        )
+    return AccountBalancePublic(
+        account_id=balance.account_id,
+        balance_cents=balance.balance_cents,
+        as_of=as_of,
+    )
 
 
 @router.get("/{account_id}", response_model=AccountPublic)

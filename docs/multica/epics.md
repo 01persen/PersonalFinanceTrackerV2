@@ -1,6 +1,7 @@
 # Project Tracker — Personal Finance Tracker
 
-> **Status:** v1.4 — epic-0001 **DONE** (8/8 sub-task done); epic-0002 +
+> **Status:** v1.5 — epic-0001 **DONE** (8/8); epic-0002 **DONE** (5/5,
+> release branch `release/epic-0002` siap di-merge ke `main`). epic-0003 +
 > epic-0008 siap dipromosikan paralel.
 > **Owner:** Tech Leader (Engineering Squad)
 
@@ -12,7 +13,7 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
 | ID | Judul | Prioritas | Status | Dependency | Owner Area |
 |----|-------|-----------|--------|-----------|-----------|
 | epic-0001 | Foundation, Auth & Data Model | P-FOUNDATION | **DONE** | — | Backend |
-| epic-0002 | Multi-Account Management | P-CORE | NOT_STARTED | 0001 | Backend + Frontend |
+| epic-0002 | Multi-Account Management | P-CORE | **DONE** | 0001 | Backend + Frontend |
 | epic-0003 | Transaction Core | P-CORE | NOT_STARTED | 0001, 0002 | Backend + Frontend |
 | epic-0004 | Categorization & Search | P-CORE | NOT_STARTED | 0003 | Backend + Frontend |
 | epic-0005 | Goal Trackers (Saving & Emergency Fund) | P-CORE | NOT_STARTED | 0002, 0003 | Backend + Frontend |
@@ -54,6 +55,14 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
 
 ## Catatan
 
+- epic **0002** sekarang **DONE** (5/5 sub-task merged ke `release/epic-0002`).
+  Sub-task list:
+  - ✅ sub-0002-01 — Backend CRUD `/accounts` (PR #11 merged).
+  - ✅ sub-0002-02 — Backend agregasi saldo (PR #12 merged).
+  - ✅ sub-0002-03 — Frontend daftar akun + saldo (PR #13 merged; #14 closed obsolete).
+  - ✅ sub-0002-04 — Frontend form tambah/edit akun (PR #15 merged; backend fix PR #16).
+  - ✅ sub-0002-05 — QA saldo engine test suite (PR #17 merged, 34 tests, 100% coverage).
+  - `release/epic-0002` HEAD: `3db0c13`. Tinggal CI/CD Engineer buka PR ke `main`.
 - epic **0001** sekarang **DONE** (8/8 sub-task merged). Sub-task list:
   - ✅ sub-0001-01 — Init backend project (PR #1 merged).
   - ✅ sub-0001-02 — Schema + migration + seed kosong (PR #2 merged).
@@ -96,3 +105,9 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
   closed, semua PR sudah merged ke `release/epic-0001`. Tinggal CI/CD
   Engineer buka PR `release/epic-0001 → main` untuk finalize. epic-0002 +
   epic-0008 siap dipromosikan paralel.
+- v1.5 (2026-07-27) — Tech Leader: epic-0002 → DONE. 5/5 sub-task merged
+  ke `release/epic-0002` (HEAD `3db0c13`). Stage H triggered — buka PR
+  `release/epic-0002 → main` untuk finalize. Backlog baru: extend
+  `ci.yml` ke `release/*` branches (CI gap ditemukan saat merge PR #17)
+  + auto-fix `RUF002` Unicode minus di `tests/test_balance_engine.py`
+  (minor, ruff findings).

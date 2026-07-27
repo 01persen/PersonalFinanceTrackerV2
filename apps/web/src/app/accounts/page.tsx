@@ -522,6 +522,13 @@ function AccountRow({ row }: { row: AccountWithBalance }) {
         </p>
         <p className="text-xs text-slate-500">{row.currency || "IDR"}</p>
       </div>
+      <Link
+        href={`/accounts/${row.id}/edit`}
+        className="ml-2 inline-flex shrink-0 items-center justify-center rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2"
+        aria-label={`Edit akun ${row.name}`}
+      >
+        Edit
+      </Link>
     </li>
   );
 }

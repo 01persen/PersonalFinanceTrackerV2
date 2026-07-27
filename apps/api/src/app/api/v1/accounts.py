@@ -208,10 +208,31 @@ def update_account(
     Only the fields present in the request body are touched. If ``type``
     changes, ``is_asset`` is recomputed and persisted so reporting rows
     stay in sync (G1 single source of truth: ``type``).
+
+    The cross-field rule that ``opening_balance_cents`` may be negative only
+    when the effective type is ``credit_card`` is enforced here against the
+    merged effective values (request payload merged with persisted row). The
+    request-only case is also covered by ``AccountUpdate._check_opening_balance_when_type_provided``;
+    we still re-check here so a single-field PATCH that flips the type to
+    a non-credit-card while the persisted balance is negative is rejected
+    before any write hits the DB.
     """
     account = _get_owned_account(db, account_id=account_id, current_user=current_user)
 
     data = payload.model_dump(exclude_unset=True)
+
+    effective_type: AccountType = data.get("type", account.type)
+    effective_balance: int = data.get("opening_balance_cents", account.opening_balance_cents)
+    if effective_balance < 0 and effective_type != AccountType.CREDIT_CARD:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "opening_balance_cents may be negative only when type is 'credit_card' "
+                f"(effective type={effective_type.value!r}, effective balance="
+                f"{effective_balance})"
+            ),
+        )
+
     if "type" in data:
         account.is_asset = _is_asset(data["type"])
     for field, value in data.items():

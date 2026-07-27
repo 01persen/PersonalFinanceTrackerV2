@@ -82,12 +82,19 @@ class UserPreferencePublic(BaseModel):
 
 
 class AccountCreate(BaseModel):
-    """Input for ``POST /accounts``."""
+    """Input for ``POST /accounts``.
+
+    TL decision (epic-0002): ``opening_balance_cents`` may be negative only when
+    ``type == credit_card`` (outstanding debt). Asset types must remain >= 0.
+    The cross-field check lives on the request schema so 422 is raised by
+    Pydantic before the route runs and the OpenAPI surface advertises the
+    constraint.
+    """
 
     name: str = Field(min_length=1, max_length=120)
     type: AccountType
     currency: str = Field(min_length=3, max_length=3)
-    opening_balance_cents: int = Field(default=0, ge=0)
+    opening_balance_cents: int = Field(default=0)
 
     @model_validator(mode="after")
     def _check_currency(self) -> AccountCreate:
@@ -97,14 +104,34 @@ class AccountCreate(BaseModel):
             )
         return self
 
+    @model_validator(mode="after")
+    def _check_opening_balance(self) -> AccountCreate:
+        if self.opening_balance_cents < 0 and self.type != AccountType.CREDIT_CARD:
+            raise ValueError(
+                "opening_balance_cents may be negative only when type is 'credit_card' "
+                f"(got type={self.type.value!r}, opening_balance_cents="
+                f"{self.opening_balance_cents})"
+            )
+        return self
+
 
 class AccountUpdate(BaseModel):
-    """Input for ``PATCH /accounts/{id}`` — every field is optional."""
+    """Input for ``PATCH /accounts/{id}`` — every field is optional.
+
+    TL decision (epic-0002): ``opening_balance_cents`` may be negative only when
+    the effective ``type`` is ``credit_card``. The schema can only see fields
+    present in the request body, so when *both* ``type`` and
+    ``opening_balance_cents`` are sent in the same PATCH we validate the
+    cross-field rule here (clean 422 with Pydantic detail). The case where
+    only one of them is sent (and the other comes from the persisted row) is
+    enforced inside the route — see ``update_account`` in
+    ``app/api/v1/accounts.py``.
+    """
 
     name: str | None = Field(default=None, min_length=1, max_length=120)
     type: AccountType | None = None
     currency: str | None = Field(default=None, min_length=3, max_length=3)
-    opening_balance_cents: int | None = Field(default=None, ge=0)
+    opening_balance_cents: int | None = None
     archived: bool | None = None
 
     @model_validator(mode="after")
@@ -112,6 +139,21 @@ class AccountUpdate(BaseModel):
         if self.currency is not None and self.currency != "IDR":
             raise ValueError(
                 f"currency must be 'IDR' (MVP is single-currency); got {self.currency!r}"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _check_opening_balance_when_type_provided(self) -> AccountUpdate:
+        if (
+            self.type is not None
+            and self.opening_balance_cents is not None
+            and self.opening_balance_cents < 0
+            and self.type != AccountType.CREDIT_CARD
+        ):
+            raise ValueError(
+                "opening_balance_cents may be negative only when type is 'credit_card' "
+                f"(got type={self.type.value!r}, opening_balance_cents="
+                f"{self.opening_balance_cents})"
             )
         return self
 

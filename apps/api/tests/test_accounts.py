@@ -21,6 +21,7 @@ import uuid
 from datetime import date
 from time import perf_counter
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
@@ -388,6 +389,179 @@ def test_post_rejects_negative_opening_balance_with_422(
         },
     )
     assert resp.status_code == 422
+    # Cross-field validator surfaces a message that names both fields.
+    detail_blob = str(resp.json()["detail"]).lower()
+    assert "credit_card" in detail_blob
+    assert "opening_balance_cents" in detail_blob
+
+
+# TL decision (epic-0002): ``opening_balance_cents`` may be negative only when
+# ``type == credit_card``. Asset types must remain >= 0. PATCH must also
+# enforce the rule against the effective (request merged with persisted) values.
+
+
+@pytest.mark.parametrize("type_", ["bank", "e_wallet", "cash", "investment", "other"])
+def test_post_rejects_negative_opening_balance_for_any_asset_type(
+    client: TestClient, fresh_db: Session, type_: str
+) -> None:
+    headers = _auth_headers(_register(client, f"neg-asset-{type_}@example.com")["access_token"])
+    resp = client.post(
+        "/api/v1/accounts",
+        headers=headers,
+        json={
+            "name": f"acc-{type_}",
+            "type": type_,
+            "currency": "IDR",
+            "opening_balance_cents": -100,
+        },
+    )
+    assert resp.status_code == 422
+
+
+def test_post_allows_negative_opening_balance_for_credit_card(
+    client: TestClient, fresh_db: Session
+) -> None:
+    headers = _auth_headers(_register(client, "cc-neg@example.com")["access_token"])
+    resp = client.post(
+        "/api/v1/accounts",
+        headers=headers,
+        json={
+            "name": "Visa Outstanding",
+            "type": "credit_card",
+            "currency": "IDR",
+            "opening_balance_cents": -500_000,
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["type"] == "credit_card"
+    assert body["opening_balance_cents"] == -500_000
+    assert body["is_asset"] is False
+
+    persisted = fresh_db.get(Account, uuid.UUID(body["id"]))
+    assert persisted is not None
+    assert persisted.opening_balance_cents == -500_000
+
+
+def test_post_allows_zero_opening_balance_for_credit_card(
+    client: TestClient, fresh_db: Session
+) -> None:
+    headers = _auth_headers(_register(client, "cc-zero@example.com")["access_token"])
+    resp = client.post(
+        "/api/v1/accounts",
+        headers=headers,
+        json={
+            "name": "Empty CC",
+            "type": "credit_card",
+            "currency": "IDR",
+            "opening_balance_cents": 0,
+        },
+    )
+    assert resp.status_code == 201, resp.text
+
+
+def test_patch_allows_negative_balance_for_credit_card(
+    client: TestClient, fresh_db: Session
+) -> None:
+    headers = _auth_headers(_register(client, "patch-cc-neg@example.com")["access_token"])
+    created = _create_account(client, headers, name="Visa", type_="credit_card")
+
+    resp = client.patch(
+        f"/api/v1/accounts/{created['id']}",
+        headers=headers,
+        json={"opening_balance_cents": -250_000},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["opening_balance_cents"] == -250_000
+    assert resp.json()["type"] == "credit_card"
+    assert resp.json()["is_asset"] is False
+
+
+def test_patch_rejects_negative_balance_for_asset_account(
+    client: TestClient, fresh_db: Session
+) -> None:
+    headers = _auth_headers(_register(client, "patch-asset-neg@example.com")["access_token"])
+    created = _create_account(client, headers, name="BCA", type_="bank")
+
+    resp = client.patch(
+        f"/api/v1/accounts/{created['id']}",
+        headers=headers,
+        json={"opening_balance_cents": -1},
+    )
+    assert resp.status_code == 422
+    detail_blob = str(resp.json()["detail"]).lower()
+    assert "credit_card" in detail_blob
+
+
+def test_patch_rejects_type_change_to_asset_when_persisted_balance_is_negative(
+    client: TestClient, fresh_db: Session
+) -> None:
+    """Flipping a negative-balance credit_card to an asset type must 422.
+
+    The schema-level validator can't see the persisted balance, so the route
+    is responsible for catching this case against the merged effective value.
+    """
+    headers = _auth_headers(_register(client, "patch-flip@example.com")["access_token"])
+    created = client.post(
+        "/api/v1/accounts",
+        headers=headers,
+        json={
+            "name": "Visa",
+            "type": "credit_card",
+            "currency": "IDR",
+            "opening_balance_cents": -750_000,
+        },
+    ).json()
+
+    resp = client.patch(
+        f"/api/v1/accounts/{created['id']}",
+        headers=headers,
+        json={"type": "bank"},
+    )
+    assert resp.status_code == 422
+
+    # The row stays untouched.
+    still = client.get(f"/api/v1/accounts/{created['id']}", headers=headers).json()
+    assert still["type"] == "credit_card"
+    assert still["opening_balance_cents"] == -750_000
+
+
+def test_patch_allows_type_change_to_credit_card_with_explicit_negative_balance(
+    client: TestClient, fresh_db: Session
+) -> None:
+    """Flipping an asset to credit_card with a new negative balance must 200.
+
+    The schema-level cross-field validator covers the case when both fields
+    are present in the same request — negative balance + new credit_card
+    type is a coherent combination.
+    """
+    headers = _auth_headers(_register(client, "patch-flip-cc@example.com")["access_token"])
+    created = _create_account(
+        client, headers, name="Old Bank", type_="bank", opening_balance_cents=100_000
+    )
+
+    resp = client.patch(
+        f"/api/v1/accounts/{created['id']}",
+        headers=headers,
+        json={"type": "credit_card", "opening_balance_cents": -200_000},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["type"] == "credit_card"
+    assert body["opening_balance_cents"] == -200_000
+    assert body["is_asset"] is False
+
+
+def test_patch_negative_balance_does_not_bypass_auth(client: TestClient, fresh_db: Session) -> None:
+    # Create via API to avoid 422 leak paths.
+    headers = _auth_headers(_register(client, "patch-auth-cc@example.com")["access_token"])
+    created = _create_account(client, headers, name="Visa", type_="credit_card")
+
+    resp = client.patch(
+        f"/api/v1/accounts/{created['id']}",
+        json={"opening_balance_cents": -10_000},
+    )
+    assert resp.status_code == 401
 
 
 # (g) Auth required on every endpoint ----------------------------------------
@@ -643,9 +817,7 @@ def test_balances_exclude_archived_accounts(client: TestClient, fresh_db: Sessio
 
 
 def test_balance_endpoints_isolate_users(client: TestClient, fresh_db: Session) -> None:
-    alice_headers = _auth_headers(
-        _register(client, "balance-alice@example.com")["access_token"]
-    )
+    alice_headers = _auth_headers(_register(client, "balance-alice@example.com")["access_token"])
     bob_headers = _auth_headers(_register(client, "balance-bob@example.com")["access_token"])
     alice_account = _create_account(
         client,

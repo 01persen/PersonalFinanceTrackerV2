@@ -156,3 +156,16 @@ class AccountPublic(BaseModel):
                 "updated_at": account.updated_at,
             }
         )
+
+
+class AccountBalancePublic(BaseModel):
+    account_id: uuid.UUID
+    balance_cents: int
+    as_of: datetime
+
+
+class AccountBalancesPublic(BaseModel):
+    accounts: list[AccountBalancePublic]
+    total_assets_cents: int
+    total_liabilities_cents: int
+    networth_cents: int

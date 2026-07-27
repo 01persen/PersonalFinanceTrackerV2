@@ -18,11 +18,16 @@ account asserts the other user can't see it via any of the read paths.
 from __future__ import annotations
 
 import uuid
+from datetime import date
+from time import perf_counter
 
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.db.models.account import Account
+from app.db.models.enums import TransactionType
+from app.db.models.transaction import Transaction
+from app.services.balance import calculate_user_balances
 
 
 def _register(client: TestClient, email: str) -> dict:
@@ -59,6 +64,31 @@ def _create_account(
     )
     assert resp.status_code == 201, resp.text
     return resp.json()
+
+
+def _add_transaction(
+    db: Session,
+    *,
+    user_id: uuid.UUID,
+    account_id: uuid.UUID,
+    type_: TransactionType,
+    amount_cents: int,
+    transfer_pair_id: uuid.UUID | None = None,
+) -> None:
+    db.add(
+        Transaction(
+            user_id=user_id,
+            account_id=account_id,
+            category_id=None,
+            type=type_,
+            amount_cents=amount_cents,
+            currency="IDR",
+            occurred_on=date.today(),
+            note=None,
+            transfer_pair_id=transfer_pair_id,
+            recurring_rule_id=None,
+        )
+    )
 
 
 # (a) POST returns 201 + body --------------------------------------------------
@@ -436,12 +466,281 @@ def test_other_user_cannot_patch_or_delete_your_account(
     assert still_there["archived"] is False
 
 
+def test_balance_returns_opening_balance_without_transactions(
+    client: TestClient, fresh_db: Session
+) -> None:
+    headers = _auth_headers(_register(client, "balance-opening@example.com")["access_token"])
+    account = _create_account(
+        client,
+        headers,
+        name="Opening Only",
+        opening_balance_cents=725_000,
+    )
+
+    response = client.get(f"/api/v1/accounts/{account['id']}/balance", headers=headers)
+
+    assert response.status_code == 200, response.text
+    assert response.json()["account_id"] == account["id"]
+    assert response.json()["balance_cents"] == 725_000
+    assert response.json()["as_of"]
+
+
+def test_balance_adds_income(client: TestClient, fresh_db: Session) -> None:
+    headers = _auth_headers(_register(client, "balance-income@example.com")["access_token"])
+    account = _create_account(client, headers, opening_balance_cents=100_000)
+    _add_transaction(
+        fresh_db,
+        user_id=uuid.UUID(account["user_id"]),
+        account_id=uuid.UUID(account["id"]),
+        type_=TransactionType.INCOME,
+        amount_cents=250_000,
+    )
+    fresh_db.commit()
+
+    response = client.get(f"/api/v1/accounts/{account['id']}/balance", headers=headers)
+
+    assert response.status_code == 200, response.text
+    assert response.json()["balance_cents"] == 350_000
+
+
+def test_balance_subtracts_expense(client: TestClient, fresh_db: Session) -> None:
+    headers = _auth_headers(_register(client, "balance-expense@example.com")["access_token"])
+    account = _create_account(client, headers, opening_balance_cents=500_000)
+    _add_transaction(
+        fresh_db,
+        user_id=uuid.UUID(account["user_id"]),
+        account_id=uuid.UUID(account["id"]),
+        type_=TransactionType.EXPENSE,
+        amount_cents=125_000,
+    )
+    fresh_db.commit()
+
+    response = client.get(f"/api/v1/accounts/{account['id']}/balance", headers=headers)
+
+    assert response.status_code == 200, response.text
+    assert response.json()["balance_cents"] == 375_000
+
+
+def test_balance_transfer_pair_moves_value_without_changing_networth(
+    client: TestClient, fresh_db: Session
+) -> None:
+    headers = _auth_headers(_register(client, "balance-transfer@example.com")["access_token"])
+    source = _create_account(
+        client,
+        headers,
+        name="Source",
+        opening_balance_cents=500_000,
+    )
+    destination = _create_account(
+        client,
+        headers,
+        name="Destination",
+        opening_balance_cents=200_000,
+    )
+    pair_id = uuid.uuid4()
+    user_id = uuid.UUID(source["user_id"])
+    _add_transaction(
+        fresh_db,
+        user_id=user_id,
+        account_id=uuid.UUID(source["id"]),
+        type_=TransactionType.TRANSFER,
+        amount_cents=-100_000,
+        transfer_pair_id=pair_id,
+    )
+    _add_transaction(
+        fresh_db,
+        user_id=user_id,
+        account_id=uuid.UUID(destination["id"]),
+        type_=TransactionType.TRANSFER,
+        amount_cents=100_000,
+        transfer_pair_id=pair_id,
+    )
+    fresh_db.commit()
+
+    response = client.get("/api/v1/accounts/balances", headers=headers)
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    balances = {row["account_id"]: row["balance_cents"] for row in payload["accounts"]}
+    assert balances[source["id"]] == 400_000
+    assert balances[destination["id"]] == 300_000
+    assert payload["total_assets_cents"] == 700_000
+    assert payload["total_liabilities_cents"] == 0
+    assert payload["networth_cents"] == 700_000
+
+
+def test_balance_summary_handles_mixed_transactions_and_liabilities(
+    client: TestClient, fresh_db: Session
+) -> None:
+    headers = _auth_headers(_register(client, "balance-mixed@example.com")["access_token"])
+    bank = _create_account(
+        client,
+        headers,
+        name="Bank",
+        type_="bank",
+        opening_balance_cents=1_000_000,
+    )
+    credit_card = _create_account(
+        client,
+        headers,
+        name="Card",
+        type_="credit_card",
+        opening_balance_cents=300_000,
+    )
+    user_id = uuid.UUID(bank["user_id"])
+    _add_transaction(
+        fresh_db,
+        user_id=user_id,
+        account_id=uuid.UUID(bank["id"]),
+        type_=TransactionType.INCOME,
+        amount_cents=200_000,
+    )
+    _add_transaction(
+        fresh_db,
+        user_id=user_id,
+        account_id=uuid.UUID(bank["id"]),
+        type_=TransactionType.EXPENSE,
+        amount_cents=50_000,
+    )
+    fresh_db.commit()
+
+    response = client.get("/api/v1/accounts/balances", headers=headers)
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    balances = {row["account_id"]: row["balance_cents"] for row in payload["accounts"]}
+    assert balances[bank["id"]] == 1_150_000
+    assert balances[credit_card["id"]] == 300_000
+    assert payload["total_assets_cents"] == 1_150_000
+    assert payload["total_liabilities_cents"] == 300_000
+    assert payload["networth_cents"] == 850_000
+
+
+def test_balances_exclude_archived_accounts(client: TestClient, fresh_db: Session) -> None:
+    headers = _auth_headers(_register(client, "balance-archived@example.com")["access_token"])
+    account = _create_account(client, headers, opening_balance_cents=450_000)
+    _add_transaction(
+        fresh_db,
+        user_id=uuid.UUID(account["user_id"]),
+        account_id=uuid.UUID(account["id"]),
+        type_=TransactionType.INCOME,
+        amount_cents=50_000,
+    )
+    fresh_db.commit()
+    assert client.delete(f"/api/v1/accounts/{account['id']}", headers=headers).status_code == 204
+
+    summary = client.get("/api/v1/accounts/balances", headers=headers)
+    individual = client.get(f"/api/v1/accounts/{account['id']}/balance", headers=headers)
+
+    assert summary.status_code == 200
+    assert summary.json() == {
+        "accounts": [],
+        "total_assets_cents": 0,
+        "total_liabilities_cents": 0,
+        "networth_cents": 0,
+    }
+    assert individual.status_code == 404
+
+
+def test_balance_endpoints_isolate_users(client: TestClient, fresh_db: Session) -> None:
+    alice_headers = _auth_headers(
+        _register(client, "balance-alice@example.com")["access_token"]
+    )
+    bob_headers = _auth_headers(_register(client, "balance-bob@example.com")["access_token"])
+    alice_account = _create_account(
+        client,
+        alice_headers,
+        name="Alice",
+        opening_balance_cents=900_000,
+    )
+    bob_account = _create_account(
+        client,
+        bob_headers,
+        name="Bob",
+        opening_balance_cents=125_000,
+    )
+
+    forbidden = client.get(
+        f"/api/v1/accounts/{alice_account['id']}/balance",
+        headers=bob_headers,
+    )
+    bob_summary = client.get("/api/v1/accounts/balances", headers=bob_headers)
+
+    assert forbidden.status_code == 404
+    assert bob_summary.status_code == 200
+    assert bob_summary.json()["accounts"] == [
+        {
+            "account_id": bob_account["id"],
+            "balance_cents": 125_000,
+            "as_of": bob_summary.json()["accounts"][0]["as_of"],
+        }
+    ]
+    assert bob_summary.json()["networth_cents"] == 125_000
+
+
+def test_balance_summary_is_empty_for_new_user(client: TestClient, fresh_db: Session) -> None:
+    headers = _auth_headers(_register(client, "balance-empty@example.com")["access_token"])
+
+    response = client.get("/api/v1/accounts/balances", headers=headers)
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "accounts": [],
+        "total_assets_cents": 0,
+        "total_liabilities_cents": 0,
+        "networth_cents": 0,
+    }
+
+
+def test_balance_endpoints_require_auth(client: TestClient, fresh_db: Session) -> None:
+    assert client.get("/api/v1/accounts/balances").status_code == 401
+    assert client.get(f"/api/v1/accounts/{uuid.uuid4()}/balance").status_code == 401
+
+
+def test_balance_query_handles_5000_transactions_under_200ms(
+    client: TestClient, fresh_db: Session
+) -> None:
+    headers = _auth_headers(_register(client, "balance-performance@example.com")["access_token"])
+    account = _create_account(client, headers)
+    user_id = uuid.UUID(account["user_id"])
+    account_id = uuid.UUID(account["id"])
+    fresh_db.add_all(
+        [
+            Transaction(
+                user_id=user_id,
+                account_id=account_id,
+                category_id=None,
+                type=TransactionType.INCOME if index % 2 == 0 else TransactionType.EXPENSE,
+                amount_cents=100,
+                currency="IDR",
+                occurred_on=date.today(),
+                note=None,
+                transfer_pair_id=None,
+                recurring_rule_id=None,
+            )
+            for index in range(5_000)
+        ]
+    )
+    fresh_db.commit()
+
+    started = perf_counter()
+    balances = calculate_user_balances(fresh_db, user_id=user_id, as_of=date.today())
+    elapsed = perf_counter() - started
+
+    assert balances.accounts[0].balance_cents == 0
+    assert elapsed < 0.2
+
+
 def test_openapi_documents_account_endpoints(client: TestClient, fresh_db: Session) -> None:
     spec = client.get("/openapi.json").json()
     paths = spec["paths"]
     assert "/api/v1/accounts" in paths
+    assert "/api/v1/accounts/balances" in paths
+    assert "/api/v1/accounts/{account_id}/balance" in paths
     assert "/api/v1/accounts/{account_id}" in paths
     for verb in ("get", "post"):
         assert verb in paths["/api/v1/accounts"]
+    assert "get" in paths["/api/v1/accounts/balances"]
+    assert "get" in paths["/api/v1/accounts/{account_id}/balance"]
     for verb in ("get", "patch", "delete"):
         assert verb in paths["/api/v1/accounts/{account_id}"]

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type FormEvent,
@@ -14,6 +15,7 @@ import { AppShell } from "@/components/shell/app-shell";
 import { AccountFormFields, isFormDirty, validateOpeningBalance, type AccountFormValues } from "@/components/accounts/account-form-fields";
 import { ConfirmDialog } from "@/components/accounts/confirm-dialog";
 import { ACKNOWLEDGED_FIELDS, useAccountFormState } from "@/components/accounts/account-form-state";
+import { useDirtyGuard } from "@/components/accounts/use-dirty-guard";
 import { useAuth } from "@/lib/auth/auth-context";
 import { AuthGuard } from "@/lib/auth/auth-guard";
 import { fetchAccountById, updateAccount } from "@/lib/api/account-client";
@@ -43,6 +45,8 @@ type SubmitState =
   | { kind: "submitting" }
   | { kind: "success" };
 
+const DIRTY_LEAVE_MESSAGE = "Perubahan belum disimpan. Yakin ingin keluar?";
+
 function EditAccountContent({ accountId }: { accountId: string }) {
   const router = useRouter();
   const { user, logout, isLoading: isLoggingOut } = useAuth();
@@ -58,6 +62,23 @@ function EditAccountContent({ accountId }: { accountId: string }) {
   const [showArchiveConfirm, setShowArchiveConfirm] = useState<boolean>(false);
   const [unarchiveDialog, setUnarchiveDialog] = useState<boolean>(false);
   const initialRef = useRef<AccountFormValues | null>(null);
+
+  const isSubmitting = submit.kind === "submitting";
+  const isSuccess = submit.kind === "success";
+  const isFormActive = !isSubmitting && !isSuccess && load.kind === "ready";
+
+  const isDirty = useMemo<boolean>(() => {
+    if (!isFormActive) return false;
+    const initial = initialRef.current;
+    if (!initial) return false;
+    return isFormDirty(form.values, initial);
+  }, [form.values, isFormActive]);
+
+  const { confirmLeave, armBypass } = useDirtyGuard({
+    isDirty,
+    message: DIRTY_LEAVE_MESSAGE,
+    enabled: isFormActive,
+  });
 
   const loadAccount = useCallback(async () => {
     if (!accountId) {
@@ -101,9 +122,11 @@ function EditAccountContent({ accountId }: { accountId: string }) {
   }, [loadAccount]);
 
   const handleLogout = useCallback(async () => {
+    if (!confirmLeave()) return;
+    armBypass();
     await logout();
     router.replace("/login");
-  }, [logout, router]);
+  }, [armBypass, confirmLeave, logout, router]);
 
   const persist = useCallback(
     async (values: AccountFormValues): Promise<{ ok: true } | { ok: false }> => {
@@ -136,7 +159,10 @@ function EditAccountContent({ accountId }: { accountId: string }) {
           archived: values.archived,
         });
         setSubmit({ kind: "success" });
+        // `armBypass` ensures the popstate from the upcoming `replace`
+        // doesn't retrigger the dirty guard during the grace period.
         window.setTimeout(() => {
+          armBypass();
           router.replace("/accounts");
           router.refresh();
         }, 900);
@@ -147,7 +173,7 @@ function EditAccountContent({ accountId }: { accountId: string }) {
         return { ok: false };
       }
     },
-    [accountId, form, router],
+    [accountId, armBypass, form, router],
   );
 
   const handleSubmit = useCallback(
@@ -212,14 +238,17 @@ function EditAccountContent({ accountId }: { accountId: string }) {
     }
   }, [form]);
 
-  const handleCancel = useCallback(() => {
-    const initial = initialRef.current;
-    if (initial && isFormDirty(form.values, initial)) {
-      const confirmLeave = window.confirm("Perubahan belum disimpan. Yakin ingin keluar?");
-      if (!confirmLeave) return;
-    }
+  const handleBack = useCallback(() => {
+    if (!confirmLeave()) return;
+    armBypass();
     router.replace("/accounts");
-  }, [form.values, router]);
+  }, [armBypass, confirmLeave, router]);
+
+  const handleCancel = useCallback(() => {
+    if (!confirmLeave()) return;
+    armBypass();
+    router.replace("/accounts");
+  }, [armBypass, confirmLeave, router]);
 
   const wantsArchive = initialRef.current
     ? form.values.archived !== initialRef.current.archived && form.values.archived
@@ -240,13 +269,15 @@ function EditAccountContent({ accountId }: { accountId: string }) {
             dihitung ulang di backend.
           </p>
         </div>
-        <Link
-          href="/accounts"
+        <button
+          type="button"
           className="btn-secondary !w-auto px-4"
+          onClick={handleBack}
           aria-label="Kembali ke daftar akun"
+          disabled={!isFormActive}
         >
           Kembali
-        </Link>
+        </button>
       </header>
 
       {load.kind === "loading" ? (
@@ -298,7 +329,7 @@ function EditAccountContent({ accountId }: { accountId: string }) {
               errors={form.errors}
               onChange={form.setValues}
               showArchived={true}
-              disabled={submit.kind === "submitting" || submit.kind === "success"}
+              disabled={!isFormActive}
               idPrefix="account-edit"
             />
 
@@ -335,14 +366,14 @@ function EditAccountContent({ accountId }: { accountId: string }) {
                 type="button"
                 className="btn-secondary"
                 onClick={handleCancel}
-                disabled={submit.kind === "submitting" || submit.kind === "success"}
+                disabled={!isFormActive}
               >
                 Batal
               </button>
               <button
                 type="submit"
                 className="btn-primary"
-                disabled={submit.kind === "submitting" || submit.kind === "success"}
+                disabled={!isFormActive}
               >
                 {submit.kind === "submitting" ? "Menyimpan..." : "Simpan perubahan"}
               </button>

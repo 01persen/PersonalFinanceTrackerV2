@@ -1,15 +1,17 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useState, type FormEvent } from "react";
 
 import { AppShell } from "@/components/shell/app-shell";
 import { AccountFormFields, INITIAL_ACCOUNT_FORM_VALUES, isFormDirty, validateOpeningBalance } from "@/components/accounts/account-form-fields";
 import { ACKNOWLEDGED_FIELDS, useAccountFormState } from "@/components/accounts/account-form-state";
+import { useDirtyGuard } from "@/components/accounts/use-dirty-guard";
 import { useAuth } from "@/lib/auth/auth-context";
 import { AuthGuard } from "@/lib/auth/auth-guard";
 import { createAccount } from "@/lib/api/account-client";
+
+const DIRTY_LEAVE_MESSAGE = "Perubahan belum disimpan. Yakin ingin keluar?";
 
 export default function NewAccountPage() {
   return (
@@ -25,10 +27,23 @@ function NewAccountContent() {
   const form = useAccountFormState(INITIAL_ACCOUNT_FORM_VALUES);
   const [submitState, setSubmitState] = useState<SubmitState>({ kind: "idle" });
 
+  const isSubmitting = submitState.kind === "submitting";
+  const isSuccess = submitState.kind === "success";
+  const isFormActive = !isSubmitting && !isSuccess;
+  const isDirty = isFormActive && isFormDirty(form.values, INITIAL_ACCOUNT_FORM_VALUES);
+
+  const { confirmLeave, armBypass } = useDirtyGuard({
+    isDirty,
+    message: DIRTY_LEAVE_MESSAGE,
+    enabled: isFormActive,
+  });
+
   const handleLogout = useCallback(async () => {
+    if (!confirmLeave()) return;
+    armBypass();
     await logout();
     router.replace("/login");
-  }, [logout, router]);
+  }, [armBypass, confirmLeave, logout, router]);
 
   const handleSubmit = useCallback(
     async (event: FormEvent<HTMLFormElement>) => {
@@ -66,7 +81,10 @@ function NewAccountContent() {
         setSubmitState({ kind: "success", accountId: created.id });
         // Small UX grace period — sub-0002-04 (g) says no optimistic UI,
         // so we show the success state briefly before redirecting.
+        // `armBypass` ensures the programmatic popstate from `replace`
+        // does not retrigger the dirty guard.
         window.setTimeout(() => {
+          armBypass();
           router.replace("/accounts");
           router.refresh();
         }, 900);
@@ -75,19 +93,20 @@ function NewAccountContent() {
         form.applyApiError(error);
       }
     },
-    [form, router, submitState.kind],
+    [armBypass, form, router, submitState.kind],
   );
 
-  const handleCancel = useCallback(() => {
-    if (isFormDirty(form.values, INITIAL_ACCOUNT_FORM_VALUES)) {
-      const confirmLeave = window.confirm("Perubahan belum disimpan. Yakin ingin keluar?");
-      if (!confirmLeave) return;
-    }
+  const handleBack = useCallback(() => {
+    if (!confirmLeave()) return;
+    armBypass();
     router.replace("/accounts");
-  }, [form.values, router]);
+  }, [armBypass, confirmLeave, router]);
 
-  const isSubmitting = submitState.kind === "submitting";
-  const isSuccess = submitState.kind === "success";
+  const handleCancel = useCallback(() => {
+    if (!confirmLeave()) return;
+    armBypass();
+    router.replace("/accounts");
+  }, [armBypass, confirmLeave, router]);
 
   return (
     <AppShell user={user} isLoggingOut={isLoggingOut} onLogout={handleLogout}>
@@ -104,13 +123,15 @@ function NewAccountContent() {
             rumus saldo total = opening + Σ transaksi.
           </p>
         </div>
-        <Link
-          href="/accounts"
+        <button
+          type="button"
           className="btn-secondary !w-auto px-4"
+          onClick={handleBack}
           aria-label="Kembali ke daftar akun"
+          disabled={!isFormActive}
         >
           Kembali
-        </Link>
+        </button>
       </header>
 
       <section className="card mt-6">
@@ -120,7 +141,7 @@ function NewAccountContent() {
             errors={form.errors}
             onChange={form.setValues}
             showArchived={false}
-            disabled={isSubmitting || isSuccess}
+            disabled={!isFormActive}
             idPrefix="account-new"
           />
 
@@ -147,14 +168,14 @@ function NewAccountContent() {
               type="button"
               className="btn-secondary"
               onClick={handleCancel}
-              disabled={isSubmitting || isSuccess}
+              disabled={!isFormActive}
             >
               Batal
             </button>
             <button
               type="submit"
               className="btn-primary"
-              disabled={isSubmitting || isSuccess}
+              disabled={!isFormActive}
             >
               {isSubmitting ? "Menyimpan..." : "Simpan akun"}
             </button>

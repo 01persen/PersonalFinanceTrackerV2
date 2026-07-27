@@ -53,16 +53,23 @@ export interface TokenPair {
 }
 
 export interface ApiErrorBody {
-  detail?: string | { msg: string }[];
+  detail?: string | { msg: string; loc?: unknown[]; type?: string }[];
 }
 
 export class ApiError extends Error {
   public readonly status: number;
+  /**
+   * Raw parsed response body when the server returned JSON. Used by the
+   * form layer to extract per-field 422 validation errors (`detail[].loc`).
+   * `undefined` when the response body wasn't JSON or wasn't captured.
+   */
+  public readonly body?: unknown;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, body?: unknown) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.body = body;
   }
 }
 
@@ -70,19 +77,28 @@ function buildUrl(path: string): string {
   return `${API_BASE_URL}${API_V1_PREFIX}${path}`;
 }
 
-async function parseError(response: Response): Promise<string> {
+interface ParsedError {
+  message: string;
+  body?: unknown;
+}
+
+async function parseError(response: Response): Promise<ParsedError> {
   try {
     const body = (await response.json()) as ApiErrorBody;
     if (typeof body.detail === "string") {
-      return body.detail;
+      return { message: body.detail, body };
     }
     if (Array.isArray(body.detail) && body.detail.length > 0) {
-      return body.detail.map((entry) => entry.msg).join("; ");
+      return {
+        message: body.detail.map((entry) => entry.msg).join("; "),
+        body,
+      };
     }
+    return { message: response.statusText || `HTTP ${response.status}`, body };
   } catch {
     // Body bukan JSON; fallthrough.
   }
-  return response.statusText || `HTTP ${response.status}`;
+  return { message: response.statusText || `HTTP ${response.status}` };
 }
 
 export interface RequestOptions {
@@ -114,8 +130,8 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   });
 
   if (!response.ok) {
-    const message = await parseError(response);
-    throw new ApiError(response.status, message);
+    const parsed = await parseError(response);
+    throw new ApiError(response.status, parsed.message, parsed.body);
   }
 
   if (response.status === 204) {

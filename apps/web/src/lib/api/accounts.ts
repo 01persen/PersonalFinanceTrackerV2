@@ -98,7 +98,7 @@ interface RawAccountPayload {
   updated_at: unknown;
 }
 
-function adaptAccount(raw: RawAccountPayload): Account | null {
+function adaptAccountFromPayload(raw: RawAccountPayload): Account | null {
   if (
     typeof raw.id !== "string" ||
     typeof raw.user_id !== "string" ||
@@ -154,6 +154,16 @@ export function isApiErrorBody(value: unknown): value is ApiErrorBody {
 }
 
 /**
+ * Hand-written adapter for a single account object. Returns `null` when the
+ * payload is missing/malformed — the caller (e.g. the edit page) treats
+ * that as "akun tidak ditemukan".
+ */
+export function adaptAccount(raw: unknown): Account | null {
+  if (!raw || typeof raw !== "object") return null;
+  return adaptAccountFromPayload(raw as RawAccountPayload);
+}
+
+/**
  * Hand-written adapter for `GET /accounts`. Returns `[]` when the payload is
  * missing/malformed — the page treats that as the empty state, not an error.
  */
@@ -162,7 +172,7 @@ export function adaptAccounts(raw: unknown): Account[] {
   const result: Account[] = [];
   for (const item of raw) {
     if (item && typeof item === "object") {
-      const adapted = adaptAccount(item as RawAccountPayload);
+      const adapted = adaptAccountFromPayload(item as RawAccountPayload);
       if (adapted) result.push(adapted);
     }
   }

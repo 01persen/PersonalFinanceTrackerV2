@@ -74,9 +74,12 @@ export function formatIdrAmountOnly(cents: number): string {
  * Fetch the user's active accounts (excludes archived). Sorted by
  * backend — assets first, then name ascending — but we always re-sort on the
  * FE so display logic doesn't change silently if the API order shifts.
+ *
+ * Accepts an `AbortSignal` so the caller can drop in-flight requests when a
+ * newer load starts (race condition guard, see sub-0002-03 defect Cek 5).
  */
-export async function fetchAccounts(): Promise<Account[]> {
-  const raw = await apiRequest<unknown>("/accounts");
+export async function fetchAccounts(options: { signal?: AbortSignal } = {}): Promise<Account[]> {
+  const raw = await apiRequest<unknown>("/accounts", { signal: options.signal });
   return adaptAccounts(raw);
 }
 
@@ -84,8 +87,11 @@ export async function fetchAccounts(): Promise<Account[]> {
  * Fetch the balances snapshot from `/accounts/balances`. Throws the underlying
  * `ApiError` from `apiRequest` when the response is not 2xx — the page is
  * expected to render the retry UI for that case.
+ *
+ * Accepts an `AbortSignal` so the caller can drop in-flight requests when a
+ * newer load starts (race condition guard, see sub-0002-03 defect Cek 5).
  */
-export async function fetchBalances(): Promise<AccountBalances | null> {
-  const raw = await apiRequest<unknown>("/accounts/balances");
+export async function fetchBalances(options: { signal?: AbortSignal } = {}): Promise<AccountBalances | null> {
+  const raw = await apiRequest<unknown>("/accounts/balances", { signal: options.signal });
   return adaptBalances(raw);
 }

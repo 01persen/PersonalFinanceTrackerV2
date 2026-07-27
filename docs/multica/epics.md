@@ -1,8 +1,9 @@
 # Project Tracker — Personal Finance Tracker
 
-> **Status:** v1.5 — epic-0001 **DONE** (8/8); epic-0002 **DONE** (5/5,
-> release branch `release/epic-0002` siap di-merge ke `main`). epic-0003 +
-> epic-0008 siap dipromosikan paralel.
+> **Status:** v1.6 — epic-0001 **DONE** (8/8); epic-0002 **DONE** (7/7 sub-task
+> + Stage 5 release fixup complete; [PR #18](https://github.com/01persen/PersonalFinanceTrackerV2/pull/18)
+> merged ke `main` pada 2026-07-27 13:06 UTC, CI hijau `api quality` + `web quality`).
+> epic-0003 + epic-0008 siap dipromosikan paralel.
 > **Owner:** Tech Leader (Engineering Squad)
 
 Tracker mengikuti urutan dependency graph (bukan urgency bisnis), sesuai SOP.
@@ -55,14 +56,19 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
 
 ## Catatan
 
-- epic **0002** sekarang **DONE** (5/5 sub-task merged ke `release/epic-0002`).
-  Sub-task list:
+- epic **0002** sekarang **DONE** (7/7 sub-task merged). Sub-task list:
   - ✅ sub-0002-01 — Backend CRUD `/accounts` (PR #11 merged).
   - ✅ sub-0002-02 — Backend agregasi saldo (PR #12 merged).
   - ✅ sub-0002-03 — Frontend daftar akun + saldo (PR #13 merged; #14 closed obsolete).
   - ✅ sub-0002-04 — Frontend form tambah/edit akun (PR #15 merged; backend fix PR #16).
   - ✅ sub-0002-05 — QA saldo engine test suite (PR #17 merged, 34 tests, 100% coverage).
-  - `release/epic-0002` HEAD: `3db0c13`. Tinggal CI/CD Engineer buka PR ke `main`.
+  - ✅ sub-0002-06 — Release fix: rebase `release/epic-0002` → `origin/main`,
+    resolve 6 conflict file + fix 17 API lint error (RUF002/RUF003/I001).
+  - ✅ sub-0002-07 — CI fix: bump Node 22.11.0 → 22.13.0 (PR #19) + npm
+    registry override (PR #20) + regenerate `package-lock.json` (PR #21).
+  - [PR #18](https://github.com/01persen/PersonalFinanceTrackerV2/pull/18)
+    `release/epic-0002 → main` **MERGED** (commit `6428c30`) dengan CI
+    `api quality` + `web quality` hijau. Epic-0002 fully shipped.
 - epic **0001** sekarang **DONE** (8/8 sub-task merged). Sub-task list:
   - ✅ sub-0001-01 — Init backend project (PR #1 merged).
   - ✅ sub-0001-02 — Schema + migration + seed kosong (PR #2 merged).
@@ -111,3 +117,9 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
   `ci.yml` ke `release/*` branches (CI gap ditemukan saat merge PR #17)
   + auto-fix `RUF002` Unicode minus di `tests/test_balance_engine.py`
   (minor, ruff findings).
+- v1.6 (2026-07-27) — Tech Leader: Stage 5 release fixup complete (sub-0002-06
+  + sub-0002-07). PR #18 merged ke `main` (commit `6428c30`, 2026-07-27 13:06
+  UTC). CI `api quality` + `web quality` hijau. epic-0002 fully shipped.
+  Sub-task backlog catatan: extend `ci.yml` ke `release/*` branches + auto-fix
+  RUF002 Unicode di `tests/test_balance_engine.py` belum di-merge ke main
+  (di-handle di epic-0003 atau backlog terpisah).

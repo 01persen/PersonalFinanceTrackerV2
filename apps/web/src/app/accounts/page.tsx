@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AppShell } from "@/components/shell/app-shell";
 import { ActionIcon, NavigationIcon } from "@/components/shell/icons";
@@ -114,11 +114,37 @@ function AccountsContent() {
   const [state, setState] = useState<AccountsPageState>(INITIAL_STATE);
   const [reloadToken, setReloadToken] = useState<number>(0);
 
+  /**
+   * Race-condition defenses for sub-0002-03 Cek 5:
+   *   - `latestLoadIdRef` bumps per `load()` call; setState after `await`
+   *     only runs when the captured id is still the latest.
+   *   - `abortControllerRef` lets each new load cancel the prior request
+   *     mid-flight so its `setState` (or `setState`-after-error) never fires.
+   *   - the `useEffect` cleanup aborts any in-flight load on unmount to
+   *     silence React 18 strict-mode warnings.
+   */
+  const latestLoadIdRef = useRef<number>(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
   const load = useCallback(async () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    const loadId = ++latestLoadIdRef.current;
+
     setState((current) => ({ ...current, status: "loading", errorMessage: null }));
 
+    const dropStale = () => loadId !== latestLoadIdRef.current || controller.signal.aborted;
+
     try {
-      const [accounts, balances] = await Promise.all([fetchAccounts(), fetchBalances()]);
+      const [accounts, balances] = await Promise.all([
+        fetchAccounts({ signal: controller.signal }),
+        fetchBalances({ signal: controller.signal }),
+      ]);
+
+      if (dropStale()) return;
 
       if (balances === null) {
         setState({
@@ -145,6 +171,8 @@ function AccountsContent() {
         asOf: balances.accounts[0]?.asOf ?? new Date().toISOString(),
       });
     } catch (error) {
+      if (dropStale()) return;
+      if (controller.signal.aborted) return;
       setState({
         status: "error",
         rows: [],
@@ -159,6 +187,12 @@ function AccountsContent() {
 
   useEffect(() => {
     void load();
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+    };
   }, [load, reloadToken]);
 
   const handleLogout = async () => {

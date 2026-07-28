@@ -6,12 +6,13 @@ Kept in one place for now — once endpoints proliferate we'll split per-domain.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 from app.db.models.account import Account
-from app.db.models.enums import AccountType, CategoryKind
+from app.db.models.enums import AccountType, CategoryKind, TransactionType
 
 
 class RegisterRequest(BaseModel):
@@ -211,3 +212,100 @@ class AccountBalancesPublic(BaseModel):
     total_assets_cents: int
     total_liabilities_cents: int
     networth_cents: int
+
+
+# --- Transactions (epic-0003, sub-0003-01) ------------------------------------
+
+# TL decision (epic-0003, sub-0003-01): the MVP is single-currency (IDR), so
+# we hard-code the request schema and reject anything else with 422 (mirrors
+# the AccountCreate pattern from epic-0002). Amount is stored as ``cents`` to
+# avoid floating-point drift — exactly the same convention used by accounts
+# and the saldo engine.
+
+
+class TransactionCreate(BaseModel):
+    """Body for ``POST /transactions``.
+
+    ``type`` is restricted to ``"income"`` / ``"expense"`` here — the paired
+    ``transfer`` flow ships in sub-0003-03 (a separate endpoint), so a client
+    sending ``type='transfer'`` to this endpoint is rejected with 422 *before*
+    any DB write.
+
+    Validation rules (per acceptance criteria (b)):
+
+    * ``amount_cents`` must be ``> 0`` (Pydantic ``gt=0`` → 422).
+    * ``currency`` must be ``"IDR"`` (model validator → 422).
+    * ``account_id`` must belong to the caller — enforced in the route
+      against the persisted ``accounts`` row (404, not 403, to avoid leaking
+      the existence of other users' accounts — same pattern as the accounts
+      router).
+    * ``category_id`` (optional) must belong to the caller AND match the
+      :class:`CategoryKind` for ``type`` (e.g. ``expense`` → expense category).
+      Enforced in the route; surfaced as 404 for ownership and 422 for
+      category/type mismatch.
+    """
+
+    type: Literal["income", "expense"] = Field(
+        description="Transaction type. ``transfer`` is handled by a separate endpoint (sub-0003-03)."
+    )
+    account_id: uuid.UUID
+    category_id: uuid.UUID | None = None
+    amount_cents: int = Field(
+        gt=0,
+        description="Transaction amount in cents (positive integer). Zero or negative values are rejected.",
+    )
+    currency: str = Field(min_length=3, max_length=3, default="IDR")
+    occurred_on: date
+    note: str | None = Field(default=None, max_length=2000)
+
+    @model_validator(mode="after")
+    def _check_currency(self) -> TransactionCreate:
+        if self.currency != "IDR":
+            raise ValueError(
+                f"currency must be 'IDR' (MVP is single-currency); got {self.currency!r}"
+            )
+        return self
+
+
+class TransactionPublic(BaseModel):
+    """Output shape for a single transaction row (read by ``GET /transactions``
+    and returned by ``POST /transactions``).
+
+    Mirrors the columns on :class:`app.db.models.transaction.Transaction`
+    directly via ``from_attributes=True``. ``type`` is rendered as the
+    :class:`TransactionType` StrEnum so FE consumers get the same string the
+    DB stores (``"income"``/``"expense"``/``"transfer"``), not a Python enum
+    repr.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    user_id: uuid.UUID
+    account_id: uuid.UUID
+    category_id: uuid.UUID | None = None
+    type: TransactionType
+    amount_cents: int
+    currency: str
+    occurred_on: date
+    note: str | None = None
+    transfer_pair_id: uuid.UUID | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class TransactionListPublic(BaseModel):
+    """Response envelope for ``GET /transactions`` (paginated).
+
+    The list is sorted with the most recent ``occurred_on`` first
+    (descending) — the FE "Pendapatan & Pengeluaran Bulanan" view expects
+    that order — and a secondary sort on ``created_at`` desc to break ties
+    between rows on the same day. ``total`` is the *unfiltered* row count
+    for the caller's filter set; ``limit`` + ``offset`` are echoed back so
+    the FE can paginate without re-deriving them.
+    """
+
+    items: list[TransactionPublic]
+    total: int
+    limit: int
+    offset: int

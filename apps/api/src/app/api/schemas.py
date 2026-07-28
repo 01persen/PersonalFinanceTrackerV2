@@ -357,3 +357,61 @@ class TransactionListPublic(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+# --- Transactions summary (epic-0003, sub-0003-04) ----------------------------
+
+
+class SummaryCategoryBreakdownPublic(BaseModel):
+    """One row of the per-category breakdown.
+
+    ``category_id`` is ``None`` for transactions saved without a category
+    (the FE renders these as "Uncategorized" in the breakdown UI). The
+    pair ``(type, category_id)`` is what uniquely identifies a row in the
+    response: income vs expense are reported separately so the FE can
+    render them on different sides of the monthly view.
+    """
+
+    category_id: uuid.UUID | None = None
+    category_name: str | None = None
+    type: TransactionType
+    total_cents: int
+    transaction_count: int
+
+
+class SummaryAccountBreakdownPublic(BaseModel):
+    """One row of the per-account breakdown.
+
+    The pair ``(type, account_id)`` is the unique key: an account that
+    received income *and* paid expenses in the same month surfaces as two
+    rows so the FE can show net movement per account without re-aggregating
+    client-side. ``account_name`` is the snapshot value at response time
+    so a renamed account doesn't break historical reporting.
+    """
+
+    account_id: uuid.UUID
+    account_name: str
+    type: TransactionType
+    total_cents: int
+    transaction_count: int
+
+
+class TransactionSummaryPublic(BaseModel):
+    """Response shape for ``GET /transactions/summary``.
+
+    All amounts are ``int`` cents (same convention as the rest of the API).
+    ``total_income`` + ``total_expense`` + ``net`` reflect the *active*
+    transactions only (``deleted_at IS NULL``); soft-deleted rows never
+    inflate monthly totals. Empty months are surfaced as zeros + empty
+    arrays — never 404 (acceptance criterion (c)).
+    """
+
+    year: int
+    month: int
+    currency: str
+    total_income_cents: int
+    total_expense_cents: int
+    net_cents: int
+    transaction_count: int
+    breakdown_by_category: list[SummaryCategoryBreakdownPublic]
+    breakdown_by_account: list[SummaryAccountBreakdownPublic]

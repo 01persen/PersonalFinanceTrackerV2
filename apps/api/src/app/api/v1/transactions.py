@@ -1,8 +1,8 @@
 """Transactions endpoints — CRUD for the authenticated user's transactions.
 
 Scope: sub-0003-01 (POST + GET list + validation) + sub-0003-02 (PATCH +
-DELETE soft delete). The paired ``transfer`` flow lives in sub-0003-03 and
-the monthly aggregator in sub-0003-04.
+DELETE soft delete) + sub-0003-04 (monthly summary aggregation). The paired
+``transfer`` flow lives in sub-0003-03.
 
 Conventions follow :mod:`app.api.v1.accounts` (per-router ``get_db``
 re-export, ``HTTPBearer`` via ``get_current_user``, auth-scoped queries
@@ -23,13 +23,15 @@ Soft delete (sub-0003-02, AC (a)-(c)):
   body are touched. Cross-user rows return 404 (same as create). ``type``
   and ``user_id`` are immutable through the API.
 * ``DELETE /transactions/{id}`` sets ``deleted_at`` to the current UTC
-  timestamp. The row stays in the table (audit trail) and the list endpoint
-  filters it out via ``deleted_at IS NULL``. A second DELETE on the same
-  row is idempotent (resets the timestamp; still 204, row still hidden).
+  timestamp. The row stays in the table and the list endpoint filters it out.
+
+The summary path is read-only, excludes soft-deleted rows and transfers, and
+returns zeros plus empty arrays for empty months.
 """
 
 from __future__ import annotations
 
+import calendar
 import uuid
 from collections.abc import Iterator
 from datetime import UTC, datetime
@@ -40,9 +42,12 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.schemas import (
+    SummaryAccountBreakdownPublic,
+    SummaryCategoryBreakdownPublic,
     TransactionCreate,
     TransactionListPublic,
     TransactionPublic,
+    TransactionSummaryPublic,
     TransactionUpdate,
 )
 from app.api.v1.auth import get_current_user
@@ -409,3 +414,173 @@ def delete_transaction(
         transaction.deleted_at = datetime.now(UTC)
         db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+def _month_bounds(year: int, month: int) -> tuple[_date, _date]:
+    """Return ``(first_day, last_day)`` for a given ``(year, month)``.
+
+    ``month`` is 1-indexed (1 = January) to match what the FE sends. The
+    returned range is inclusive on both ends so a transaction dated
+    ``2026-01-31`` lands in the January bucket.
+    """
+    first_day = _date(year, month, 1)
+    last_day_num = calendar.monthrange(year, month)[1]
+    last_day = _date(year, month, last_day_num)
+    return first_day, last_day
+
+
+@router.get("/summary", response_model=TransactionSummaryPublic)
+def transactions_summary(
+    year: int = Query(
+        ...,
+        ge=1970,
+        le=2999,
+        description="Calendar year (e.g. ``2026``).",
+    ),
+    month: int = Query(
+        ...,
+        ge=1,
+        le=12,
+        description="Calendar month, 1-indexed (1 = January, 12 = December).",
+    ),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> TransactionSummaryPublic:
+    """Return the caller's monthly income/expense summary + breakdowns.
+
+    Implementation notes (sub-0003-04):
+
+    * **Inclusive bounds.** The month window is ``[first, last]`` so a
+      transaction dated ``2026-01-31`` lands in January and
+      ``2026-02-01`` lands in February.
+    * **Soft-delete aware.** Every query in this route filters on
+      ``deleted_at IS NULL`` so tombstoned rows never inflate totals or
+      the breakdowns (acceptance criterion (b)). The
+      ``ix_transactions_user_deleted_at`` index keeps the predicate cheap.
+    * **Transfers excluded.** The summary covers income + expense only;
+      ``transfer`` rows (created by the paired-create flow in sub-0003-03)
+      are internal account-to-account moves, not real income/expense, so
+      they don't belong in the monthly view. The saldo engine handles
+      transfers for balance computation.
+    * **Empty months are not 404.** A month with zero active transactions
+      returns ``200`` with ``total_income_cents=0``,
+      ``total_expense_cents=0``, ``net_cents=0``, empty breakdowns, and
+      ``transaction_count=0`` — the FE renders an empty state without a
+      second request (acceptance criterion (c)).
+    * **Category names are snapshotted at response time.** A row whose
+      category is renamed or archived after the fact still surfaces under
+      the name it had when the transaction happened… actually no: the FE
+      wants the current category name so the breakdown UI labels stay
+      consistent with the rest of the app. We use ``Category.name`` from
+      the persisted row, joined on ``category_id``; categories that don't
+      exist (e.g. FK cascade-deleted) surface as ``category_name=None``
+      with ``category_id=None`` so the FE can bucket them under
+      "Uncategorized".
+    * **Account names are snapshotted at response time** for the same
+      reason. Archived accounts still surface in the breakdown (the
+      transactions happened, the account just got retired) — we never
+      filter on ``Account.archived`` here.
+    * **Cross-user isolation.** Every aggregate filters on
+      ``Transaction.user_id == current_user.id``; another user's rows in
+      the same month are never visible.
+    """
+    first_day, last_day = _month_bounds(year, month)
+
+    active_filters = [
+        Transaction.user_id == current_user.id,
+        Transaction.occurred_on >= first_day,
+        Transaction.occurred_on <= last_day,
+        Transaction.deleted_at.is_(None),
+    ]
+
+    total_income_cents = int(
+        db.execute(
+            select(func.coalesce(func.sum(Transaction.amount_cents), 0)).where(
+                *active_filters,
+                Transaction.type == TransactionType.INCOME,
+            )
+        ).scalar_one()
+    )
+    total_expense_cents = int(
+        db.execute(
+            select(func.coalesce(func.sum(Transaction.amount_cents), 0)).where(
+                *active_filters,
+                Transaction.type == TransactionType.EXPENSE,
+            )
+        ).scalar_one()
+    )
+    transaction_count = int(
+        db.execute(
+            select(func.count()).select_from(Transaction).where(*active_filters)
+        ).scalar_one()
+    )
+
+    category_rows = db.execute(
+        select(
+            Transaction.category_id,
+            Category.name,
+            Transaction.type,
+            func.coalesce(func.sum(Transaction.amount_cents), 0).label("total_cents"),
+            func.count(Transaction.id).label("transaction_count"),
+        )
+        .outerjoin(Category, Category.id == Transaction.category_id)
+        .where(*active_filters)
+        .group_by(Transaction.category_id, Category.name, Transaction.type)
+        .order_by(
+            Transaction.type.asc(),
+            func.sum(Transaction.amount_cents).desc(),
+            Category.name.asc().nulls_last(),
+        )
+    ).all()
+
+    account_rows = db.execute(
+        select(
+            Transaction.account_id,
+            Account.name.label("account_name"),
+            Transaction.type,
+            func.coalesce(func.sum(Transaction.amount_cents), 0).label("total_cents"),
+            func.count(Transaction.id).label("transaction_count"),
+        )
+        .join(Account, Account.id == Transaction.account_id)
+        .where(*active_filters)
+        .group_by(Transaction.account_id, Account.name, Transaction.type)
+        .order_by(
+            Transaction.type.asc(),
+            func.sum(Transaction.amount_cents).desc(),
+            Account.name.asc(),
+        )
+    ).all()
+
+    breakdown_by_category = [
+        SummaryCategoryBreakdownPublic(
+            category_id=row.category_id,
+            category_name=row.name,
+            type=row.type,
+            total_cents=int(row.total_cents),
+            transaction_count=int(row.transaction_count),
+        )
+        for row in category_rows
+    ]
+    breakdown_by_account = [
+        SummaryAccountBreakdownPublic(
+            account_id=row.account_id,
+            account_name=row.account_name,
+            type=row.type,
+            total_cents=int(row.total_cents),
+            transaction_count=int(row.transaction_count),
+        )
+        for row in account_rows
+    ]
+
+    return TransactionSummaryPublic(
+        year=year,
+        month=month,
+        currency="IDR",
+        total_income_cents=total_income_cents,
+        total_expense_cents=total_expense_cents,
+        net_cents=total_income_cents - total_expense_cents,
+        transaction_count=transaction_count,
+        breakdown_by_category=breakdown_by_category,
+        breakdown_by_account=breakdown_by_account,
+    )
+

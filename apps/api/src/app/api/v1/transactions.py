@@ -1,15 +1,15 @@
 """Transactions endpoints — CRUD for the authenticated user's transactions.
 
-Scope: sub-0003-01 (POST + GET list + validation). PATCH / DELETE land in
-sub-0003-02 (with the soft-delete behaviour) and the paired ``transfer``
-flow lives in sub-0003-03.
+Scope: sub-0003-01 (POST + GET list + validation) + sub-0003-02 (PATCH +
+DELETE soft delete). The paired ``transfer`` flow lives in sub-0003-03 and
+the monthly aggregator in sub-0003-04.
 
 Conventions follow :mod:`app.api.v1.accounts` (per-router ``get_db``
 re-export, ``HTTPBearer`` via ``get_current_user``, auth-scoped queries
 that never read across users, 404 instead of 403 for ``not yours``
 payloads).
 
-Validation rules (per acceptance criteria (b)):
+Validation rules (sub-0003-01, AC (b)):
 
 * ``amount_cents > 0`` — Pydantic ``Field(gt=0)`` → 422.
 * ``currency == "IDR"`` — model validator → 422.
@@ -17,23 +17,34 @@ Validation rules (per acceptance criteria (b)):
 * ``category_id`` (optional) belongs to the caller AND its ``kind`` matches
   the transaction ``type`` — 404 for ownership, 422 for kind mismatch.
 
-The list path is paginated (``limit`` + ``offset``) and filterable on
-``occurred_on`` range, ``account_id``, ``type``, and ``category_id``.
-Results sort by ``occurred_on`` desc, ``created_at`` desc to give the FE a
-stable "Pendapatan & Pengeluaran Bulanan" view.
+Soft delete (sub-0003-02, AC (a)-(c)):
+
+* ``PATCH /transactions/{id}`` is partial — only the fields present in the
+  body are touched. Cross-user rows return 404 (same as create). ``type``
+  and ``user_id`` are immutable through the API.
+* ``DELETE /transactions/{id}`` sets ``deleted_at`` to the current UTC
+  timestamp. The row stays in the table (audit trail) and the list endpoint
+  filters it out via ``deleted_at IS NULL``. A second DELETE on the same
+  row is idempotent (resets the timestamp; still 204, row still hidden).
 """
 
 from __future__ import annotations
 
 import uuid
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from datetime import date as _date
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.api.schemas import TransactionCreate, TransactionListPublic, TransactionPublic
+from app.api.schemas import (
+    TransactionCreate,
+    TransactionListPublic,
+    TransactionPublic,
+    TransactionUpdate,
+)
 from app.api.v1.auth import get_current_user
 from app.db.models.account import Account
 from app.db.models.category import Category
@@ -125,6 +136,32 @@ def _validate_category(
         )
 
 
+def _get_owned_transaction(
+    db: Session,
+    *,
+    transaction_id: uuid.UUID,
+    current_user: User,
+) -> Transaction:
+    """Load a transaction and assert it belongs to the caller.
+
+    Soft-deleted rows are surfaced as 404 (same as "not yours") so the FE
+    can't observe a deleted row through a stale id and PATCH/DELETE on a
+    tombstoned row returns the same code as PATCH/DELETE on a foreign id.
+    """
+    transaction = db.get(Transaction, transaction_id)
+    if transaction is None or transaction.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="transaction not found",
+        )
+    if transaction.deleted_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="transaction not found",
+        )
+    return transaction
+
+
 @router.post(
     "",
     response_model=TransactionPublic,
@@ -137,8 +174,8 @@ def create_transaction(
 ) -> TransactionPublic:
     """Create an income or expense transaction for the current user.
 
-    Returns 201 with the persisted row. The soft-delete ``deleted_at``
-    column ships with sub-0003-02 — for now the row is hard-saved.
+    Returns 201 with the persisted row. ``deleted_at`` defaults to NULL so
+    the row is immediately visible to GET /transactions.
     """
     type_enum = TransactionType(payload.type)
     account = _get_owned_account(db, account_id=payload.account_id, current_user=current_user)
@@ -162,6 +199,7 @@ def create_transaction(
         note=payload.note,
         transfer_pair_id=None,
         recurring_rule_id=None,
+        deleted_at=None,
     )
     db.add(transaction)
     db.commit()
@@ -212,6 +250,10 @@ def list_transactions(
     includes ``total`` so the FE can render pagination without a second
     request.
 
+    Soft-deleted rows (``deleted_at IS NOT NULL``) are excluded (AC (b)).
+    The list and the ``total`` count use the same predicate so pagination
+    stays consistent.
+
     Validation:
 
     * ``account_id`` must belong to the caller — 404 otherwise.
@@ -248,7 +290,10 @@ def list_transactions(
                 detail="category not found",
             )
 
-    base_where = [Transaction.user_id == current_user.id]
+    base_where = [
+        Transaction.user_id == current_user.id,
+        Transaction.deleted_at.is_(None),
+    ]
     if date_from is not None:
         base_where.append(Transaction.occurred_on >= date_from)
     if date_to is not None:
@@ -284,3 +329,83 @@ def list_transactions(
         limit=limit,
         offset=offset,
     )
+
+
+@router.patch("/{transaction_id}", response_model=TransactionPublic)
+def update_transaction(
+    transaction_id: uuid.UUID,
+    payload: TransactionUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> TransactionPublic:
+    """Partial update of a single transaction (scoped to the caller).
+
+    Only the fields present in the request body are touched. ``type``,
+    ``user_id``, ``transfer_pair_id``, ``recurring_rule_id`` and
+    ``deleted_at`` are server-controlled and never editable through this
+    endpoint (silently ignored if a client sends them — the request only
+    declares the editable subset on the schema). Cross-user rows return
+    404 (same as the create / list endpoints), and PATCH on a soft-deleted
+    row also returns 404 so a stale id from the client never resurrects a
+    tombstoned row.
+
+    Validation mirrors POST: ``amount_cents > 0`` (Pydantic), ``currency ==
+    "IDR"`` (model validator), ``account_id`` ownership (404), and
+    ``category_id`` ownership + kind match (404 / 422).
+    """
+    transaction = _get_owned_transaction(
+        db, transaction_id=transaction_id, current_user=current_user
+    )
+
+    data = payload.model_dump(exclude_unset=True)
+
+    if "account_id" in data:
+        _get_owned_account(db, account_id=data["account_id"], current_user=current_user)
+
+    if "category_id" in data and data["category_id"] is not None:
+        _validate_category(
+            db,
+            category_id=data["category_id"],
+            current_user=current_user,
+            type_=transaction.type,
+        )
+
+    for field, value in data.items():
+        setattr(transaction, field, value)
+
+    db.commit()
+    db.refresh(transaction)
+    return TransactionPublic.model_validate(transaction)
+
+
+@router.delete(
+    "/{transaction_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+)
+def delete_transaction(
+    transaction_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    """Soft-delete a transaction by setting ``deleted_at``.
+
+    The row stays in the table (audit trail) and is filtered out of
+    GET /transactions by the ``deleted_at IS NULL`` predicate (AC (b)).
+    The timestamp is recorded server-side (``datetime.now(UTC)``) so all
+    clients see the same audit value regardless of clock skew.
+
+    Calling DELETE on a soft-deleted row is a no-op (idempotent) — the
+    row is already hidden from the list endpoint and the final 204 makes
+    the retry safe to issue without state-checking first.
+    """
+    transaction = db.get(Transaction, transaction_id)
+    if transaction is None or transaction.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="transaction not found",
+        )
+    if transaction.deleted_at is None:
+        transaction.deleted_at = datetime.now(UTC)
+        db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, Date, Enum, ForeignKey, Index, String, Text
+from sqlalchemy import BigInteger, Date, DateTime, Enum, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -24,6 +24,7 @@ class Transaction(Base, UUIDPKMixin, UserFKMixin, TimestampMixin):
         Index("ix_transactions_user_occurred_on", "user_id", "occurred_on"),
         Index("ix_transactions_account_occurred_on", "account_id", "occurred_on"),
         Index("ix_transactions_category", "category_id"),
+        Index("ix_transactions_user_deleted_at", "user_id", "deleted_at"),
     )
 
     account_id: Mapped[str] = mapped_column(
@@ -46,6 +47,11 @@ class Transaction(Base, UUIDPKMixin, UserFKMixin, TimestampMixin):
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     transfer_pair_id: Mapped[str | None] = mapped_column(GUID(), nullable=True)
     recurring_rule_id: Mapped[str | None] = mapped_column(GUID(), nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        default=None,
+    )
 
     user: Mapped[User] = relationship(back_populates="transactions")
     account: Mapped[Account] = relationship(back_populates="transactions")

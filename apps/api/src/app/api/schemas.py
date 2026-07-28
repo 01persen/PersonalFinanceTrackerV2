@@ -267,15 +267,62 @@ class TransactionCreate(BaseModel):
         return self
 
 
+class TransactionUpdate(BaseModel):
+    """Body for ``PATCH /transactions/{id}`` — every field is optional.
+
+    Editable fields mirror the user-editable portion of the create schema
+    (AC: only own-user; field invalid ditolak). ``type`` is intentionally
+    rejected here — the paired ``transfer`` flow ships in sub-0003-03 and a
+    transaction's semantic type is immutable after creation (cash-flow
+    books stay consistent). ``user_id`` / ``account_id`` / ``transfer_pair_id``
+    are server-controlled and never editable through this endpoint.
+
+    ``extra="forbid"`` so a client attempting to edit ``type`` (or any
+    other immutable field) gets a 422 with a clear Pydantic error before
+    the route runs — exactly the same surface as the create schema.
+
+    Validation rules (per AC (a)):
+
+    * ``amount_cents`` must be ``> 0`` when provided (Pydantic ``gt=0`` → 422).
+    * ``currency`` must be ``"IDR"`` when provided (model validator → 422).
+    * ``account_id`` belongs to the caller — enforced in the route (404).
+    * ``category_id`` (optional) belongs to the caller AND matches the
+      persisted transaction's ``type`` — enforced in the route (404 for
+      ownership, 422 for kind mismatch).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    account_id: uuid.UUID | None = None
+    category_id: uuid.UUID | None = None
+    amount_cents: int | None = Field(
+        default=None,
+        gt=0,
+        description="Transaction amount in cents (positive integer). Zero or negative values are rejected.",
+    )
+    currency: str | None = Field(default=None, min_length=3, max_length=3)
+    occurred_on: date | None = None
+    note: str | None = Field(default=None, max_length=2000)
+
+    @model_validator(mode="after")
+    def _check_currency(self) -> TransactionUpdate:
+        if self.currency is not None and self.currency != "IDR":
+            raise ValueError(
+                f"currency must be 'IDR' (MVP is single-currency); got {self.currency!r}"
+            )
+        return self
+
+
 class TransactionPublic(BaseModel):
     """Output shape for a single transaction row (read by ``GET /transactions``
-    and returned by ``POST /transactions``).
+    and returned by ``POST /transactions`` / ``PATCH /transactions/{id}``).
 
     Mirrors the columns on :class:`app.db.models.transaction.Transaction`
     directly via ``from_attributes=True``. ``type`` is rendered as the
     :class:`TransactionType` StrEnum so FE consumers get the same string the
     DB stores (``"income"``/``"expense"``/``"transfer"``), not a Python enum
-    repr.
+    repr. ``deleted_at`` is exposed so the FE can badge a deleted row (the
+    default list endpoint still hides it via ``deleted_at IS NULL``).
     """
 
     model_config = ConfigDict(from_attributes=True)
@@ -290,6 +337,7 @@ class TransactionPublic(BaseModel):
     occurred_on: date
     note: str | None = None
     transfer_pair_id: uuid.UUID | None = None
+    deleted_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 

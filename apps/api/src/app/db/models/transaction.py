@@ -25,6 +25,7 @@ class Transaction(Base, UUIDPKMixin, UserFKMixin, TimestampMixin):
         Index("ix_transactions_account_occurred_on", "account_id", "occurred_on"),
         Index("ix_transactions_category", "category_id"),
         Index("ix_transactions_user_deleted_at", "user_id", "deleted_at"),
+        Index("ix_transactions_transfer_group_id", "transfer_group_id"),
     )
 
     account_id: Mapped[str] = mapped_column(
@@ -46,6 +47,7 @@ class Transaction(Base, UUIDPKMixin, UserFKMixin, TimestampMixin):
     occurred_on: Mapped[date] = mapped_column(Date, nullable=False)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     transfer_pair_id: Mapped[str | None] = mapped_column(GUID(), nullable=True)
+    transfer_group_id: Mapped[str | None] = mapped_column(GUID(), nullable=True)
     recurring_rule_id: Mapped[str | None] = mapped_column(GUID(), nullable=True)
     deleted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),

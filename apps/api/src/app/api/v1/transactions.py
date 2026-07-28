@@ -25,8 +25,19 @@ Soft delete (sub-0003-02, AC (a)-(c)):
 * ``DELETE /transactions/{id}`` sets ``deleted_at`` to the current UTC
   timestamp. The row stays in the table and the list endpoint filters it out.
 
+The paired ``POST /transactions/transfer`` endpoint (sub-0003-03) creates
+two rows in a single DB transaction — an ``expense`` on the source account
+and an ``income`` on the destination account — both linked by the same
+``transfer_pair_id`` and ``transfer_group_id``. Either both rows land or
+neither does; see :func:`create_transfer` for the atomicity contract.
+
 The summary path is read-only, excludes soft-deleted rows and transfers, and
 returns zeros plus empty arrays for empty months.
+
+The list path is paginated (``limit`` + ``offset``) and filterable on
+``occurred_on`` range, ``account_id``, ``type``, and ``category_id``.
+Results sort by ``occurred_on`` desc, ``created_at`` desc to give the FE a
+stable "Pendapatan & Pengeluaran Bulanan" view.
 """
 
 from __future__ import annotations
@@ -49,6 +60,8 @@ from app.api.schemas import (
     TransactionPublic,
     TransactionSummaryPublic,
     TransactionUpdate,
+    TransferCreate,
+    TransferPublic,
 )
 from app.api.v1.auth import get_current_user
 from app.db.models.account import Account
@@ -203,6 +216,7 @@ def create_transaction(
         occurred_on=payload.occurred_on,
         note=payload.note,
         transfer_pair_id=None,
+        transfer_group_id=None,
         recurring_rule_id=None,
         deleted_at=None,
     )
@@ -210,6 +224,95 @@ def create_transaction(
     db.commit()
     db.refresh(transaction)
     return TransactionPublic.model_validate(transaction)
+
+
+@router.post(
+    "/transfer",
+    response_model=TransferPublic,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_transfer(
+    payload: TransferCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> TransferPublic:
+    """Create a paired transfer between two of the caller's accounts.
+
+    Persists exactly two rows in a single DB transaction:
+
+    * an ``expense`` transaction on ``source_account_id`` for
+      ``amount_cents`` currency IDR on ``occurred_on``;
+    * an ``income`` transaction on ``destination_account_id`` for the
+      same ``amount_cents`` currency IDR on the same ``occurred_on``.
+
+    Both rows share the same ``transfer_pair_id`` and ``transfer_group_id``
+    (a single fresh UUID per call). The saldo engine's sign convention
+    (``expense`` → ``-amount``, ``income`` → ``+amount``) does the
+    bookkeeping: the source loses ``amount_cents`` and the destination
+    gains ``amount_cents``, networth unchanged.
+
+    Atomicity contract (AC (a)): the two inserts run inside one
+    ``db.begin()`` block and the entire batch is committed in a single
+    ``commit()`` call. If any check fails after the inserts begin — or
+    the commit itself raises (constraint violation, transient DB error,
+    etc.) — SQLAlchemy rollback discards both rows.
+
+    Validation contract:
+
+    * ``amount_cents > 0`` (Pydantic ``gt=0``) → 422.
+    * ``currency == "IDR"`` (model validator) → 422.
+    * ``source_account_id != destination_account_id`` (model validator)
+      → 422.
+    * Both accounts belong to the caller and are non-archived →
+      404 for ownership/missing, 404 for archived (mirrors the
+      accounts router).
+    """
+    source = _get_owned_account(db, account_id=payload.source_account_id, current_user=current_user)
+    destination = _get_owned_account(
+        db, account_id=payload.destination_account_id, current_user=current_user
+    )
+
+    pair_id = uuid.uuid4()
+    note = payload.note
+
+    source_tx = Transaction(
+        user_id=current_user.id,
+        account_id=source.id,
+        category_id=None,
+        type=TransactionType.EXPENSE,
+        amount_cents=payload.amount_cents,
+        currency=payload.currency,
+        occurred_on=payload.occurred_on,
+        note=note,
+        transfer_pair_id=pair_id,
+        transfer_group_id=pair_id,
+        recurring_rule_id=None,
+    )
+    destination_tx = Transaction(
+        user_id=current_user.id,
+        account_id=destination.id,
+        category_id=None,
+        type=TransactionType.INCOME,
+        amount_cents=payload.amount_cents,
+        currency=payload.currency,
+        occurred_on=payload.occurred_on,
+        note=note,
+        transfer_pair_id=pair_id,
+        transfer_group_id=pair_id,
+        recurring_rule_id=None,
+    )
+
+    db.add_all([source_tx, destination_tx])
+    db.commit()
+    db.refresh(source_tx)
+    db.refresh(destination_tx)
+
+    return TransferPublic(
+        source=TransactionPublic.model_validate(source_tx),
+        destination=TransactionPublic.model_validate(destination_tx),
+        transfer_pair_id=pair_id,
+        transfer_group_id=pair_id,
+    )
 
 
 @router.get("", response_model=TransactionListPublic)
@@ -583,4 +686,3 @@ def transactions_summary(
         breakdown_by_category=breakdown_by_category,
         breakdown_by_account=breakdown_by_account,
     )
-

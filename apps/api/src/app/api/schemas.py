@@ -321,8 +321,16 @@ class TransactionPublic(BaseModel):
     directly via ``from_attributes=True``. ``type`` is rendered as the
     :class:`TransactionType` StrEnum so FE consumers get the same string the
     DB stores (``"income"``/``"expense"``/``"transfer"``), not a Python enum
-    repr. ``deleted_at`` is exposed so the FE can badge a deleted row (the
+    repr.
+
+    ``deleted_at`` is exposed so the FE can badge a deleted row (the
     default list endpoint still hides it via ``deleted_at IS NULL``).
+
+    ``transfer_pair_id`` and ``transfer_group_id`` are both populated for
+    the two legs of a paired transfer (sub-0003-03) and ``None`` for any
+    non-transfer row. The pair id is the exact link between the source
+    and destination leg; the group id mirrors the pair id for the
+    2-row MVP and is reserved for future grouped transfers.
     """
 
     model_config = ConfigDict(from_attributes=True)
@@ -337,9 +345,77 @@ class TransactionPublic(BaseModel):
     occurred_on: date
     note: str | None = None
     transfer_pair_id: uuid.UUID | None = None
+    transfer_group_id: uuid.UUID | None = None
     deleted_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class TransferCreate(BaseModel):
+    """Body for ``POST /transactions/transfer``.
+
+    Creates two transactions (``expense`` on the source account,
+    ``income`` on the destination account) linked by the same
+    ``transfer_pair_id`` and ``transfer_group_id`` in a single DB
+    transaction. The saldo engine handles the sign convention natively
+    (``expense`` → ``-amount_cents``, ``income`` → ``+amount_cents``),
+    so the persisted rows do not need to encode signed amounts.
+
+    Validation rules (per acceptance criteria):
+
+    * ``amount_cents > 0`` — Pydantic ``gt=0`` → 422.
+    * ``currency == "IDR"`` — model validator → 422.
+    * ``source_account_id != destination_account_id`` — cross-field
+      validator → 422 (no self-transfer).
+    * ``occurred_on`` is a valid date — implicit via the ``date`` type.
+    * Both accounts must belong to the caller — 404 (not 403) when a
+      row is missing or owned by another user.
+    * Both accounts must be non-archived — 404.
+    """
+
+    source_account_id: uuid.UUID
+    destination_account_id: uuid.UUID
+    amount_cents: int = Field(
+        gt=0,
+        description="Transfer amount in cents (positive integer). Zero or negative values are rejected.",
+    )
+    currency: str = Field(min_length=3, max_length=3, default="IDR")
+    occurred_on: date
+    note: str | None = Field(default=None, max_length=2000)
+
+    @model_validator(mode="after")
+    def _check_currency(self) -> TransferCreate:
+        if self.currency != "IDR":
+            raise ValueError(
+                f"currency must be 'IDR' (MVP is single-currency); got {self.currency!r}"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _check_distinct_accounts(self) -> TransferCreate:
+        if self.source_account_id == self.destination_account_id:
+            raise ValueError(
+                "source_account_id and destination_account_id must be different "
+                "(self-transfer is not allowed)"
+            )
+        return self
+
+
+class TransferPublic(BaseModel):
+    """Response shape for ``POST /transactions/transfer``.
+
+    Returns *both* legs of the pair so the FE can render the new
+    destination balance and the row grouping without a follow-up
+    ``GET /transactions`` call. The two rows are linked by the same
+    ``transfer_pair_id`` / ``transfer_group_id`` and the destination
+    amount is the same ``amount_cents`` as the source — the FE uses
+    the pair id to deduplicate the two rows when grouping.
+    """
+
+    source: TransactionPublic
+    destination: TransactionPublic
+    transfer_pair_id: uuid.UUID
+    transfer_group_id: uuid.UUID
 
 
 class TransactionListPublic(BaseModel):

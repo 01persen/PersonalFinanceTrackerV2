@@ -1,7 +1,7 @@
 """add transactions transfer_group_id for paired transfers
 
 Revision ID: a1f7c8e2b4d9
-Revises: 8a7b1c2d3e4f
+Revises: e29955254062
 Create Date: 2026-07-28 12:10:00.000000
 
 Adds a nullable ``transfer_group_id`` column on ``transactions`` so the
@@ -15,6 +15,14 @@ and mirrors the pair id for the current 2-row MVP.
 Existing rows get ``NULL`` (no transfer leg) via the default; no backfill
 is required because the column is informational and the saldo engine
 does not depend on it.
+
+Down_revision notes: this migration sits on top of ``e29955254062``
+(sub-0003-02's soft-delete column) so the migration graph stays a
+single linear chain — no parallel branch against the
+``8a7b1c2d3e4f`` user_preferences head. Soft-delete semantics apply to
+transfer rows the same way they do to income/expense rows (see
+sub-0003-04's summary endpoint, which excludes both ``transfer`` rows
+and tombstoned rows from monthly totals).
 """
 
 from __future__ import annotations
@@ -35,7 +43,7 @@ from app.db.models.mixins import GUID  # noqa: E402
 
 # revision identifiers, used by Alembic.
 revision: str = "a1f7c8e2b4d9"
-down_revision: str | Sequence[str] | None = "8a7b1c2d3e4f"
+down_revision: str | Sequence[str] | None = "e29955254062"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

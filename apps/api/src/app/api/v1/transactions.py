@@ -686,4 +686,3 @@ def transactions_summary(
         breakdown_by_category=breakdown_by_category,
         breakdown_by_account=breakdown_by_account,
     )
-

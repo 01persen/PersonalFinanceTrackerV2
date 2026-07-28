@@ -9,7 +9,7 @@ import {
   type AccountType,
 } from "@/lib/api/accounts";
 
-export { ACCOUNT_TYPE_VALUES, type AccountType };
+export { ACCOUNT_TYPE_VALUES, type AccountType, type Account };
 
 /**
  * Maps backend `AccountType` values to the human-friendly labels used in the

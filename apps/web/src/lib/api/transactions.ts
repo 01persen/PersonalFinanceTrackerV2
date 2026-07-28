@@ -1,4 +1,5 @@
 import type { ApiErrorBody } from "@/lib/api/client";
+import type { CategoryKind } from "@/lib/api/categories";
 
 /**
  * Mirrors `TransactionType` in `apps/api/src/app/db/models/enums.py`. The
@@ -8,6 +9,16 @@ import type { ApiErrorBody } from "@/lib/api/client";
  */
 export const TRANSACTION_TYPE_VALUES = ["income", "expense", "transfer"] as const;
 export type TransactionType = (typeof TRANSACTION_TYPE_VALUES)[number];
+
+/**
+ * The subset of ``TransactionType`` accepted by ``POST /transactions``.
+ * Used by the create form's type toggle — anything outside this set is
+ * read-only on the edit page (e.g. a ``transfer`` row that came back
+ * from the paired-create endpoint).
+ */
+export const TRANSACTION_CREATABLE_TYPE_VALUES = ["income", "expense"] as const;
+export type CreatableTransactionType =
+  (typeof TRANSACTION_CREATABLE_TYPE_VALUES)[number];
 
 /**
  * Output shape for a single transaction row, mirroring `TransactionPublic`
@@ -118,6 +129,19 @@ export function adaptTransactions(raw: unknown): Transaction[] {
     }
   }
   return out;
+}
+
+/**
+ * Map a ``TransactionType`` to its matching ``CategoryKind``. ``transfer``
+ * has no category (it's an account-to-account move), so this helper is
+ * scoped to the creatable subset — the assert keeps ``mypy --strict``
+ * happy for the narrow subset callers actually use.
+ */
+export function transactionTypeToCategoryKind(
+  type: CreatableTransactionType,
+): CategoryKind {
+  if (type === "income") return "income";
+  return "expense";
 }
 
 export type { ApiErrorBody };

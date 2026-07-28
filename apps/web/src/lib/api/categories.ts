@@ -14,9 +14,9 @@ export type CategoryKind = (typeof CATEGORY_KIND_VALUES)[number];
  * Output shape for a single category row, mirroring `CategoryPublic` in
  * `apps/api/src/app/api/schemas.py`.
  *
- * Categories are nested (parent → children) on the wire. The FE keeps the
- * flat list and lets the filter UI render parent → children groupings from
- * ``parentId`` so the same source of truth feeds the list and the form.
+ * Categories are nested (parent → children) on the wire. The FE flattens
+ * the list to build the picker; ``parentId`` is preserved so the picker
+ * can group children under their parent.
  */
 export interface Category {
   id: string;
@@ -64,11 +64,11 @@ function adaptCategoryFromPayload(raw: RawCategoryPayload): Category | null {
 
 /**
  * Hand-written adapter for `GET /categories`. Returns `[]` when the
- * payload is missing or the items are malformed — the filter treats that
- * as "tidak ada kategori" (the filter still renders, just without category
- * options). Returns `null` when the wire shape isn't even an array so the
- * caller can distinguish "endpoint returned something unrecognised" from
- * "endpoint returned the empty list".
+ * payload is missing or malformed — the picker treats that as "no
+ * categories yet" (the empty state still renders). Returns `null` for
+ * a payload that's an object but missing the expected array shape, so
+ * the caller can distinguish "endpoint returned nothing useful" from
+ * "endpoint returned the empty array".
  */
 export function adaptCategories(raw: unknown): Category[] | null {
   if (!Array.isArray(raw)) return null;
@@ -82,4 +82,8 @@ export function adaptCategories(raw: unknown): Category[] | null {
   return out;
 }
 
+/**
+ * Re-export so callers that already import from `categories` don't have
+ * to drill into `client.ts` for the type.
+ */
 export type { ApiErrorBody };

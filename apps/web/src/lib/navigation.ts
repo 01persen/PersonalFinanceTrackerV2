@@ -37,7 +37,7 @@ export const navigationItems: readonly NavigationItem[] = [
     href: "/transactions",
     description: "Catat pemasukan, pengeluaran, dan transfer.",
     icon: "transactions",
-    available: false,
+    available: true,
   },
   {
     label: "Kategori",

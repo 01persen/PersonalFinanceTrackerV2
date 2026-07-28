@@ -15,6 +15,8 @@ import {
   INITIAL_TRANSACTION_FORM_VALUES,
   TRANSACTION_NOTE_MAX,
   TransactionFormFields,
+  TransactionFormFieldsSkeleton,
+  TransactionSubmitSkeleton,
   isTransactionFormDirty,
   todayIsoDate,
   validateAmount,
@@ -227,7 +229,7 @@ function NewTransactionContent() {
 
       {prefetch.kind === "loading" ? (
         <section className="card mt-6" aria-busy="true">
-          <FormSkeleton />
+          <TransactionFormFieldsSkeleton />
         </section>
       ) : null}
 
@@ -280,54 +282,58 @@ function NewTransactionContent() {
 
       {prefetch.kind === "ready" && hasReadyAccounts ? (
         <section className="card mt-6">
-          <form className="grid gap-5" onSubmit={handleSubmit} noValidate>
-            <TransactionFormFields
-              values={form.values}
-              errors={form.errors}
-              onChange={form.setValues}
-              accounts={prefetch.accounts}
-              categories={prefetch.categories}
-              disabled={!isFormActive}
-              idPrefix="transaction-new"
-            />
-
-            {form.generalError ? (
-              <div
-                role="alert"
-                className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
-              >
-                {form.generalError}
-              </div>
-            ) : null}
-
-            {isSuccess ? (
-              <div
-                role="status"
-                className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800"
-              >
-                Transaksi berhasil disimpan. Mengalihkan...
-              </div>
-            ) : null}
-
-            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={handleCancel}
+          {isSubmitting ? (
+            <TransactionSubmitSkeleton />
+          ) : (
+            <form className="grid gap-5" onSubmit={handleSubmit} noValidate>
+              <TransactionFormFields
+                values={form.values}
+                errors={form.errors}
+                onChange={form.setValues}
+                accounts={prefetch.accounts}
+                categories={prefetch.categories}
                 disabled={!isFormActive}
-              >
-                Batal
-              </button>
-              <button
-                type="submit"
-                className="btn-primary"
-                disabled={!canSubmit}
-                aria-disabled={!canSubmit}
-              >
-                {isSubmitting ? "Menyimpan..." : "Simpan transaksi"}
-              </button>
-            </div>
-          </form>
+                idPrefix="transaction-new"
+              />
+
+              {form.generalError ? (
+                <div
+                  role="alert"
+                  className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+                >
+                  {form.generalError}
+                </div>
+              ) : null}
+
+              {isSuccess ? (
+                <div
+                  role="status"
+                  className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800"
+                >
+                  Transaksi berhasil disimpan. Mengalihkan...
+                </div>
+              ) : null}
+
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={handleCancel}
+                  disabled={!isFormActive}
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="btn-primary"
+                  disabled={!canSubmit}
+                  aria-disabled={!canSubmit}
+                >
+                  {isSubmitting ? "Menyimpan..." : "Simpan transaksi"}
+                </button>
+              </div>
+            </form>
+          )}
         </section>
       ) : null}
 
@@ -336,22 +342,5 @@ function NewTransactionContent() {
         isi nominal, pilih akun, simpan.
       </p>
     </AppShell>
-  );
-}
-
-function FormSkeleton() {
-  return (
-    <div role="status" aria-live="polite" aria-busy="true">
-      <div className="grid grid-cols-2 gap-2 sm:flex sm:gap-3">
-        <div className="h-16 animate-pulse rounded-xl bg-slate-100" />
-        <div className="h-16 animate-pulse rounded-xl bg-slate-100" />
-      </div>
-      <div className="mt-5 h-14 animate-pulse rounded-md bg-slate-100" />
-      <div className="mt-3 h-14 animate-pulse rounded-md bg-slate-100" />
-      <div className="mt-3 h-14 animate-pulse rounded-md bg-slate-100" />
-      <div className="mt-3 h-14 animate-pulse rounded-md bg-slate-100" />
-      <div className="mt-3 h-24 animate-pulse rounded-md bg-slate-100" />
-      <span className="sr-only">Memuat formulir...</span>
-    </div>
   );
 }

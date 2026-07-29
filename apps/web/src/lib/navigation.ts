@@ -44,7 +44,7 @@ export const navigationItems: readonly NavigationItem[] = [
     href: "/categories",
     description: "Atur kategori dan temukan transaksi lebih cepat.",
     icon: "categories",
-    available: false,
+    available: true,
   },
   {
     label: "Target keuangan",

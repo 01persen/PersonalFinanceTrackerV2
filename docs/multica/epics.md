@@ -1,6 +1,6 @@
 # Project Tracker — Personal Finance Tracker
 
-> **Status:** v3.0 — epic-0001 **DONE** (8/8); epic-0002 **DONE** (7/7 sub-task
+> **Status:** v3.1 — epic-0001 **DONE** (8/8); epic-0002 **DONE** (7/7 sub-task
 > + Stage 5 release fixup complete; [PR #18](https://github.com/01persen/PersonalFinanceTrackerV2/pull/18)
 > merged ke `main` pada 2026-07-27 13:06 UTC, CI hijau `api quality` + `web quality`).
 > epic-0003 **DONE** (8/8 sub-task + Stage H squash-merged ke `main`).
@@ -76,18 +76,26 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
 ## Catatan
 
 - epic **0004** sekarang **IN_PROGRESS** (sourced 2026-07-29). Sub-task list
-  masih kosong — Stage B akan dijalankan TL dengan bantuan SA. Parent
-  issue: [GRE-38](https://multica/issues/GRE-38). Branch: `release/epic-0004`
+  (Stage B complete 2026-07-29, 7 sub-task di 5 stage). Parent issue:
+  [GRE-38](https://multica/issues/GRE-38). Branch: `release/epic-0004`
   (cut dari `main` @ `00dc91d`, yaitu HEAD post epic-0003 squash-merge
   PR #28). Epic-0004 dipilih karena topmost eligible di tabel setelah
   epic-0003 DONE — hanya butuh `epic-0003` (DONE). epic-0006 tetap
   IN_PROGRESS (Stage B belum mulai); epic-0005 eligible (butuh 0002+0003
   DONE), epic-0007 blocked (butuh 0005 NOT_STARTED + 0006 IN_PROGRESS),
   epic-0008 + epic-0009 eligible. Carry-over penting ke sub-0004-03 search
-  endpoint: **flaky test `test_get_sort_is_stable_for_same_day` harus di-fix
-  sebelum epic-0004** (akan heavy-modify `apps/api/tests/test_transactions.py`)
-  — tiket housekeeping terpisah. Kontrak FE↔BE: kategori punya
-  `parent_id` opsional untuk hirarki (sesuai spreadsheet user analysis).
+  endpoint: **flaky test `test_get_sort_is_stable_for_same_day` sudah
+  diangkat ke sub-task eksplisit `sub-0004-00`** (Stage 1 paralel, BE).
+  Kontrak FE↔BE: kategori punya `parent_id` opsional untuk hirarki (sesuai
+  spreadsheet user analysis).
+  - [ ] sub-0004-00 — Backend Pre-req: fix flaky `test_get_sort_is_stable_for_same_day` → **todo** ([GRE-39](https://multica/issues/GRE-39)), BE. Stage 1 paralel dengan 01.
+  - [ ] sub-0004-01 — Backend CRUD `/categories` + parent/child hirarki → **todo** ([GRE-40](https://multica/issues/GRE-40)), BE. Stage 1 paralel dengan 00.
+  - [ ] sub-0004-02 — Backend Auto-categorize rule engine + backfill opsional → **backlog** ([GRE-41](https://multica/issues/GRE-41)), BE. Stage 2 (butuh 01).
+  - [ ] sub-0004-03 — Backend Search endpoint + index design (perf < 500 ms @ 5k tx) → **backlog** ([GRE-42](https://multica/issues/GRE-42)), BE. Stage 2 (butuh 00).
+  - [ ] sub-0004-04 — Frontend UI Manajemen Kategori (mobile-first) → **backlog** ([GRE-43](https://multica/issues/GRE-43)), FE. Stage 3 (butuh 01).
+  - [ ] sub-0004-05 — Frontend UI Search global + filter panel (mobile-first) → **backlog** ([GRE-44](https://multica/issues/GRE-44)), FE. Stage 4 (butuh 03 + sub-0003-06 DONE).
+  - [ ] sub-0004-06 — QA Integration + e2e test plan Epic 0004 → **backlog** ([GRE-45](https://multica/issues/GRE-45)), QA. Stage 5 (butuh semua).
+  - Stage 1 kickoff rest-of-day 2026-07-29 (00 + 01 paralel, BE triggered via sub-issue assignment).
 - epic **0006** sekarang **IN_PROGRESS** (sourced 2026-07-29). Sub-task list
   masih kosong — Stage B akan dijalankan TL dengan bantuan SA. Parent
   issue: [GRE-34](https://multica/issues/GRE-34). Branch: `release/epic-0006`
@@ -355,3 +363,21 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
   sub-task search endpoint dimulai (akan modify
   `apps/api/tests/test_transactions.py`) — tiket terpisah tetap
   outstanding, di-flag di Catatan epic-0004.
+- v3.1 (2026-07-29) — Tech Leader: epic-0004 Stage B complete. SA
+  breakdown Epic Detail Doc jadi **7 sub-task di 5 stage** (5
+  high-level + 1 pre-req housekeeping `sub-0004-00` + 1 QA). Sub-issue
+  dibuat: [GRE-39](https://multica/issues/GRE-39) (00, Stage 1 todo,
+  BE), [GRE-40](https://multica/issues/GRE-40) (01, Stage 1 todo, BE),
+  [GRE-41](https://multica/issues/GRE-41) (02, Stage 2 backlog, BE),
+  [GRE-42](https://multica/issues/GRE-42) (03, Stage 2 backlog, BE),
+  [GRE-43](https://multica/issues/GRE-43) (04, Stage 3 backlog, FE),
+  [GRE-44](https://multica/issues/GRE-44) (05, Stage 4 backlog, FE),
+  [GRE-45](https://multica/issues/GRE-45) (06, Stage 5 backlog, QA).
+  Stage 1 kickoff rest-of-day 2026-07-29 — Backend Engineer di-trigger
+  via sub-issue assignment (`todo` + assignee = BE auto-fire) untuk
+  paralel sub-0004-00 (pre-req flaky test fix, file
+  `apps/api/tests/test_transactions.py`) + sub-0004-01 (categories CRUD
+  schema + parent/child hirarki). Stage 2 dipromote setelah Stage 1
+  done per Stage Plan di Operating Manual §5.1. Carry-over penting:
+  constraint (d) perf < 500 ms butuh index design di sub-0004-03; FE
+  sub-task wajib mobile-first viewport 390×844 (sub-0003-05 baseline).

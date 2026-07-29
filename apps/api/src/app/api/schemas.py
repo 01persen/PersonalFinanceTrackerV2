@@ -423,10 +423,14 @@ class TransactionListPublic(BaseModel):
 
     The list is sorted with the most recent ``occurred_on`` first
     (descending) — the FE "Pendapatan & Pengeluaran Bulanan" view expects
-    that order — and a secondary sort on ``created_at`` desc to break ties
-    between rows on the same day. ``total`` is the *unfiltered* row count
-    for the caller's filter set; ``limit`` + ``offset`` are echoed back so
-    the FE can paginate without re-deriving them.
+    that order — followed by a deterministic tie-breaker chain on
+    ``amount_cents`` desc and ``id`` asc. We deliberately avoid
+    ``created_at`` because its second-level precision on SQLite ties
+    frequently, leaving the row order up to a random UUID tie-break
+    (carried over as flaky from PR #22, fixed in sub-0004-00). ``total`` is
+    the *unfiltered* row count for the caller's filter set; ``limit`` +
+    ``offset`` are echoed back so the FE can paginate without re-deriving
+    them.
     """
 
     items: list[TransactionPublic]

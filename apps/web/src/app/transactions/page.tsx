@@ -341,13 +341,21 @@ function TransactionsHeader() {
           mempersempit hasil.
         </p>
       </div>
-      <Link
-        href="/transactions/new"
-        className="btn-primary !w-auto px-4"
-        aria-label="Tambah transaksi"
-      >
-        + Tambah transaksi
-      </Link>
+      <div className="flex flex-wrap items-center gap-2">
+        <Link
+          href="/transactions/bulanan"
+          className="btn-secondary !w-auto px-4"
+        >
+          Lihat bulanan
+        </Link>
+        <Link
+          href="/transactions/new"
+          className="btn-primary !w-auto px-4"
+          aria-label="Tambah transaksi"
+        >
+          + Tambah transaksi
+        </Link>
+      </div>
     </header>
   );
 }

@@ -34,7 +34,7 @@ def test_register_seeds_default_categories_via_api(client: TestClient, fresh_db:
     resp = client.get("/api/v1/categories", headers=headers)
     assert resp.status_code == 200, resp.text
     payload = resp.json()
-    names = {c["name"] for c in payload}
+    names = {c["name"] for c in payload["items"]}
 
     # Spot-check a few from each group rather than re-listing the whole tree.
     expected = {
@@ -88,8 +88,8 @@ def test_categories_are_scoped_to_the_authenticated_user(
     # Each user has the same defaults — that is fine — but the rows themselves
     # are different physical rows (different user_id). The endpoint must not
     # leak rows across users.
-    alice_cats = alice_resp.json()
-    bob_cats = bob_resp.json()
+    alice_cats = alice_resp.json()["items"]
+    bob_cats = bob_resp.json()["items"]
     assert len(alice_cats) == len(bob_cats) > 0
     assert {c["id"] for c in alice_cats}.isdisjoint({c["id"] for c in bob_cats})
 
@@ -99,7 +99,7 @@ def test_categories_hierarchy_has_parent_links(client: TestClient, fresh_db: Ses
     resp = client.get("/api/v1/categories", headers=_auth_headers(body["access_token"]))
     assert resp.status_code == 200
 
-    cats = resp.json()
+    cats = resp.json()["items"]
     cicilan = next(c for c in cats if c["name"] == "Cicilan" and c["parent_id"] is None)
     cicilan_mobil = next(c for c in cats if c["name"] == "Cicilan Mobil")
     assert cicilan_mobil["parent_id"] == cicilan["id"]
@@ -131,8 +131,8 @@ def test_seed_runs_on_every_register_not_double_seeding(
     a_cats = client.get("/api/v1/categories", headers=_auth_headers(a["access_token"])).json()
     b_cats = client.get("/api/v1/categories", headers=_auth_headers(b["access_token"])).json()
 
-    a_ids = {c["id"] for c in a_cats}
-    b_ids = {c["id"] for c in b_cats}
+    a_ids = {c["id"] for c in a_cats["items"]}
+    b_ids = {c["id"] for c in b_cats["items"]}
 
     assert len(a_ids) == 33
     assert len(b_ids) == 33
@@ -160,7 +160,7 @@ def test_categories_list_orders_income_before_expense(
     body = _register(client, "ordering@example.com")
     resp = client.get("/api/v1/categories", headers=_auth_headers(body["access_token"]))
     assert resp.status_code == 200
-    cats = resp.json()
+    cats = resp.json()["items"]
 
     kinds = [c["kind"] for c in cats]
     # All 7 incomes must precede all 26 expenses.

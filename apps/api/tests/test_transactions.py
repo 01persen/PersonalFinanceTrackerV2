@@ -77,7 +77,7 @@ def _create_account(
 def _list_categories(client: TestClient, headers: dict[str, str]) -> list[dict]:
     resp = client.get("/api/v1/categories", headers=headers)
     assert resp.status_code == 200, resp.text
-    return resp.json()
+    return resp.json()["items"]
 
 
 def _pick_category(

@@ -38,6 +38,7 @@ EXPECTED_INDEXES = {
     ("transactions", "ix_transactions_transfer_group_id"),
     ("accounts", "ix_accounts_user_id"),
     ("categories", "ix_categories_user_id"),
+    ("categories", "ix_categories_user_kind_archived_at"),
     ("category_rules", "ix_category_rules_user_id"),
     ("debts", "ix_debts_user_id"),
     ("goals", "ix_goals_user_id"),

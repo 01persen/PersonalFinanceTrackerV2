@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from datetime import date, datetime
 from typing import TYPE_CHECKING
 
@@ -28,12 +29,12 @@ class Transaction(Base, UUIDPKMixin, UserFKMixin, TimestampMixin):
         Index("ix_transactions_transfer_group_id", "transfer_group_id"),
     )
 
-    account_id: Mapped[str] = mapped_column(
+    account_id: Mapped[uuid.UUID] = mapped_column(
         GUID(),
         ForeignKey("accounts.id", ondelete="CASCADE"),
         nullable=False,
     )
-    category_id: Mapped[str | None] = mapped_column(
+    category_id: Mapped[uuid.UUID | None] = mapped_column(
         GUID(),
         ForeignKey("categories.id", ondelete="SET NULL"),
         nullable=True,
@@ -46,9 +47,9 @@ class Transaction(Base, UUIDPKMixin, UserFKMixin, TimestampMixin):
     currency: Mapped[str] = mapped_column(String(3), nullable=False)
     occurred_on: Mapped[date] = mapped_column(Date, nullable=False)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
-    transfer_pair_id: Mapped[str | None] = mapped_column(GUID(), nullable=True)
-    transfer_group_id: Mapped[str | None] = mapped_column(GUID(), nullable=True)
-    recurring_rule_id: Mapped[str | None] = mapped_column(GUID(), nullable=True)
+    transfer_pair_id: Mapped[uuid.UUID | None] = mapped_column(GUID(), nullable=True)
+    transfer_group_id: Mapped[uuid.UUID | None] = mapped_column(GUID(), nullable=True)
+    recurring_rule_id: Mapped[uuid.UUID | None] = mapped_column(GUID(), nullable=True)
     deleted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,

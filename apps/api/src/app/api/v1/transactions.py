@@ -67,9 +67,13 @@ from app.api.v1.auth import get_current_user
 from app.db.models.account import Account
 from app.db.models.category import Category
 from app.db.models.enums import CategoryKind, TransactionType
+from app.db.models.rule_audit_log import RuleAuditLog
 from app.db.models.transaction import Transaction
 from app.db.models.user import User
 from app.db.session import get_session
+from app.services.rule_engine import (
+    resolve_category_for_transaction,
+)
 
 router = APIRouter(prefix="/transactions", tags=["transactions"])
 
@@ -221,6 +225,38 @@ def create_transaction(
         deleted_at=None,
     )
     db.add(transaction)
+    db.flush()  # need ``transaction.id`` for the audit log row
+
+    # sub-0004-02 AC (1) — auto-apply active category rules when the caller
+    # didn't supply a category. ``note``-based match only; if no rule
+    # matches (or the row has no note) the category stays ``None`` (AC (2)
+    # "no-match preserve" — there's nothing to preserve, so this is a
+    # no-op). Audit row written inside the engine, in the same transaction
+    # as the parent insert so a failed commit drops both.
+    if transaction.category_id is None:
+        match = resolve_category_for_transaction(
+            db, transaction=transaction, current_user_id=current_user.id
+        )
+        if match is not None:
+            target = db.get(Category, match.category_id)
+            if (
+                target is not None
+                and target.user_id == current_user.id
+                and target.archived_at is None
+                and target.kind == type_enum.value
+            ):
+                transaction.category_id = target.id
+                db.add(
+                    RuleAuditLog(
+                        rule_id=match.rule_id,
+                        transaction_id=transaction.id,
+                        user_id=current_user.id,
+                        prev_category_id=None,
+                        new_category_id=target.id,
+                        origin="live",
+                    )
+                )
+
     db.commit()
     db.refresh(transaction)
     return TransactionPublic.model_validate(transaction)
@@ -480,6 +516,37 @@ def update_transaction(
 
     for field, value in data.items():
         setattr(transaction, field, value)
+
+    # sub-0004-02 AC (1) — auto-apply rules when the caller sends an explicit
+    # ``category_id: null`` (i.e. "clear it, let the rule engine decide").
+    # The engine's ``resolve_category_for_transaction`` honours
+    # no-match preserve (AC (2)) — if nothing matches the resulting note
+    # we leave the cleared ``None`` alone. If the payload doesn't touch
+    # ``category_id`` we leave the existing assignment alone (the FE is
+    # doing a separate edit; don't surprise them by re-categorising).
+    if data.get("category_id") is None and "category_id" in data:
+        match = resolve_category_for_transaction(
+            db, transaction=transaction, current_user_id=current_user.id
+        )
+        if match is not None:
+            target = db.get(Category, match.category_id)
+            if (
+                target is not None
+                and target.user_id == current_user.id
+                and target.archived_at is None
+                and target.kind == transaction.type.value
+            ):
+                transaction.category_id = target.id
+                db.add(
+                    RuleAuditLog(
+                        rule_id=match.rule_id,
+                        transaction_id=transaction.id,
+                        user_id=current_user.id,
+                        prev_category_id=None,
+                        new_category_id=target.id,
+                        origin="live",
+                    )
+                )
 
     db.commit()
     db.refresh(transaction)

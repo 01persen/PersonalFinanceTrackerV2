@@ -27,6 +27,7 @@ EXPECTED_TABLES = {
     "debts",
     "debt_payments",
     "user_preferences",
+    "rule_audit_log",
 }
 
 EXPECTED_INDEXES = {
@@ -40,9 +41,13 @@ EXPECTED_INDEXES = {
     ("categories", "ix_categories_user_id"),
     ("categories", "ix_categories_user_kind_archived_at"),
     ("category_rules", "ix_category_rules_user_id"),
+    ("category_rules", "ix_category_rules_user_priority_active"),
     ("debts", "ix_debts_user_id"),
     ("goals", "ix_goals_user_id"),
     ("debt_payments", "ix_debt_payments_debt_id"),
+    ("rule_audit_log", "ix_rule_audit_log_user_applied_at"),
+    ("rule_audit_log", "ix_rule_audit_log_rule_applied_at"),
+    ("rule_audit_log", "ix_rule_audit_log_transaction"),
     ("user_preferences", "ix_user_preferences_user_id"),
 }
 

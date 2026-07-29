@@ -19,7 +19,8 @@ Scenarios covered (per acceptance criteria):
 * (c) ``GET /transactions`` returns the caller's rows only, supports
       composable filters (``date_from``/``date_to``/``account_id``/``type``/
       ``category_id``), and paginates via ``limit``/``offset`` with a
-      stable sort (``occurred_on`` desc, ``created_at`` desc).
+      stable sort (``occurred_on`` desc, ``amount_cents`` desc,
+      ``id`` asc).
 
 Two-user isolation is exercised: every test that creates a transaction
 asserts the other user can't see it via either the list endpoint or a
@@ -29,9 +30,8 @@ filtered list.
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, date, timedelta
+from datetime import date, timedelta
 
-import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
@@ -675,22 +675,28 @@ def test_get_requires_authentication(client: TestClient, fresh_db: Session) -> N
     assert resp.status_code == 401
 
 
-def test_get_sort_is_stable_for_same_day(
-    client: TestClient, fresh_db: Session, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_get_sort_is_stable_for_same_day(client: TestClient, fresh_db: Session) -> None:
     """Two transactions on the same date stay consistently ordered across reads.
 
-    We freeze ``func.now()`` so both rows get a deterministic timestamp (so
-    the secondary ``created_at`` sort is exercised). The first read
-    captures the order, then a second read must return the same order.
-    """
-    from datetime import datetime
+    Root cause of the historical flake: ``TimestampMixin.created_at`` is
+    declared with ``server_default=func.now()``, which is a SQL expression
+    evaluated by the database. SQLite stores ``CURRENT_TIMESTAMP`` at
+    second-level precision, so two transactions posted within the same
+    second tie on ``created_at`` — the previous tie-breaker was
+    ``id DESC`` (a random ``uuid.uuid4()`` value), making the order
+    non-deterministic and the assertion ``first_ids == [b.id, a.id]``
+    fail roughly half the time. The fix (sub-0004-00) replaces the
+    secondary sort with ``amount_cents DESC, id ASC``, both of which are
+    independent of insertion timing.
 
-    fixed = datetime(2026, 1, 15, 12, 0, 0, tzinfo=UTC)
-    monkeypatch.setattr(
-        "app.db.models.mixins.func.now",
-        lambda: fixed,
-    )
+    The test deliberately uses two transactions with distinct
+    ``amount_cents`` on the same day so the ``amount_cents DESC``
+    tie-breaker resolves the ordering deterministically. The id-asc
+    fallback only kicks in for rows with identical amount_cents, which is
+    not exercised here — the goal of this test is to lock in the
+    documented sort chain (``occurred_on`` → ``amount_cents`` → ``id``),
+    not to assert randomness properties.
+    """
     headers = _auth_headers(_register(client, "stable-sort@example.com")["access_token"])
     account = _create_account(client, headers, name="A")
     today = date.today()
@@ -725,6 +731,7 @@ def test_get_sort_is_stable_for_same_day(
 
     first_ids = [item["id"] for item in first["items"]]
     second_ids = [item["id"] for item in second["items"]]
+    # Stability: a second read returns the same order.
     assert first_ids == second_ids
-    # created_at desc => the row inserted second appears first.
+    # amount_cents desc => the row with the higher amount appears first.
     assert first_ids == [b["id"], a["id"]]

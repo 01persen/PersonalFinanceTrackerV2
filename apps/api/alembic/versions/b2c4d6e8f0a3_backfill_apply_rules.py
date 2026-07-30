@@ -73,13 +73,25 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 
-def _current_rule_version(bind: object) -> dict[object, str]:
-    """Return a ``{user_id: rule_version_hash}`` map for the active rule set.
+def _current_rule_version(bind: object) -> dict[str, str]:
+    """Return a ``{user_id_str: rule_version_hash}`` map for the active rule set.
 
     The hash is stable across reruns for the same rule set, so the
     migration can detect "rules haven't changed since the last
-    apply" and skip the pass entirely. Includes ``user_id`` so a
-    multi-tenant deploy can fingerprint each tenant independently.
+    apply" and skip the pass entirely. ``user_id`` is normalised
+    to its string form so the lookup matches the raw
+    ``SELECT DISTINCT user_id`` row above (which returns ``str``
+    on SQLite, ``uuid.UUID`` on Postgres — both stringify the
+    same way for storage).
+
+    QA defect #1c root cause: a previous revision keyed this map
+    by the raw ``CategoryRule.user_id`` (a ``UUID`` instance) but
+    compared against the raw-SQL result which returned ``str``,
+    so ``.get()`` always missed and the apply pass was silently
+    skipped for every user. The migration committed successfully,
+    the data directory was left untouched, and the audit log had
+    zero rows — the kind of bug that's invisible until you look
+    for it.
     """
     rows = list(
         bind.execute(
@@ -93,9 +105,9 @@ def _current_rule_version(bind: object) -> dict[object, str]:
             ).order_by(CategoryRule.user_id, CategoryRule.id)
         )
     )
-    by_user: dict[object, list[tuple[object, ...]]] = {}
+    by_user: dict[str, list[tuple[object, ...]]] = {}
     for row in rows:
-        by_user.setdefault(row.user_id, []).append(
+        by_user.setdefault(str(row.user_id), []).append(
             (row.id, row.pattern, row.priority, row.is_regex, row.active)
         )
     return {
@@ -112,14 +124,17 @@ def upgrade() -> None:
 
     # Discover the user set without dragging the ORM mapper; the data
     # migration is a one-shot pass and a raw ``text()`` query keeps the
-    # path portable to both Postgres + SQLite.
-    user_ids = list(
-        bind.execute(
+    # path portable to both Postgres + SQLite. Normalise to ``str``
+    # so the rule_version lookup matches the format used by
+    # ``_current_rule_version``.
+    user_ids = [
+        str(uid)
+        for uid in bind.execute(
             text(
                 "SELECT DISTINCT user_id FROM transactions WHERE deleted_at IS NULL"
             )
         ).scalars()
-    )
+    ]
 
     rule_versions = _current_rule_version(bind)
 

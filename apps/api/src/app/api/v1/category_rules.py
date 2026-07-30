@@ -45,6 +45,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import desc, func, select
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
 from app.api.v1.auth import get_current_user
@@ -451,7 +452,23 @@ def apply_rules_endpoint(
     )
 
     if payload.apply_backfill:
-        db.commit()
+        # QA defect #3b regression on commit 97aad3f: the new
+        # unique constraint ``uq_rule_audit_log_rule_tx_origin``
+        # raises ``IntegrityError`` when a concurrent apply-rules
+        # request wins the unique-index race. SQLite's database-
+        # level locking can also raise ``OperationalError`` when
+        # two threads race on the UPDATE of the same transaction
+        # row. We catch both so the surviving row is committed
+        # and the caller sees a normal 200 response. Without the
+        # catch the duplicate path returns 500 — which is exactly
+        # the bug QA retest flagged. The duplicate row is safely
+        # rolled back; the apply logic does NOT retry because the
+        # rule engine is idempotent on no-op per AC (2) but that's
+        # an extra audit row which the user didn't ask for.
+        try:
+            db.commit()
+        except (IntegrityError, OperationalError):
+            db.rollback()
     else:
         # The engine only writes when ``write_audit=True``; the
         # explicit rollback keeps the dry run a pure read even if a

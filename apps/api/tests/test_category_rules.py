@@ -27,6 +27,7 @@ a rule asserts the other user can't see it via GET / PATCH / DELETE
 
 from __future__ import annotations
 
+import concurrent.futures
 import time
 import uuid
 from datetime import date
@@ -872,6 +873,57 @@ def test_apply_rules_idempotent_on_second_pass(
     ).json()
     assert second["transactions_updated"] == 0
     assert second["affected_transaction_ids"] == []
+
+
+def test_apply_rules_concurrent_returns_200_not_500_on_unique_constraint(
+    client: TestClient, fresh_db: Session
+) -> None:
+    """QA defect #3b regression test: IntegrityError from
+    ``uq_rule_audit_log_rule_tx_origin`` must not surface as HTTP 500.
+
+    Two parallel ``apply-rules`` requests on the same set of
+    transactions race the unique-index insert. The route catches
+    ``IntegrityError``, rolls back the duplicate, and returns a
+    normal 200 envelope so the caller doesn't see the duplicate
+    as an error.
+    """
+    headers = _auth_headers(
+        _register(client, "concurrent-apply@example.com")["access_token"]
+    )
+    account = _create_account(client, headers)
+    cat = _pick_category(client, headers, kind="expense", name_contains="Makan")
+
+    _create_transaction(client, headers, account_id=account["id"], note="STARBUCKS")
+    _create_transaction(
+        client, headers, account_id=account["id"], note="STARBUCKS again"
+    )
+    _create_rule(
+        client,
+        headers,
+        pattern="STARBUCKS",
+        category_id=cat["id"],
+        priority=200,
+    )
+
+    # Two parallel requests hitting the same endpoint on the same
+    # database. The TestClient internally serialises each call via
+    # its own session but the underlying SQLAlchemy engine can
+    # still race the audit-row insert on multi-threaded boots.
+    # We use ThreadPoolExecutor to make the race observable even
+    # on the single-threaded test client.
+    def _do_apply() -> int:
+        return client.post(
+            "/api/v1/categories/apply-rules",
+            headers=headers,
+            json={"apply_backfill": True},
+        ).status_code
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        statuses = list(pool.map(lambda _: _do_apply(), range(2)))
+
+    # Neither call may return 500 — the route catches
+    # IntegrityError and falls back to a clean 200.
+    assert all(s == 200 for s in statuses), statuses
 
 
 def test_apply_rules_no_match_preserves_existing_category(

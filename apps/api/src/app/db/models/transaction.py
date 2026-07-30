@@ -6,7 +6,7 @@ import uuid
 from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, Date, DateTime, Enum, ForeignKey, Index, String, Text
+from sqlalchemy import BigInteger, Date, DateTime, Enum, ForeignKey, Index, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -27,6 +27,40 @@ class Transaction(Base, UUIDPKMixin, UserFKMixin, TimestampMixin):
         Index("ix_transactions_category", "category_id"),
         Index("ix_transactions_user_deleted_at", "user_id", "deleted_at"),
         Index("ix_transactions_transfer_group_id", "transfer_group_id"),
+        # sub-0004-03 — search endpoint index design. The four composite
+        # indexes below let each filter on the search endpoint resolve via
+        # a single index scan that respects the mandatory ``user_id``
+        # predicate and the mandatory ``occurred_on DESC`` ordering. The
+        # ``ix_transactions_note_trgm`` index drives the substring ``q``
+        # filter — on PostgreSQL it's a GIN trigram index (requires the
+        # ``pg_trgm`` extension); the migration creates the GIN variant
+        # when it detects PG and a plain B-tree fallback on SQLite so the
+        # test schema matches the index list in ``test_migrations``.
+        Index(
+            "ix_transactions_user_account_occurred_on",
+            "user_id",
+            "account_id",
+            text("occurred_on DESC"),
+        ),
+        Index(
+            "ix_transactions_user_category_occurred_on",
+            "user_id",
+            "category_id",
+            text("occurred_on DESC"),
+        ),
+        Index(
+            "ix_transactions_user_occurred_on_type",
+            "user_id",
+            text("occurred_on DESC"),
+            "type",
+        ),
+        Index(
+            "ix_transactions_user_occurred_on_amount",
+            "user_id",
+            text("occurred_on DESC"),
+            "amount_cents",
+        ),
+        Index("ix_transactions_note_trgm", "note"),
     )
 
     account_id: Mapped[uuid.UUID] = mapped_column(

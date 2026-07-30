@@ -537,6 +537,28 @@ class TransactionListPublic(BaseModel):
     offset: int
 
 
+class TransactionSearchListPublic(BaseModel):
+    """Response envelope for ``GET /transactions/search`` (sub-0004-03).
+
+    Mirrors :class:`TransactionListPublic` semantically (same item shape,
+    same deterministic sort chain ``occurred_on DESC, amount_cents DESC,
+    id ASC``) but exposes ``page`` + ``page_size`` instead of
+    ``limit`` + ``offset`` because the FE search panel paginates by
+    "page N of M" rather than by offset (acceptance criterion (1)).
+
+    ``page`` is 1-indexed (page 1 is the first page) and ``page_size`` is
+    clamped to ``[1, 200]`` by the route — see the ``Query`` defaults on
+    the search endpoint. ``total`` is the *unfiltered-by-page* row count
+    for the caller's filter set so the FE can render the page navigator
+    without a follow-up count call.
+    """
+
+    items: list[TransactionPublic]
+    total: int
+    page: int
+    page_size: int
+
+
 # --- Transactions summary (epic-0003, sub-0003-04) ----------------------------
 
 

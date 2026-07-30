@@ -168,7 +168,7 @@ def test_backfill_migration_with_prior_data_does_not_crash(
     up_to_f0a1 = _run_alembic(sqlite_db, "upgrade", "b2c4d6e8f0a1")
     assert up_to_f0a1.returncode == 0, up_to_f0a1.stderr or up_to_f0a1.stdout
 
-    # Seed: user + account + category + category_rule + transaction.
+    # Seed: user + account + category + transaction.
     # Schema at f0a1 does not have is_regex/active (those come in
     # f0a2) — so we use the SQLite-recognised defaults.
     conn = sqlite3.connect(sqlite_db)
@@ -224,3 +224,113 @@ def test_backfill_migration_with_prior_data_does_not_crash(
     finally:
         conn.close()
     assert "origin_tag" in cols, "origin_tag column missing from rule_audit_log"
+
+
+def test_backfill_migration_actually_applies_rules(
+    sqlite_db: Path
+) -> None:
+    """QA retest #3 defect #1c (round 3): the backfill migration
+    must *actually* apply rules — not just run without crashing.
+
+    Round 2's fix moved ``op.add_column("origin_tag", ...)`` to
+    the top of f0a3 so the idempotency SELECT didn't crash. But
+    it also normalised ``user_id`` to ``str`` so the
+    ``_current_rule_version`` lookup would match. The engine's
+    Python-side guard ``transaction.user_id != user_id`` then
+    fails (``UUID != str``) and every transaction is silently
+    skipped — the migration runs to completion, writes nothing,
+    and AC (5) "log affected rows" stays unmet.
+
+    The fix casts the string ``user_id`` back to ``UUID`` before
+    calling the engine so the Python-side guard sees the same
+    type as ``Transaction.user_id``. This test seeds a real
+    category_rule (the previous test missed this path entirely)
+    and asserts the transaction's ``category_id`` gets assigned
+    + an audit row appears in ``rule_audit_log``.
+
+    Enum note: SQLAlchemy's ``Enum(native_enum=False)`` stores
+    enum *names* (UPPERCASE) in the DB, not the lowercase
+    ``StrEnum`` *values*. The model bind processor converts
+    ``TransactionType.EXPENSE`` to ``"EXPENSE"`` for storage; a
+    raw-SQL ``INSERT ... type='expense'`` would store a value
+    the ORM can't roundtrip back. Production writes go through
+    the ORM so this works there — but a raw-SQL seed must use
+    uppercase enum names to match the storage convention.
+    """
+    up_to_f0a2 = _run_alembic(sqlite_db, "upgrade", "b2c4d6e8f0a2")
+    assert up_to_f0a2.returncode == 0, up_to_f0a2.stderr or up_to_f0a2.stdout
+
+    # Seed user + account + category + rule + transaction. Schema
+    # at f0a2 already has is_regex/active columns so we set them
+    # explicitly.
+    conn = sqlite3.connect(sqlite_db)
+    try:
+        conn.executescript(
+            """
+            INSERT INTO users (id, email, password_hash, created_at, updated_at)
+            VALUES ('11111111-1111-1111-1111-111111111111',
+                    'migration-apply@example.com',
+                    'fakehash', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+            INSERT INTO accounts (id, user_id, name, type, opening_balance_cents,
+                                  currency, created_at, updated_at)
+            VALUES ('22222222-2222-2222-2222-222222222222',
+                    '11111111-1111-1111-1111-111111111111',
+                    'Test', 'asset', 0, 'IDR',
+                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+            INSERT INTO categories (id, user_id, name, kind, created_at, updated_at)
+            VALUES ('33333333-3333-3333-3333-333333333333',
+                    '11111111-1111-1111-1111-111111111111',
+                    'Makan', 'EXPENSE',
+                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+            INSERT INTO category_rules (id, user_id, pattern, category_id,
+                                        priority, is_regex, active,
+                                        created_at, updated_at)
+            VALUES ('55555555-5555-5555-5555-555555555555',
+                    '11111111-1111-1111-1111-111111111111',
+                    'BACKFILL',
+                    '33333333-3333-3333-3333-333333333333',
+                    100, 0, 1,
+                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+            INSERT INTO transactions (id, user_id, account_id, category_id,
+                                      type, amount_cents, currency, occurred_on,
+                                      note, created_at, updated_at)
+            VALUES ('44444444-4444-4444-4444-444444444444',
+                    '11111111-1111-1111-1111-111111111111',
+                    '22222222-2222-2222-2222-222222222222',
+                    NULL, 'EXPENSE', 10000, 'IDR', '2026-07-30',
+                    'BACKFILL test', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+            """
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    upgrade = _run_alembic(sqlite_db, "upgrade", "head")
+    assert upgrade.returncode == 0, upgrade.stderr or upgrade.stdout
+
+    conn = sqlite3.connect(sqlite_db)
+    try:
+        # The transaction's category_id must be assigned — the
+        # rule matches note "BACKFILL test" → category Makan.
+        tx_category = conn.execute(
+            "SELECT category_id FROM transactions WHERE id = '44444444-4444-4444-4444-444444444444'"
+        ).fetchone()[0]
+        assert tx_category == "33333333-3333-3333-3333-333333333333", (
+            f"backfill did not assign category_id, got {tx_category!r}"
+        )
+
+        # One audit row written for the apply pass, with the
+        # SHA256 ``rule_version`` hash in ``origin_tag``.
+        audit_rows = list(
+            conn.execute(
+                "SELECT rule_id, transaction_id, origin, origin_tag "
+                "FROM rule_audit_log WHERE origin = 'backfill'"
+            )
+        )
+        assert len(audit_rows) == 1, (
+            f"expected exactly 1 backfill audit row, got {len(audit_rows)}"
+        )
+        assert audit_rows[0][2] == "backfill"
+        assert audit_rows[0][3] is not None and len(audit_rows[0][3]) == 64
+    finally:
+        conn.close()

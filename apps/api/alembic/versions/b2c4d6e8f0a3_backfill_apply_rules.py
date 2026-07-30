@@ -50,6 +50,7 @@ from __future__ import annotations
 
 import hashlib
 import sys
+import uuid
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -181,17 +182,32 @@ def upgrade() -> None:
                 if last_origin_tag == rule_version:
                     continue
 
+                # QA retest #3 defect #1c (round 3): the
+                # migration normalises ``user_id`` to ``str`` so
+                # the ``_current_rule_version`` lookup matches,
+                # but ``apply_rules_to_transactions`` then runs a
+                # Python-side ``transaction.user_id != user_id``
+                # check (line ~303 in services/rule_engine.py)
+                # where ``transaction.user_id`` is a ``UUID``
+                # object. Comparing ``UUID(...) != str(...)``
+                # returns ``True`` and every transaction is
+                # silently skipped — the apply pass runs, writes
+                # nothing, exits 0. Cast the string back to a
+                # ``UUID`` before the engine call so the
+                # Python-side guard matches.
+                user_id_uuid = uuid.UUID(user_id)
+
                 txs = list(
                     session.execute(
                         select(Transaction).where(
-                            Transaction.user_id == user_id,
+                            Transaction.user_id == user_id_uuid,
                             Transaction.deleted_at.is_(None),
                         )
                     ).scalars()
                 )
                 apply_rules_to_transactions(
                     session,
-                    user_id=user_id,
+                    user_id=user_id_uuid,
                     transactions=txs,
                     origin="backfill",
                     write_audit=True,

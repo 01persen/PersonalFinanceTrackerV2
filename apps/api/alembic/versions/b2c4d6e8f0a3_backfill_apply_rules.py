@@ -53,6 +53,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+import sqlalchemy as sa
 from alembic import op
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
@@ -122,6 +123,20 @@ def upgrade() -> None:
     """Apply rules to every user's existing transactions, per user."""
     bind = op.get_bind()
 
+    # QA retest #2 defect #1c (round 2): the ``origin_tag`` column
+    # is referenced below in the ``SELECT ... FROM rule_audit_log``
+    # idempotency query, but the column is also part of the
+    # follow-up migration ``b2c4d6e8f0a4``'s ``add_column``. If
+    # we waited for that migration, this upgrade would crash on
+    # any database with prior data — ``no such column: origin_tag``.
+    # Add the column here so the SELECT below sees a defined schema,
+    # and skip the same ``add_column`` in ``b2c4d6e8f0a4``'s upgrade
+    # to avoid an ALTER-TABLE error on second touch.
+    op.add_column(
+        "rule_audit_log",
+        sa.Column("origin_tag", sa.String(length=64), nullable=True),
+    )
+
     # Discover the user set without dragging the ORM mapper; the data
     # migration is a one-shot pass and a raw ``text()`` query keeps the
     # path portable to both Postgres + SQLite. Normalise to ``str``
@@ -189,12 +204,14 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """No-op on rollback.
+    """Reverse the schema change but keep the audit trail.
 
-    The audit log is the only persistent artefact of the backfill;
-    rows it wrote are *not* rolled back on downgrade because
-    they're the audit trail that downstream analytics + QA depend
-    on. Hard reversal of the categorisation would need a separate
-    ticket that explicitly scopes which tenants / rule versions to
-    revert.
+    The ``origin_tag`` column is dropped on downgrade (it was
+    added in ``upgrade`` above so the idempotency query could see
+    it). Audit rows written by the backfill are intentionally
+    preserved — they're the audit trail that downstream analytics
+    + QA depend on, and hard reversal of the categorisation would
+    need a separate ticket that explicitly scopes which tenants /
+    rule versions to revert.
     """
+    op.drop_column("rule_audit_log", "origin_tag")

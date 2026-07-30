@@ -146,3 +146,81 @@ def test_users_email_is_unique(sqlite_db: Path) -> None:
         assert "ix_users_email" in unique_idx_names
     finally:
         conn.close()
+
+
+def test_backfill_migration_with_prior_data_does_not_crash(
+    sqlite_db: Path
+) -> None:
+    """QA retest #2 defect #1c regression: ``b2c4d6e8f0a3`` backfill
+    migration must not raise ``no such column: origin_tag`` when
+    upgrading over a database that already has data at f0a1.
+
+    The original split — ``origin_tag`` added in f0a4, queried in
+    f0a3 — meant any upgrade over prior data crashed because
+    f0a3's idempotency ``SELECT`` referenced a column the
+    backfill didn't add yet. The fix moves the
+    ``op.add_column("origin_tag", ...)`` to the top of
+    ``b2c4d6e8f0a3`` upgrade; f0a4 keeps the unique index but
+    skips the now-redundant column addition.
+    """
+    # Bring the DB up to f0a1 (the state right before backfill
+    # migrations started).
+    up_to_f0a1 = _run_alembic(sqlite_db, "upgrade", "b2c4d6e8f0a1")
+    assert up_to_f0a1.returncode == 0, up_to_f0a1.stderr or up_to_f0a1.stdout
+
+    # Seed: user + account + category + category_rule + transaction.
+    # Schema at f0a1 does not have is_regex/active (those come in
+    # f0a2) — so we use the SQLite-recognised defaults.
+    conn = sqlite3.connect(sqlite_db)
+    try:
+        conn.executescript(
+            """
+            INSERT INTO users (id, email, password_hash, created_at, updated_at)
+            VALUES ('11111111-1111-1111-1111-111111111111',
+                    'migration-test@example.com',
+                    'fakehash', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+            INSERT INTO accounts (id, user_id, name, type, opening_balance_cents,
+                                  currency, created_at, updated_at)
+            VALUES ('22222222-2222-2222-2222-222222222222',
+                    '11111111-1111-1111-1111-111111111111',
+                    'Test', 'asset', 0, 'IDR',
+                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+            INSERT INTO categories (id, user_id, name, kind, created_at, updated_at)
+            VALUES ('33333333-3333-3333-3333-333333333333',
+                    '11111111-1111-1111-1111-111111111111',
+                    'Makan', 'expense',
+                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+            INSERT INTO transactions (id, user_id, account_id, category_id,
+                                      type, amount_cents, currency, occurred_on,
+                                      note, created_at, updated_at)
+            VALUES ('44444444-4444-4444-4444-444444444444',
+                    '11111111-1111-1111-1111-111111111111',
+                    '22222222-2222-2222-2222-222222222222',
+                    NULL, 'expense', 10000, 'IDR', '2026-07-30',
+                    'BACKFILL test', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+            """
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    # Upgrade through f0a2 (which adds is_regex + active defaults
+    # so the seeded category_rule isn't strictly needed here —
+    # backfill works without rules and will just no-op for users
+    # with no rules, which is enough to exercise the column
+    # ordering).
+    upgrade = _run_alembic(sqlite_db, "upgrade", "head")
+    assert upgrade.returncode == 0, upgrade.stderr or upgrade.stdout
+
+    # The migration should not crash AND the column ``origin_tag``
+    # should be present (added by f0a3 during this same upgrade
+    # pass).
+    conn = sqlite3.connect(sqlite_db)
+    try:
+        cols = {
+            row[1]
+            for row in conn.execute("PRAGMA table_info(rule_audit_log)")
+        }
+    finally:
+        conn.close()
+    assert "origin_tag" in cols, "origin_tag column missing from rule_audit_log"

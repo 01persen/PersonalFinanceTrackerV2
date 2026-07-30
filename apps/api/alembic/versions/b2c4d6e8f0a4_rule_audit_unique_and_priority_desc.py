@@ -49,12 +49,13 @@ depends_on: str | Sequence[str] | None = None
 def upgrade() -> None:
     bind = op.get_bind()
 
-    # 0) Add ``origin_tag`` column for the backfill rule_version
-    # idempotency check. Nullable — live apply rows leave it NULL.
-    op.add_column(
-        "rule_audit_log",
-        sa.Column("origin_tag", sa.String(length=64), nullable=True),
-    )
+    # 0) ``origin_tag`` column was added by the backfill migration
+    # ``b2c4d6e8f0a3`` so the idempotency ``SELECT ... FROM
+    # rule_audit_log`` could reference it. QA retest #2 found that
+    # leaving the column addition to this migration meant f0a3
+    # crashed on any database with prior data
+    # (``no such column: origin_tag``). We add it in f0a3 and skip
+    # here so the chain ``f0a3 → f0a4`` is order-stable.
 
     # 1) Dedupe any existing audit rows that would block the unique
     # index. Keep the earliest-applied row per triple.
@@ -120,4 +121,7 @@ def downgrade() -> None:
         table_name="rule_audit_log",
     )
 
-    op.drop_column("rule_audit_log", "origin_tag")
+    # ``origin_tag`` column is dropped by ``b2c4d6e8f0a3``'s
+    # downgrade — keep the schema change co-located with the
+    # migration that introduces it so the upgrade/downgrade chain
+    # is symmetric and self-contained.

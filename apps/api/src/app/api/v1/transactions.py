@@ -36,8 +36,12 @@ returns zeros plus empty arrays for empty months.
 
 The list path is paginated (``limit`` + ``offset``) and filterable on
 ``occurred_on`` range, ``account_id``, ``type``, and ``category_id``.
-Results sort by ``occurred_on`` desc, ``created_at`` desc to give the FE a
-stable "Pendapatan & Pengeluaran Bulanan" view.
+Results sort by ``occurred_on`` desc, ``amount_cents`` desc, ``id`` asc —
+a fully deterministic tie-breaker chain that does not depend on
+``created_at`` (whose second-level precision on SQLite ties frequently,
+forcing a random UUID tie-break). See sub-0004-00 carry-over for the
+historical flake and sub-0004-03 for the same pattern in the search
+endpoint.
 """
 
 from __future__ import annotations
@@ -423,8 +427,8 @@ def list_transactions(
             .where(*base_where)
             .order_by(
                 Transaction.occurred_on.desc(),
-                Transaction.created_at.desc(),
-                Transaction.id.desc(),
+                Transaction.amount_cents.desc(),
+                Transaction.id.asc(),
             )
             .limit(limit)
             .offset(offset)

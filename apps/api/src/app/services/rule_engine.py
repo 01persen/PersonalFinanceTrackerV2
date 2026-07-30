@@ -29,6 +29,7 @@ guard is the pattern-length cap at the API boundary plus a
 
 from __future__ import annotations
 
+import concurrent.futures
 import re
 import uuid
 from collections.abc import Iterable
@@ -52,6 +53,36 @@ REGEX_MAX_PATTERN_CHARS = 1024
 #: match is cheap; this guard mainly prevents accidental upload of
 #: gigantic notes-as-patterns.
 PATTERN_MAX_CHARS = 255
+#: Wall-clock budget for a single :func:`re.search` call. Combined
+#: with the static catastrophic-pattern linter below; on its own
+#: the timeout is a backstop (CPython can't actually interrupt a
+#: hung ``re.search`` because it holds the GIL — the worker thread
+#: continues to burn CPU even after ``future.result`` times out).
+#: Tuned at 200ms — well above the longest legitimate match but
+#: orders of magnitude shorter than a ReDoS attack on a 30-char
+#: haystack.
+REGEX_MATCH_TIMEOUT_SECONDS = 0.2
+#: Compiled linter that flags the textbook ReDoS shapes the QA team
+#: fed us. Python's :mod:`re` module is not interruptible from
+#: another thread (it holds the GIL during backtracking), so a wall-
+#: clock timeout can't actually free the worker — the only reliable
+#: defence is to reject these patterns at compile time. The linter
+#: is conservative: it flags patterns that *can* backtrack
+#: catastrophically. False positives are accepted as the cost of
+#: safety; legitimate patterns almost never look like this.
+_REDOS_PATTERN = re.compile(
+    r"\([^()]*[+*][^()]*\)[+*?]"  # (X+)+, (X*)+, (X+)*, (X*)?, etc.
+    r"|\(\.\*\)\+"  # (.*)+
+    r"|\(\.\+\)\+"  # (.+)+
+    r"|\(\.[*+]\)[*?]"  # (.*)*, (.+)*, (.+)?, (.*)?
+    r"|\[[^\]]*\+\][+*?]"  # [a+]+  — character-class followed by quantifier
+    r"|\([^()]*\|[^()]*\)[+*][^?]"  # (a|b)+  — bare alternation with quantifier
+)
+#: Module-level executor for timed-out regex matches. Sized at 1
+#: worker so a hung pattern doesn't pile up concurrent jobs.
+_REGEX_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
+    max_workers=1, thread_name_prefix="rule-engine-regex"
+)
 
 
 @dataclass(frozen=True)
@@ -85,14 +116,41 @@ def _safe_search(pattern: str, *, is_regex: bool, haystack: str) -> bool:
 
     Returns ``True`` iff the pattern matches the haystack. Raises
     :class:`ValueError` when ``is_regex`` is True and the pattern is
-    too long — the API layer catches it and returns 422.
+    too long, OR matches the catastrophic-pattern linter — the
+    API layer catches it and returns 422. Returns ``False``
+    (no-match) when the regex exceeds
+    :data:`REGEX_MATCH_TIMEOUT_SECONDS` — the rule is treated as
+    catastrophic and skipped for the remainder of the apply pass so
+    one bad row doesn't lock a FastAPI worker (AC risk area: regex
+    ReDoS).
+
+    The catastrophic-pattern linter is the primary defence — CPython
+    can't interrupt a hung ``re.search`` because it holds the GIL,
+    so the timeout is only a backstop. Patterns that match the
+    linter are rejected at the engine boundary so they never reach
+    the regex engine.
     """
     if is_regex:
         if len(pattern) > REGEX_MAX_PATTERN_CHARS:
             raise ValueError(
                 f"regex pattern exceeds the {REGEX_MAX_PATTERN_CHARS}-character safety cap"
             )
-        return re.search(pattern, haystack) is not None
+        if _REDOS_PATTERN.search(pattern):
+            raise ValueError(
+                "regex pattern matches the catastrophic-backtracking linter "
+                "(nested quantifier, alternation-with-quantifier, or "
+                "character-class-with-quantifier shape)"
+            )
+        try:
+            future = _REGEX_EXECUTOR.submit(re.search, pattern, haystack)
+            return future.result(timeout=REGEX_MATCH_TIMEOUT_SECONDS) is not None
+        except concurrent.futures.TimeoutError:
+            # Catastrophic backtracking — skip the rule for this
+            # apply pass without raising. The audit log won't see
+            # the rule so the operator can re-train it later.
+            return False
+        except re.error:
+            return False
     return pattern.lower() in haystack.lower()
 
 
@@ -113,12 +171,12 @@ def _pick_winner(
             matched = _safe_search(
                 rule.pattern, is_regex=rule.is_regex, haystack=note
             )
-        except re.error:
-            # Malformed regex on a user-uploaded rule — skip and
-            # continue with the remaining rules so one bad row
-            # doesn't block the whole engine. The audit log won't
-            # record anything for skipped rules so QA can spot the
-            # offender by manually re-applying + checking the
+        except (ValueError, re.error):
+            # Malformed / over-cap regex on a user-uploaded rule —
+            # skip and continue with the remaining rules so one bad
+            # row doesn't block the whole engine. The audit log
+            # won't record anything for skipped rules so QA can spot
+            # the offender by manually re-applying + checking the
             # ``RuleMatch`` debug path.
             continue
         if not matched:
@@ -188,6 +246,7 @@ def apply_rules_to_transactions(
     transactions: list[Transaction],
     origin: str,
     write_audit: bool = True,
+    rule_version: str | None = None,
 ) -> ApplyResult:
     """Apply the engine to ``transactions`` in-memory.
 
@@ -202,6 +261,12 @@ def apply_rules_to_transactions(
     count *would-be* updates without committing anything — the
     backfill endpoint and the data migration script then issue a
     second pass with ``write_audit=True``.
+
+    ``rule_version`` is an optional fingerprint (typically the SHA256
+    of the caller's active rule set) recorded as ``origin_tag`` on
+    every audit row. The Alembic data migration uses it as an
+    idempotency anchor: if the most recent ``origin_tag`` for a user
+    equals the current ``rule_version``, the apply pass is skipped.
 
     No-match preserve (AC (2)): a transaction whose ``category_id``
     is already set and no rule matches is left untouched — the
@@ -272,6 +337,7 @@ def apply_rules_to_transactions(
                     prev_category_id=prev,
                     new_category_id=target_category.id,
                     origin=origin,
+                    origin_tag=rule_version,
                 )
             )
         updated += 1

@@ -44,7 +44,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import desc, select
+from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
 from app.api.v1.auth import get_current_user
@@ -418,6 +418,28 @@ def apply_rules_endpoint(
     race window because the worst case is one stale audit row, not
     data corruption.
     """
+    # sub-0004-02 AC (4) — explicit 403 when the caller has no rules
+    # to evaluate. The QA defect #3a report flagged that a foreign /
+    # rule-less caller previously got 200 + ``{rules_evaluated: 0}``
+    # which the spec classifies as a 403. We detect "no rules"
+    # explicitly with a cheap count query before loading the
+    # transaction set, so a caller who legitimately has zero rules
+    # still gets 403 even if they happen to own transactions.
+    has_rules = (
+        db.execute(
+            select(func.count(CategoryRule.id)).where(
+                CategoryRule.user_id == current_user.id,
+                CategoryRule.active.is_(True),
+            )
+        ).scalar_one()
+        > 0
+    )
+    if not has_rules:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="no active category rules for the caller",
+        )
+
     transactions = _list_transactions_for_user(db, user_id=current_user.id)
 
     result: ApplyResult = apply_rules_to_transactions(

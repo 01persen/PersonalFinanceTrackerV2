@@ -517,14 +517,21 @@ def update_transaction(
     for field, value in data.items():
         setattr(transaction, field, value)
 
-    # sub-0004-02 AC (1) — auto-apply rules when the caller sends an explicit
-    # ``category_id: null`` (i.e. "clear it, let the rule engine decide").
-    # The engine's ``resolve_category_for_transaction`` honours
-    # no-match preserve (AC (2)) — if nothing matches the resulting note
-    # we leave the cleared ``None`` alone. If the payload doesn't touch
-    # ``category_id`` we leave the existing assignment alone (the FE is
-    # doing a separate edit; don't surprise them by re-categorising).
-    if data.get("category_id") is None and "category_id" in data:
+    # sub-0004-02 AC (1) — auto-apply rules when EITHER:
+    #   (a) the caller sends an explicit ``category_id: null`` (clear
+    #       the manual override, let the engine decide), OR
+    #   (b) the caller edits a matching field (``note`` — the only
+    #       free-text key the engine indexes) and leaves
+    #       ``category_id`` untouched or sends ``null`` too.
+    # An explicit non-null ``category_id`` is a manual override and
+    # is preserved (no engine call). The engine's
+    # ``resolve_category_for_transaction`` honours no-match preserve
+    # (AC (2)) — if nothing matches the resulting note we leave the
+    # cleared ``None`` alone.
+    category_touched = "category_id" in data and data["category_id"] is None
+    note_changed = "note" in data
+    if category_touched or note_changed:
+        prev_category_id = transaction.category_id
         match = resolve_category_for_transaction(
             db, transaction=transaction, current_user_id=current_user.id
         )
@@ -535,6 +542,7 @@ def update_transaction(
                 and target.user_id == current_user.id
                 and target.archived_at is None
                 and target.kind == transaction.type.value
+                and prev_category_id != target.id
             ):
                 transaction.category_id = target.id
                 db.add(
@@ -542,7 +550,7 @@ def update_transaction(
                         rule_id=match.rule_id,
                         transaction_id=transaction.id,
                         user_id=current_user.id,
-                        prev_category_id=None,
+                        prev_category_id=prev_category_id,
                         new_category_id=target.id,
                         origin="live",
                     )

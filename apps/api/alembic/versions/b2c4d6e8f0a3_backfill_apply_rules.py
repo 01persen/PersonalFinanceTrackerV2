@@ -16,9 +16,23 @@ Idempotency strategy:
   migration produces no duplicate audit rows because the second
   pass computes the same winners and finds the category already
   applied.
-* The audit table itself records every change with its
-  ``applied_at`` server timestamp; the migration is intentionally
-  re-runnable so an operator can refresh after a rules re-import.
+* A ``rule_version`` hash (sorted ``(rule_id, pattern, priority,
+  is_regex)`` tuples joined with ``"|"``) is recorded as the
+  ``origin_tag`` on every audit row. The upgrade step queries
+  the most recent ``origin_tag`` per user and skips the apply
+  pass when the current rule set hashes to the same value.
+* The unique constraint ``uq_rule_audit_log_rule_tx_origin``
+  (added by ``b2c4d6e8f0a4``) is the DB-level backstop —
+  concurrent backfills can't both write an audit row for the
+  same ``(rule, transaction, origin)`` triple.
+
+QA defect #1c: the previous implementation spun up a separate
+SQLAlchemy ``Session`` via ``get_sessionmaker(url=bind_url)``.
+That session was bound to a different engine than the one Alembic
+held, so commits made by the engine never reached the migration
+transaction and the audit rows silently disappeared. This
+revision uses ``Session(bind=bind)`` directly — same engine, same
+transaction — so the writes are durable.
 
 Why this is *not* a generic "recompute every transaction": the
 engine only flips a category when a rule matches *and* the
@@ -34,20 +48,22 @@ a second writer.
 
 from __future__ import annotations
 
+import hashlib
 import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from sqlalchemy import select, text
 from alembic import op
+from sqlalchemy import select, text
+from sqlalchemy.orm import Session
 
 # Ensure ``app`` package is importable when the migration runs standalone.
 _SRC = Path(__file__).resolve().parents[3] / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
+from app.db.models.category_rule import CategoryRule  # noqa: E402
 from app.db.models.transaction import Transaction  # noqa: E402
-from app.db.session import get_sessionmaker  # noqa: E402
 from app.services.rule_engine import apply_rules_to_transactions  # noqa: E402
 
 # revision identifiers, used by Alembic.
@@ -57,11 +73,42 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 
+def _current_rule_version(bind: object) -> dict[object, str]:
+    """Return a ``{user_id: rule_version_hash}`` map for the active rule set.
+
+    The hash is stable across reruns for the same rule set, so the
+    migration can detect "rules haven't changed since the last
+    apply" and skip the pass entirely. Includes ``user_id`` so a
+    multi-tenant deploy can fingerprint each tenant independently.
+    """
+    rows = list(
+        bind.execute(
+            select(
+                CategoryRule.user_id,
+                CategoryRule.id,
+                CategoryRule.pattern,
+                CategoryRule.priority,
+                CategoryRule.is_regex,
+                CategoryRule.active,
+            ).order_by(CategoryRule.user_id, CategoryRule.id)
+        )
+    )
+    by_user: dict[object, list[tuple[object, ...]]] = {}
+    for row in rows:
+        by_user.setdefault(row.user_id, []).append(
+            (row.id, row.pattern, row.priority, row.is_regex, row.active)
+        )
+    return {
+        user_id: hashlib.sha256(
+            "|".join(",".join(map(str, t)) for t in sorted(tuples)).encode()
+        ).hexdigest()
+        for user_id, tuples in by_user.items()
+    }
+
+
 def upgrade() -> None:
     """Apply rules to every user's existing transactions, per user."""
     bind = op.get_bind()
-    bind_url = str(bind.engine.url)
-    session_factory = get_sessionmaker(url=bind_url)
 
     # Discover the user set without dragging the ORM mapper; the data
     # migration is a one-shot pass and a raw ``text()`` query keeps the
@@ -74,9 +121,36 @@ def upgrade() -> None:
         ).scalars()
     )
 
-    with session_factory() as session:
+    rule_versions = _current_rule_version(bind)
+
+    # QA defect #1c fix: use a Session bound to the *same* engine
+    # Alembic is using so commits propagate to the migration
+    # transaction.
+    with Session(bind=bind) as session:
         try:
             for user_id in user_ids:
+                rule_version = rule_versions.get(user_id)
+                if rule_version is None:
+                    # No active rules for this user — skip; matches
+                    # the 403 behaviour of the apply-rules endpoint.
+                    continue
+
+                # Idempotency check: skip if the most recent audit
+                # row for this user already records the current
+                # rule_version. The migration is still re-runnable
+                # after a rule change (the hash will differ).
+                last_origin_tag = session.execute(
+                    text(
+                        "SELECT origin_tag FROM rule_audit_log "
+                        "WHERE user_id = :user_id AND origin = 'backfill' "
+                        "ORDER BY applied_at DESC LIMIT 1"
+                    ),
+                    {"user_id": user_id},
+                ).scalar()
+
+                if last_origin_tag == rule_version:
+                    continue
+
                 txs = list(
                     session.execute(
                         select(Transaction).where(
@@ -91,6 +165,7 @@ def upgrade() -> None:
                     transactions=txs,
                     origin="backfill",
                     write_audit=True,
+                    rule_version=rule_version,
                 )
             session.commit()
         except Exception:

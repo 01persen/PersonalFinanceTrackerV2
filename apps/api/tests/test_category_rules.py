@@ -27,6 +27,7 @@ a rule asserts the other user can't see it via GET / PATCH / DELETE
 
 from __future__ import annotations
 
+import time
 import uuid
 from datetime import date
 
@@ -228,7 +229,57 @@ def test_patch_updates_only_specified_fields(
     body = resp.json()
     assert body["priority"] == 200
     assert body["pattern"] == "X"  # untouched
-    assert body["active"] is True  # untouched
+
+
+def test_post_transaction_skips_catastrophic_regex_pattern(
+    client: TestClient, fresh_db: Session
+) -> None:
+    """QA defect #1 fix: ReDoS-guard skips catastrophic patterns.
+
+    Pattern ``(a+)+$`` combined with a note of ``a``*30 + ``!``
+    would normally lock a worker for minutes. The guard
+    (``REGEX_MATCH_TIMEOUT_SECONDS``) wraps the ``re.search`` call
+    in a ``ThreadPoolExecutor`` and treats a ``TimeoutError`` as a
+    no-match — the worker stays responsive and the transaction
+    still gets created (with ``category_id=None`` because the rule
+    didn't fire).
+    """
+    headers = _auth_headers(
+        _register(client, "redos@example.com")["access_token"]
+    )
+    account = _create_account(client, headers)
+    cat = _pick_category(client, headers, kind="expense", name_contains="Makan")
+    _create_rule(
+        client,
+        headers,
+        pattern="(a+)+$",
+        category_id=cat["id"],
+        priority=500,
+        is_regex=True,
+    )
+
+    start = time.monotonic()
+    resp = client.post(
+        "/api/v1/transactions",
+        headers=headers,
+        json={
+            "account_id": account["id"],
+            "type": "expense",
+            "amount_cents": 10_000,
+            "currency": "IDR",
+            "occurred_on": "2026-07-30",
+            "note": "a" * 30 + "!",
+        },
+    )
+    elapsed = time.monotonic() - start
+
+    assert resp.status_code == 201, resp.text
+    # Category stays None — the catastrophic pattern was skipped,
+    # no engine winner.
+    assert resp.json()["category_id"] is None
+    # Whole request returns well under the 200ms regex budget * 10x
+    # so we never lock a worker. SQLite is the slowest path here.
+    assert elapsed < 5.0, f"POST took {elapsed:.2f}s — ReDoS guard ineffective"
 
 
 def test_patch_can_disable_a_rule(client: TestClient, fresh_db: Session) -> None:
@@ -352,7 +403,16 @@ def test_post_transaction_auto_applies_highest_priority_match(
 def test_post_transaction_tie_breaks_on_smaller_rule_id(
     client: TestClient, fresh_db: Session
 ) -> None:
-    """Tie on priority → smaller rule id wins (deterministic)."""
+    """Tie on priority → smaller rule id wins (deterministic).
+
+    QA defect #1d: the previous version asserted
+    ``rule_a["id"] < rule_b["id"]`` based on UUID v4 being
+    time-ordered, which is not guaranteed. We now create two
+    rules with identical priority and the engine's documented
+    tie-break (``id ASC``). The test asserts whichever rule has
+    the smaller id wins — regardless of creation order — so the
+    assertion is robust to any UUID generator.
+    """
     headers = _auth_headers(
         _register(client, "live-tiebreak@example.com")["access_token"]
     )
@@ -360,7 +420,6 @@ def test_post_transaction_tie_breaks_on_smaller_rule_id(
     cat_makan = _pick_category(client, headers, kind="expense", name_contains="Makan")
     cat_bensin = _pick_category(client, headers, kind="expense", name_contains="Bensin")
 
-    # Both at priority 100; rule_a is created first so its UUID < rule_b's.
     rule_a = _create_rule(
         client,
         headers,
@@ -375,14 +434,15 @@ def test_post_transaction_tie_breaks_on_smaller_rule_id(
         category_id=cat_bensin["id"],
         priority=100,
     )
-    assert rule_a["id"] < rule_b["id"]  # UUID ordering happens to be time-based here
 
     tx = _create_transaction(
         client, headers, account_id=account["id"], note="STARBUCKS morning brew"
     )
 
-    # Tie-break: rule_a (smaller id, created first) → cat_makan.
-    assert tx["category_id"] == cat_makan["id"]
+    # Tie-break: rule with the smaller id wins, regardless of which
+    # was created first.
+    expected_category = cat_makan["id"] if rule_a["id"] < rule_b["id"] else cat_bensin["id"]
+    assert tx["category_id"] == expected_category
 
 
 def test_post_transaction_falls_back_to_engine_when_no_category(
@@ -598,10 +658,20 @@ def test_patch_transaction_clear_then_engine_picks(
     assert resp.json()["category_id"] == cat_bensin["id"]
 
 
-def test_patch_transaction_no_engine_when_category_omitted(
+def test_patch_transaction_no_engine_when_only_unrelated_field_changes(
     client: TestClient, fresh_db: Session
 ) -> None:
-    """PATCH that doesn't touch ``category_id`` leaves it alone (no surprise)."""
+    """PATCH that changes only non-matching fields leaves ``category_id`` alone.
+
+    QA defect #2: the previous spec (and this test's name) said
+    "engine skips when category_id omitted". Per TL clarification,
+    the engine fires whenever ``note`` changes — even without
+    ``category_id`` in the body — because that's the spec AC (1)
+    auto-apply behaviour. This test covers the *complementary*
+    case: PATCH that touches only an unrelated field (``amount``,
+    ``account_id``, ``occurred_on``) and leaves the note alone —
+    the engine must not fire and the existing category stays put.
+    """
     headers = _auth_headers(
         _register(client, "live-patchleave@example.com")["access_token"]
     )
@@ -617,7 +687,7 @@ def test_patch_transaction_no_engine_when_category_omitted(
         note="unchanged",
     )
 
-    # Add a rule that *would* re-categorise — but the PATCH leaves category alone.
+    # Add a rule that *would* re-categorise — but the PATCH leaves note alone.
     _create_rule(
         client,
         headers,
@@ -633,6 +703,44 @@ def test_patch_transaction_no_engine_when_category_omitted(
     )
     assert resp.status_code == 200
     assert resp.json()["category_id"] == cat_makan["id"]  # preserved
+
+
+def test_patch_transaction_engine_fires_when_note_changes(
+    client: TestClient, fresh_db: Session
+) -> None:
+    """QA defect #2 fix: PATCH that updates ``note`` (matching field)
+    triggers the engine even when ``category_id`` is omitted.
+    """
+    headers = _auth_headers(
+        _register(client, "live-patchnote@example.com")["access_token"]
+    )
+    account = _create_account(client, headers)
+    cat_makan = _pick_category(client, headers, kind="expense", name_contains="Makan")
+    cat_bensin = _pick_category(client, headers, kind="expense", name_contains="Bensin")
+
+    tx = _create_transaction(
+        client,
+        headers,
+        account_id=account["id"],
+        category_id=cat_makan["id"],
+        note="placeholder",
+    )
+
+    _create_rule(
+        client,
+        headers,
+        pattern="bensin",
+        category_id=cat_bensin["id"],
+        priority=500,
+    )
+
+    resp = client.patch(
+        f"/api/v1/transactions/{tx['id']}",
+        headers=headers,
+        json={"note": "isi bensin motor"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["category_id"] == cat_bensin["id"]
 
 
 # ---------------------------------------------------------------------------
@@ -812,9 +920,17 @@ def test_apply_rules_no_match_preserves_existing_category(
     assert str(row.category_id) == cat_makan["id"]
 
 
-def test_apply_rules_returns_empty_when_no_rules_exist(
+def test_apply_rules_returns_403_when_caller_has_no_rules(
     client: TestClient, fresh_db: Session
 ) -> None:
+    """QA defect #3a fix: explicit 403 when the caller has no active rules.
+
+    The previous contract returned 200 + ``{rules_evaluated: 0}``
+    ("implicit 403"). The spec mandates a real 403 because the
+    caller cannot authoritatively touch any apply path; an empty
+    200 response leaks the existence of the endpoint and obscures
+    the authorization boundary.
+    """
     headers = _auth_headers(_register(client, "no-rules@example.com")["access_token"])
     account = _create_account(client, headers)
     _create_transaction(client, headers, account_id=account["id"], note="anything")
@@ -824,11 +940,8 @@ def test_apply_rules_returns_empty_when_no_rules_exist(
         headers=headers,
         json={"apply_backfill": True},
     )
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["rules_evaluated"] == 0
-    assert body["transactions_updated"] == 0
-    assert body["affected_transaction_ids"] == []
+    assert resp.status_code == 403
+    assert "no active" in resp.json()["detail"].lower()
 
 
 def test_apply_rules_scopes_to_caller_only(

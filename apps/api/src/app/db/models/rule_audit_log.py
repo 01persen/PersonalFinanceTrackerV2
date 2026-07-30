@@ -20,6 +20,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+import sqlalchemy as sa
 from sqlalchemy import DateTime, ForeignKey, Index, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -37,9 +38,19 @@ class RuleAuditLog(Base, UUIDPKMixin):
         Index("ix_rule_audit_log_user_applied_at", "user_id", "applied_at"),
         Index("ix_rule_audit_log_rule_applied_at", "rule_id", "applied_at"),
         Index("ix_rule_audit_log_transaction", "transaction_id"),
-        # ``applied_at`` doubles as a migration-version check anchor: the
-        # idempotent Alembic data migration (``backfill``) compares the
-        # maximum ``applied_at`` per user before re-applying.
+        # Sub-0004-02 QA fix — unique (rule, transaction, origin)
+        # prevents duplicate audit rows on concurrent backfill. The
+        # constraint is portable across SQLite + PostgreSQL and is
+        # created by Alembic migration b2c4d6e8f0a4. ``applied_at``
+        # is excluded because duplicate writes within the same
+        # microsecond would otherwise be allowed; the constraint
+        # catches that case at the (rule, tx, origin) level instead.
+        sa.UniqueConstraint(
+            "rule_id",
+            "transaction_id",
+            "origin",
+            name="uq_rule_audit_log_rule_tx_origin",
+        ),
     )
 
     rule_id: Mapped[uuid.UUID] = mapped_column(
@@ -75,6 +86,13 @@ class RuleAuditLog(Base, UUIDPKMixin):
         # admin dry-run / apply endpoint. Free-text on purpose — future
         # origins (``"import"``, ``"undo"``) reuse the same row without a
         # schema change.
+    )
+    origin_tag: Mapped[str | None] = mapped_column(
+        # Sub-0004-02 QA fix — SHA256 fingerprint of the active rule
+        # set at apply time, used by the Alembic data migration to
+        # short-circuit re-runs when the rules haven't changed. NULL
+        # for the live-apply path (only the backfill hashes rules).
+        nullable=True,
     )
 
     rule: Mapped[CategoryRule | None] = relationship()

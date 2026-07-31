@@ -85,11 +85,12 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
 ## Catatan
 
 - epic **0005** sekarang **IN_PROGRESS** (sourced 2026-07-31, re-source
-  cycle post v4.0 user reset). Sub-task list masih kosong — Stage B
-  akan dijalankan TL dengan bantuan SA di routing berikutnya. Parent
-  issue: [GRE-56](https://multica/issues/GRE-56). Branch:
-  `release/epic-0005` (cut dari `main` @ `d886f15d`, post epic-0004
-  squash-merge [PR #40](https://github.com/01persen/PersonalFinanceTrackerV2/pull/40);
+  cycle post v4.0 user reset). Stage B complete — SA breakdown 6
+  sub-task (5 impl + 1 QA) di 4 stage aktif (Stage 4 skip — banner
+  FE-only). Parent issue: [GRE-56](https://multica/issues/GRE-56).
+  Branch: `release/epic-0005` (cut dari `main` @ `d886f15d`, post
+  epic-0004 squash-merge
+  [PR #40](https://github.com/01persen/PersonalFinanceTrackerV2/pull/40);
   local stale branch dari v4.0 cycle dihapus dulu via `git branch -D`
   sebelum re-cut dari main HEAD, push ke `origin/release/epic-0005`
   sebagai branch baru). Epic-0005 dipilih karena topmost eligible di
@@ -97,11 +98,27 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
   (DONE), keduanya DONE. epic-0007 sekarang butuh `0005 IN_PROGRESS` +
   `0006 IN_PROGRESS` (dependency partial) — setelah epic-0005 Stage H
   merge, blocker epic-0007 tinggal 0006. epic-0006 tetap IN_PROGRESS
-  (Stage B belum mulai, di luar scope Stage A ini). Carry-over
+  (Stage B belum mulai, di luar scope Stage A/B ini). Carry-over
   housekeeping dari epic-0004: flaky test
   `test_get_sort_is_stable_for_same_day` sudah di-fix (sub-0004-00 +
   [PR #38](https://github.com/01persen/PersonalFinanceTrackerV2/pull/38)
-  + [PR #39](https://github.com/01persen/PersonalFinanceTrackerV2/pull/39)).
+  + [PR #39](https://github.com/01persen/PersonalFinanceTrackerV2/pull/39));
+  epic-0005 BE CRUD `goals` test independen di file baru
+  `apps/api/tests/test_goals.py` — tidak butuh pre-req housekeeping.
+  TL-confirmed keputusan untuk sub-0005-02: (i) EF `target_amount_snapshot_cents`
+  di-snapshot at creation, tidak recompute saat `monthly_expense_cents`
+  atau `multiplier` berubah post-creation (snapshot semantics); (ii)
+  multiplier auto-fetch default dari `user_settings.ef_multiplier`
+  (PRD §14 default 3), FE boleh override per-goal.
+  - [ ] sub-0005-01 — BE CRUD `goals` + schema migration + endpoint progress → **todo** ([GRE-57](https://multica/issues/GRE-57)), BE. Stage 1 kickoff, serial dengan 02.
+  - [ ] sub-0005-02 — BE Engine progress + auto-update hook + EF formula + multiplier config → **backlog** ([GRE-58](https://multica/issues/GRE-58)), BE. Stage 1, depend on 01 DONE (promote ke `todo` setelah 01 done).
+  - [ ] sub-0005-03 — FE UI daftar goal + progress bar (mobile-first) → **backlog** ([GRE-59](https://multica/issues/GRE-59)), FE. Stage 2, depend on 01+02 DONE.
+  - [ ] sub-0005-04 — FE UI form buat/edit goal (saving + EF) → **backlog** ([GRE-61](https://multica/issues/GRE-61)), FE. Stage 2 paralel dengan 03, depend on 02 DONE (EF formula + multiplier exposed untuk client preview).
+  - [ ] sub-0005-05 — FE Banner notifikasi progress (threshold-based, in-app) → **backlog** ([GRE-60](https://multica/issues/GRE-60)), FE. Stage 3, depend on 03 DONE. Stage 4 skip — banner FE-only.
+  - [ ] sub-0005-06 — QA Integration + e2e test plan Epic 0005 → **backlog** ([GRE-62](https://multica/issues/GRE-62)), QA. Stage 5, depend on 01–05 DONE. Cover 4 Epic AC (a–d) + 4 high-risk area validation (race linked account, EF snapshot, multiplier config, auto-update hook).
+  - Stage 1 kickoff: Backend Engineer di-trigger via sub-0005-01 assignment (`todo` + assignee BE auto-fire). Stage 2-5 backlog, auto-promote per Stage Plan Operating Manual §5.1.
+  - **High-risk area QA direct test** (TL-confirmed, bukan BE re-impl): (1) concurrent test linked account recompute eventual consistency ≤ 1 s; (2) EF snapshot freeze post-creation; (3) multiplier auto-fetch default + per-goal override; (4) auto-update hook no-op untuk akun unlinked (no infinite loop).
+  - Sub-task status: **0/6 DONE** (Stage 1 kickoff rest-of-day 2026-07-31).
   Epic-0005 BE CRUD `goals` akan independently test model `goals`
   (tidak menyentuh `apps/api/tests/test_transactions.py`), risiko rendah
   — tetap flagged untuk awareness.
@@ -457,3 +474,23 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
   + SA) di-trigger di routing yang sama dengan comment hand-off ke
   System Analyst. epic-0006 tetap IN_PROGRESS (Stage B belum mulai,
   di luar scope Stage A ini).
+- v4.3 (2026-07-31) — Tech Leader: epic-0005 **Stage B complete**.
+  System Analyst breakdown Epic Detail Doc → 6 sub-task (5 impl + 1
+  QA) di 4 stage aktif (Stage 4 skip — banner FE-only). Sub-issue
+  dibuat: [GRE-57](https://multica/issues/GRE-57) (01, Stage 1 todo,
+  BE), [GRE-58](https://multica/issues/GRE-58) (02, Stage 1 backlog,
+  BE), [GRE-59](https://multica/issues/GRE-59) (03, Stage 2 backlog,
+  FE), [GRE-61](https://multica/issues/GRE-61) (04, Stage 2 backlog,
+  FE), [GRE-60](https://multica/issues/GRE-60) (05, Stage 3 backlog,
+  FE), [GRE-62](https://multica/issues/GRE-62) (06, Stage 5 backlog,
+  QA). Stage 1 kickoff: Backend Engineer di-trigger via sub-0005-01
+  assignment (`todo` + assignee BE auto-fire, sequence ke sub-0005-02
+  setelah 01 done). Pre-req housekeeping konfirmasi: epic-0005 BE
+  CRUD `goals` test independen di file baru `test_goals.py` — tidak
+  butuh sub-task housekeeping terpisah. TL-confirmed keputusan untuk
+  sub-0005-02 high-risk area: (i) EF `target_amount_snapshot_cents`
+  snapshot semantics at creation (tidak recompute post-creation); (ii)
+  multiplier auto-fetch default dari `user_settings.ef_multiplier`
+  (PRD §14 default 3) + FE boleh override per-goal. Tracker header
+  v4.2 → v4.3 + Catatan entry epic-0005 (sub-task list + TL-confirmed
+  keputusan + high-risk area notes) + Riwayat entry v4.3.

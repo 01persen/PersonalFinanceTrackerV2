@@ -7,12 +7,15 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 from app.db.models.account import Account
 from app.db.models.enums import AccountType, CategoryKind, GoalKind, TransactionType
+
+if TYPE_CHECKING:
+    from app.db.models.user_preference import UserPreference
 
 
 class RegisterRequest(BaseModel):
@@ -170,6 +173,77 @@ class UserPreferencePublic(BaseModel):
     dependents_count: int
     theme: str
     updated_at: datetime
+
+
+class UserSettingsPublic(BaseModel):
+    """Response shape for ``GET /users/me/settings`` and ``PATCH /users/me/settings``.
+
+    Alias of :class:`UserPreferencePublic` exposed under the
+    ``/users/me/settings`` route per the sub-0005-02 kickoff. The
+    underlying table is the same ``user_preferences`` row written by
+    the epic-0001 seed -- the new router is a thin alias path so the
+    existing ``GET /preferences`` endpoint and the new
+    ``/users/me/settings`` path return the same body without two
+    divergent schemas.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    locale: str
+    currency: str
+    ef_multiplier: int
+    dependents_count: int
+    theme: str
+    updated_at: datetime
+
+    @classmethod
+    def from_preference(cls, pref: UserPreference) -> UserSettingsPublic:
+        """Build the public view from a :class:`UserPreference` row.
+
+        Renames ``emergency_fund_multiplier`` -> ``ef_multiplier`` to
+        match the request body contract -- the FE-facing field name is
+        shorter and was the one pinned in the sub-0005-02 spec.
+
+        ``UserPreference`` is imported here in a ``TYPE_CHECKING`` block
+        (the model lives in :mod:`app.db.models.user_preference`) so
+        pydantic + mypy can see the column types without a circular
+        import. At runtime the body duck-types; mypy reads the type.
+        """
+        return cls.model_validate(
+            {
+                "locale": pref.locale,
+                "currency": pref.currency,
+                "ef_multiplier": pref.emergency_fund_multiplier,
+                "dependents_count": pref.dependents_count,
+                "theme": pref.theme,
+                "updated_at": pref.updated_at,
+            }
+        )
+
+
+class UserSettingsUpdate(BaseModel):
+    """Body for ``PATCH /users/me/settings``.
+
+    Every field is optional — only the fields present in the request
+    are touched. ``ef_multiplier`` must be ``>= 1`` per PRD §14
+    (the multiplier that's actually used to size the EF — values
+    below 1 would make the EF smaller than a single month of
+    expenses, which contradicts the goal's intent). Other fields
+    reuse the locale / currency / theme validation already done in
+    the FE for the MVP; we enforce a max length here so a client
+    can't blow up the preferences row with a runaway payload.
+
+    ``extra="forbid"`` so a client attempting to PATCH the immutable
+    ``id`` / ``user_id`` columns gets a 422 before the route runs.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    ef_multiplier: int | None = Field(default=None, ge=1)
+    locale: str | None = Field(default=None, min_length=2, max_length=10)
+    currency: str | None = Field(default=None, min_length=3, max_length=3)
+    dependents_count: int | None = Field(default=None, ge=0)
+    theme: str | None = Field(default=None, max_length=32)
 
 
 # --- Accounts (epic-0002) -----------------------------------------------------
@@ -782,6 +856,11 @@ class GoalPublic(BaseModel):
     ``archived_at`` is the authoritative tombstone timestamp surfaced
     so the FE can badge an archived goal (the default list endpoint
     still hides it via ``archived_at IS NULL``).
+
+    ``achieved_at`` is the *first* time the goal crossed 100% (added
+    in sub-0005-02, migration ``c5a7b9c1d3e4``). Persisted by the
+    recompute hook so the FE can badge achieved goals on a cache
+    miss without the progress endpoint having to write to the DB.
     """
 
     model_config = ConfigDict(from_attributes=True)
@@ -805,6 +884,7 @@ class GoalPublic(BaseModel):
     notes: str | None
     archived: bool
     archived_at: datetime | None
+    achieved_at: datetime | None
     created_at: datetime
     updated_at: datetime
 

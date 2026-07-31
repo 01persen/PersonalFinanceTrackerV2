@@ -144,6 +144,48 @@ def test_upgrade_is_replayable(sqlite_db: Path) -> None:
     assert _run_alembic(sqlite_db, "upgrade", "head").returncode == 0
 
 
+def test_goals_achieved_at_column_roundtrip(sqlite_db: Path) -> None:
+    """sub-0005-02 — the ``c5a7b9c1d3e4`` migration adds a nullable
+    ``achieved_at`` column to ``goals``. It must:
+
+    * Apply cleanly on top of the f5a6 state.
+    * Survive a ``downgrade -1`` round-trip (drop the new column).
+    * Stay nullable so a brand-new DB (empty ``goals`` table) sees
+      no constraint violation.
+    """
+    up = _run_alembic(sqlite_db, "upgrade", "c5a7b9c1d3e4")
+    assert up.returncode == 0, up.stderr or up.stdout
+
+    conn = sqlite3.connect(sqlite_db)
+    try:
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(goals)")}
+        assert "achieved_at" in cols
+    finally:
+        conn.close()
+
+    # Downgrade — the column must be gone after a single ``-1``.
+    down = _run_alembic(sqlite_db, "downgrade", "f5a6b7c8d9e0")
+    assert down.returncode == 0, down.stderr or down.stdout
+
+    conn = sqlite3.connect(sqlite_db)
+    try:
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(goals)")}
+        assert "achieved_at" not in cols
+    finally:
+        conn.close()
+
+    # Re-apply — the column comes back without data loss for other rows.
+    re_up = _run_alembic(sqlite_db, "upgrade", "c5a7b9c1d3e4")
+    assert re_up.returncode == 0, re_up.stderr or re_up.stdout
+
+    conn = sqlite3.connect(sqlite_db)
+    try:
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(goals)")}
+        assert "achieved_at" in cols
+    finally:
+        conn.close()
+
+
 def test_goals_migration_preserves_data_over_prior_state(
     sqlite_db: Path,
 ) -> None:

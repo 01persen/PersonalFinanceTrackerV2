@@ -27,6 +27,13 @@ default later). The ``current_amount_cents`` column is nullable so a
 goal with a linked account has no persisted value — sub-0005-02 will
 compute the live amount from the saldo engine on read.
 
+``achieved_at`` (added by sub-0005-02, migration ``c5a7b9c1d3e4``) is
+the *first* time ``current_amount_cents >= target_amount_cents``; the
+goal-engine's recompute hook persists it on threshold-cross and never
+touches it again — a goal that subsequently dips back below 100%
+(linked-account withdraw) still surfaces the original achievement
+timestamp.
+
 The FK to ``accounts`` is ``ON DELETE SET NULL`` so archiving an account
 never cascades into deleting the goal (mirrors the PRD's audit-friendly
 intent — losing a goal because someone closes an account would be a
@@ -76,6 +83,10 @@ class Goal(Base, UUIDPKMixin, UserFKMixin, TimestampMixin):
     target_amount_snapshot_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     archived_at: Mapped[DateTime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    achieved_at: Mapped[DateTime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
     )

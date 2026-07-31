@@ -3,12 +3,13 @@ name: CI
 on:
   pull_request:
     branches:
-      - release/epic-0001
+      - 'release/*'
       - main
   push:
     branches:
       - 'release/*'
       - main
+  workflow_dispatch: {}
 
 permissions:
   contents: read

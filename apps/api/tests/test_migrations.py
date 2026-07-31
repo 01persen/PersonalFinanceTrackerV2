@@ -49,7 +49,12 @@ EXPECTED_INDEXES = {
     ("category_rules", "ix_category_rules_user_id"),
     ("category_rules", "ix_category_rules_user_priority_active"),
     ("debts", "ix_debts_user_id"),
-    ("goals", "ix_goals_user_id"),
+    # sub-0005-01 — goal CRUD index design (migration f5a6). The original
+    # ``ix_goals_user_id`` is dropped in favour of the composite indexes
+    # that drive the list endpoint's filters.
+    ("goals", "ix_goals_user_id_kind"),
+    ("goals", "ix_goals_user_id_archived_at"),
+    ("goals", "ix_goals_linked_account_id"),
     ("debt_payments", "ix_debt_payments_debt_id"),
     ("rule_audit_log", "ix_rule_audit_log_user_applied_at"),
     ("rule_audit_log", "ix_rule_audit_log_rule_applied_at"),
@@ -138,6 +143,114 @@ def test_upgrade_is_replayable(sqlite_db: Path) -> None:
     assert _run_alembic(sqlite_db, "downgrade", "base").returncode == 0
     assert _run_alembic(sqlite_db, "upgrade", "head").returncode == 0
 
+
+def test_goals_migration_preserves_data_over_prior_state(
+    sqlite_db: Path,
+) -> None:
+    """sub-0005-01 carry-over: SQLite < 3.35.0 portability.
+
+    CI flagged that ``ALTER COLUMN ... DROP NOT NULL`` and
+    ``ADD COLUMN ... NOT NULL DEFAULT <non-constant>`` aren't supported
+    on older SQLite. The f5a6 migration was patched to wrap those ops
+    in ``op.batch_alter_table(recreate="always")`` and to add
+    ``start_date`` as nullable first, backfill it with
+    ``UPDATE ... SET start_date = CURRENT_DATE``, then tighten to
+    NOT NULL in a second batch. This test pins the data-preservation
+    contract:
+
+    * The pre-existing goal row survives the upgrade.
+    * ``start_date`` is back-filled to a non-null value.
+    * The downgrade round-trips back to the f0a5 schema with the
+      goal row's ``current_amount_cents`` and renamed column still
+      intact.
+    """
+    up_to_f0a5 = _run_alembic(sqlite_db, "upgrade", "b2c4d6e8f0a5")
+    assert up_to_f0a5.returncode == 0, up_to_f0a5.stderr or up_to_f0a5.stdout
+
+    conn = sqlite3.connect(sqlite_db)
+    try:
+        conn.executescript(
+            """
+            INSERT INTO users (id, email, password_hash, created_at, updated_at)
+            VALUES ('11111111-1111-1111-1111-111111111111',
+                    'goals-data@example.com',
+                    'fakehash', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+            INSERT INTO goals (id, user_id, kind, name, target_amount_cents,
+                              current_amount_cents, account_id,
+                              created_at, updated_at)
+            VALUES ('22222222-2222-2222-2222-222222222222',
+                    '11111111-1111-1111-1111-111111111111',
+                    'saving', 'Pre-existing', 5000000, 1500000, NULL,
+                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+            """
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    # Upgrade to f5a6 — every column-nullability / column-add op must
+    # run inside the batch recreate path (verified indirectly: a bare
+    # ``ALTER COLUMN DROP NOT NULL`` on this CI SQLite would throw
+    # ``near "ALTER": syntax error`` here).
+    up = _run_alembic(sqlite_db, "upgrade", "f5a6b7c8d9e0")
+    assert up.returncode == 0, up.stderr or up.stdout
+
+    conn = sqlite3.connect(sqlite_db)
+    try:
+        row = conn.execute(
+            """
+            SELECT current_amount_cents, linked_account_id, start_date
+            FROM goals
+            WHERE id = '22222222-2222-2222-2222-222222222222'
+            """
+        ).fetchone()
+        assert row is not None
+        # Pre-existing ``current_amount_cents`` survives the recreate.
+        assert int(row[0]) == 1_500_000
+        # ``linked_account_id`` is the renamed version of ``account_id``
+        # and matches the persisted NULL.
+        assert row[1] is None
+        # ``start_date`` was back-filled to today's date (not NULL).
+        assert row[2] is not None
+    finally:
+        conn.close()
+
+    # Downgrade — table is recreated again with the original shape.
+    down = _run_alembic(sqlite_db, "downgrade", "b2c4d6e8f0a5")
+    assert down.returncode == 0, down.stderr or down.stdout
+
+    conn = sqlite3.connect(sqlite_db)
+    try:
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(goals)")}
+        # New columns from f5a6 are gone.
+        for new_col in (
+            "start_date",
+            "jangka_waktu_months",
+            "tabungan_bulanan_cents",
+            "monthly_expense_cents",
+            "jumlah_tanggungan",
+            "multiplier",
+            "lama_mengumpulkan_bulan",
+            "target_amount_snapshot_cents",
+            "notes",
+            "archived_at",
+            "linked_account_id",
+        ):
+            assert new_col not in cols, f"{new_col!r} should be dropped on downgrade"
+        # ``account_id`` is back.
+        assert "account_id" in cols
+
+        # Pre-existing data survives the round-trip — same
+        # ``current_amount_cents`` value, ``account_id`` still NULL.
+        row = conn.execute(
+            "SELECT current_amount_cents, account_id "
+            "FROM goals WHERE id = '22222222-2222-2222-2222-222222222222'"
+        ).fetchone()
+        assert int(row[0]) == 1_500_000
+        assert row[1] is None
+    finally:
+        conn.close()
+
     tables = _table_names(sqlite_db)
     assert EXPECTED_TABLES.issubset(tables)
 
@@ -154,9 +267,7 @@ def test_users_email_is_unique(sqlite_db: Path) -> None:
         conn.close()
 
 
-def test_backfill_migration_with_prior_data_does_not_crash(
-    sqlite_db: Path
-) -> None:
+def test_backfill_migration_with_prior_data_does_not_crash(sqlite_db: Path) -> None:
     """QA retest #2 defect #1c regression: ``b2c4d6e8f0a3`` backfill
     migration must not raise ``no such column: origin_tag`` when
     upgrading over a database that already has data at f0a1.
@@ -223,18 +334,13 @@ def test_backfill_migration_with_prior_data_does_not_crash(
     # pass).
     conn = sqlite3.connect(sqlite_db)
     try:
-        cols = {
-            row[1]
-            for row in conn.execute("PRAGMA table_info(rule_audit_log)")
-        }
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(rule_audit_log)")}
     finally:
         conn.close()
     assert "origin_tag" in cols, "origin_tag column missing from rule_audit_log"
 
 
-def test_backfill_migration_actually_applies_rules(
-    sqlite_db: Path
-) -> None:
+def test_backfill_migration_actually_applies_rules(sqlite_db: Path) -> None:
     """QA retest #3 defect #1c (round 3): the backfill migration
     must *actually* apply rules — not just run without crashing.
 
@@ -333,9 +439,7 @@ def test_backfill_migration_actually_applies_rules(
                 "FROM rule_audit_log WHERE origin = 'backfill'"
             )
         )
-        assert len(audit_rows) == 1, (
-            f"expected exactly 1 backfill audit row, got {len(audit_rows)}"
-        )
+        assert len(audit_rows) == 1, f"expected exactly 1 backfill audit row, got {len(audit_rows)}"
         assert audit_rows[0][2] == "backfill"
         assert audit_rows[0][3] is not None and len(audit_rows[0][3]) == 64
     finally:

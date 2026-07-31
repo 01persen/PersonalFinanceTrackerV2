@@ -16,7 +16,17 @@ Closes the QA defect loop on sub-0004-02:
   Portable across SQLite (the test backend) and PostgreSQL (prod).
   Pre-existing duplicates from the previous build are deduped in
   the upgrade path so the constraint can be created cleanly —
-  only the earliest row per triple is kept.
+  only the earliest row per triple is kept. The dedupe uses
+  ``IS NOT DISTINCT FROM`` for the NULL-safe equality on
+  ``rule_id`` (a ``LEFT JOIN`` against an audit row whose
+  ``rule_id`` is NULL would otherwise drop the row from the
+  self-join — the previous ``IS`` form happened to work on SQLite
+  because SQLite coerces ``NULL = NULL`` to TRUE in the WHERE
+  clause, but PostgreSQL raises ``syntax error at or near "b"``
+  because PG only accepts ``IS [NOT] NULL`` or
+  ``IS [NOT] DISTINCT FROM`` for NULL-safe equality. Using
+  ``IS NOT DISTINCT FROM`` makes the statement portable across
+  both backends).
 
 * Recreates ``ix_category_rules_user_priority_active`` with the
   priority column explicitly declared ``DESC``. PostgreSQL honours
@@ -58,7 +68,17 @@ def upgrade() -> None:
     # here so the chain ``f0a3 → f0a4`` is order-stable.
 
     # 1) Dedupe any existing audit rows that would block the unique
-    # index. Keep the earliest-applied row per triple.
+    # index. Keep the earliest-applied row per triple. The
+    # ``IS NOT DISTINCT FROM`` predicate is the NULL-safe equality
+    # form understood by both SQLite and PostgreSQL — the previous
+    # ``IS`` form worked on SQLite (because SQLite's WHERE clause
+    # coerces ``NULL = NULL`` to TRUE) but PostgreSQL raises
+    # ``syntax error at or near "b"`` because PG only accepts
+    # ``IS [NOT] NULL`` or ``IS [NOT] DISTINCT FROM`` for
+    # NULL-safe equality. The outer ``WHERE a.rule_id IS NOT NULL``
+    # keeps the join conservative: rows with NULL ``rule_id`` are
+    # excluded because the unique constraint is on ``rule_id``
+    # anyway, so they don't need to be considered for the dedupe.
     bind.execute(
         sa.text(
             """
@@ -67,7 +87,7 @@ def upgrade() -> None:
                 SELECT a.id
                 FROM rule_audit_log AS a
                 JOIN rule_audit_log AS b
-                  ON a.rule_id IS b.rule_id
+                  ON a.rule_id IS NOT DISTINCT FROM b.rule_id
                  AND a.transaction_id = b.transaction_id
                  AND a.origin = b.origin
                  AND a.applied_at > b.applied_at

@@ -49,7 +49,12 @@ EXPECTED_INDEXES = {
     ("category_rules", "ix_category_rules_user_id"),
     ("category_rules", "ix_category_rules_user_priority_active"),
     ("debts", "ix_debts_user_id"),
-    ("goals", "ix_goals_user_id"),
+    # sub-0005-01 — goal CRUD index design (migration f5a6). The original
+    # ``ix_goals_user_id`` is dropped in favour of the composite indexes
+    # that drive the list endpoint's filters.
+    ("goals", "ix_goals_user_id_kind"),
+    ("goals", "ix_goals_user_id_archived_at"),
+    ("goals", "ix_goals_linked_account_id"),
     ("debt_payments", "ix_debt_payments_debt_id"),
     ("rule_audit_log", "ix_rule_audit_log_user_applied_at"),
     ("rule_audit_log", "ix_rule_audit_log_rule_applied_at"),
@@ -154,9 +159,7 @@ def test_users_email_is_unique(sqlite_db: Path) -> None:
         conn.close()
 
 
-def test_backfill_migration_with_prior_data_does_not_crash(
-    sqlite_db: Path
-) -> None:
+def test_backfill_migration_with_prior_data_does_not_crash(sqlite_db: Path) -> None:
     """QA retest #2 defect #1c regression: ``b2c4d6e8f0a3`` backfill
     migration must not raise ``no such column: origin_tag`` when
     upgrading over a database that already has data at f0a1.
@@ -223,18 +226,13 @@ def test_backfill_migration_with_prior_data_does_not_crash(
     # pass).
     conn = sqlite3.connect(sqlite_db)
     try:
-        cols = {
-            row[1]
-            for row in conn.execute("PRAGMA table_info(rule_audit_log)")
-        }
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(rule_audit_log)")}
     finally:
         conn.close()
     assert "origin_tag" in cols, "origin_tag column missing from rule_audit_log"
 
 
-def test_backfill_migration_actually_applies_rules(
-    sqlite_db: Path
-) -> None:
+def test_backfill_migration_actually_applies_rules(sqlite_db: Path) -> None:
     """QA retest #3 defect #1c (round 3): the backfill migration
     must *actually* apply rules — not just run without crashing.
 
@@ -333,9 +331,7 @@ def test_backfill_migration_actually_applies_rules(
                 "FROM rule_audit_log WHERE origin = 'backfill'"
             )
         )
-        assert len(audit_rows) == 1, (
-            f"expected exactly 1 backfill audit row, got {len(audit_rows)}"
-        )
+        assert len(audit_rows) == 1, f"expected exactly 1 backfill audit row, got {len(audit_rows)}"
         assert audit_rows[0][2] == "backfill"
         assert audit_rows[0][3] is not None and len(audit_rows[0][3]) == 64
     finally:

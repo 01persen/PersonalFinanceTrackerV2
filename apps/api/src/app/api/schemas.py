@@ -12,7 +12,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 from app.db.models.account import Account
-from app.db.models.enums import AccountType, CategoryKind, TransactionType
+from app.db.models.enums import AccountType, CategoryKind, GoalKind, TransactionType
 
 
 class RegisterRequest(BaseModel):
@@ -615,3 +615,257 @@ class TransactionSummaryPublic(BaseModel):
     transaction_count: int
     breakdown_by_category: list[SummaryCategoryBreakdownPublic]
     breakdown_by_account: list[SummaryAccountBreakdownPublic]
+
+
+# --- Goals (epic-0005, sub-0005-01) -------------------------------------------
+
+# TL decision (epic-0005, sub-0005-01): one ``goals`` table discriminated by
+# the ``kind`` column (``saving`` | ``emergency_fund``) — kind-specific
+# columns are nullable so a single backing table can hold both flavours
+# without a JOIN-style subclass split. The route enforces which fields
+# are writeable on each kind via Pydantic ``model_validator`` rules (the
+# DB layer can't express "either A or B, but not both in the same row"
+# without a CHECK constraint that breaks for back-compat rows, and we
+# want the validation to surface as 422 with a clear Pydantic error).
+
+
+class GoalCreate(BaseModel):
+    """Body for ``POST /goals``.
+
+    Required: ``kind``, ``name``, ``target_amount_cents``.
+
+    Validation rules (per sub-0005-01 AC):
+
+    * ``kind`` must be ``saving`` or ``emergency_fund`` (Pydantic ``Enum``
+      → 422).
+    * ``name`` is 1-120 chars (Pydantic → 422).
+    * ``target_amount_cents > 0`` (Pydantic ``gt=0`` → 422).
+    * ``linked_account_id`` (when set) must belong to the caller —
+      enforced in the route (404). Archived accounts return 404 so a
+      stale id from the client never resurrects a goal on a closed
+      account.
+    * **Saving-only fields**: ``jangka_waktu_months > 0`` when set, and
+      ``target_date >= start_date`` when both are provided. ``tabungan_bulanan_cents``
+      is currently a manual input — the auto-calc rule ships in
+      sub-0005-02, which will overwrite whatever the caller sent here.
+    * **EF-only fields**: ``monthly_expense_cents > 0`` when set,
+      ``jumlah_tanggungan >= 0`` when set, ``multiplier >= 1``
+      (default 3 when null). The auto-calc fields
+      (``lama_mengumpulkan_bulan``, ``target_amount_snapshot_cents``)
+      are intentionally NOT settable on create — they're the service
+      layer's output, not user input.
+
+    ``extra="forbid"`` rejects unknown fields with 422 before the route
+    runs (mirrors categories / transactions PATCH schemas).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: GoalKind
+    name: str = Field(min_length=1, max_length=120)
+    target_amount_cents: int = Field(gt=0)
+    current_amount_cents: int | None = Field(default=None, ge=0)
+    linked_account_id: uuid.UUID | None = None
+    start_date: date | None = None
+    target_date: date | None = None
+    jangka_waktu_months: int | None = Field(default=None, gt=0)
+    tabungan_bulanan_cents: int | None = Field(default=None, ge=0)
+    monthly_expense_cents: int | None = Field(default=None, gt=0)
+    jumlah_tanggungan: int | None = Field(default=None, ge=0)
+    multiplier: int | None = Field(default=None, ge=1)
+    lama_mengumpulkan_bulan: int | None = None
+    target_amount_snapshot_cents: int | None = Field(default=None, ge=0)
+    notes: str | None = Field(default=None, max_length=2000)
+
+    @model_validator(mode="after")
+    def _validate_kind_specific(self) -> GoalCreate:
+        # Saving-only — reject EF-only fields if they leak in on a saving
+        # goal; the auto-calc EF fields are write-once at the service
+        # layer (sub-0005-02) so we also reject them here as "not user
+        # input on create".
+        if self.kind == GoalKind.SAVING:
+            if (
+                self.monthly_expense_cents is not None
+                or self.jumlah_tanggungan is not None
+                or self.multiplier is not None
+            ):
+                raise ValueError(
+                    "monthly_expense_cents, jumlah_tanggungan, and multiplier are "
+                    "emergency_fund-only fields and must be omitted when kind='saving'"
+                )
+            if (
+                self.lama_mengumpulkan_bulan is not None
+                or self.target_amount_snapshot_cents is not None
+            ):
+                raise ValueError(
+                    "lama_mengumpulkan_bulan and target_amount_snapshot_cents are "
+                    "auto-calc fields owned by the goal-engine and must be omitted on create"
+                )
+            if (
+                self.target_date is not None
+                and self.start_date is not None
+                and self.target_date < self.start_date
+            ):
+                raise ValueError(
+                    f"target_date ({self.target_date.isoformat()}) must be >= "
+                    f"start_date ({self.start_date.isoformat()})"
+                )
+        # Emergency Fund-only — reject saving-only fields.
+        if self.kind == GoalKind.EMERGENCY_FUND:
+            saving_only_provided = [
+                name
+                for name, value in (
+                    ("target_date", self.target_date),
+                    ("jangka_waktu_months", self.jangka_waktu_months),
+                    ("tabungan_bulanan_cents", self.tabungan_bulanan_cents),
+                )
+                if value is not None
+            ]
+            if saving_only_provided:
+                raise ValueError(
+                    f"{', '.join(saving_only_provided)} are saving-only fields and must be "
+                    "omitted when kind='emergency_fund'"
+                )
+            if (
+                self.lama_mengumpulkan_bulan is not None
+                or self.target_amount_snapshot_cents is not None
+            ):
+                raise ValueError(
+                    "lama_mengumpulkan_bulan and target_amount_snapshot_cents are "
+                    "auto-calc fields owned by the goal-engine and must be omitted on create"
+                )
+        return self
+
+
+class GoalUpdate(BaseModel):
+    """Body for ``PATCH /goals/{id}`` — every field is optional.
+
+    ``kind`` is intentionally immutable through this endpoint: changing
+    the kind after creation would require different auto-calc rules and
+    a different validation surface, and the FE never needs to. Pydantic
+    rejects it with 422 (the field is not on the schema at all).
+
+    ``linked_account_id`` can be cleared by sending ``null``.
+    ``start_date`` cannot be cleared — once a goal exists the horizon
+    is anchored. ``extra="forbid"`` rejects unknown / server-controlled
+    fields.
+
+    The kind-specific rules from :class:`GoalCreate` re-run here against
+    the **merged** effective values (request payload union persisted row)
+    inside the route, so a PATCH that turns a saving goal's horizon
+    inconsistent with its ``target_date`` is rejected the same way as
+    on create.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    target_amount_cents: int | None = Field(default=None, gt=0)
+    current_amount_cents: int | None = Field(default=None, ge=0)
+    linked_account_id: uuid.UUID | None = None
+    start_date: date | None = None
+    target_date: date | None = None
+    jangka_waktu_months: int | None = Field(default=None, gt=0)
+    tabungan_bulanan_cents: int | None = Field(default=None, ge=0)
+    monthly_expense_cents: int | None = Field(default=None, gt=0)
+    jumlah_tanggungan: int | None = Field(default=None, ge=0)
+    multiplier: int | None = Field(default=None, ge=1)
+    notes: str | None = Field(default=None, max_length=2000)
+
+
+class GoalPublic(BaseModel):
+    """Output shape for a single goal row.
+
+    Mirrors the columns on :class:`app.db.models.goal.Goal` directly via
+    ``from_attributes=True``. ``archived`` is the derived boolean (kept
+    in sync with ``archived_at IS NOT NULL`` by the API layer);
+    ``archived_at`` is the authoritative tombstone timestamp surfaced
+    so the FE can badge an archived goal (the default list endpoint
+    still hides it via ``archived_at IS NULL``).
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    user_id: uuid.UUID
+    kind: GoalKind
+    name: str
+    target_amount_cents: int
+    current_amount_cents: int | None
+    linked_account_id: uuid.UUID | None
+    start_date: date
+    target_date: date | None
+    jangka_waktu_months: int | None
+    tabungan_bulanan_cents: int | None
+    monthly_expense_cents: int | None
+    jumlah_tanggungan: int | None
+    multiplier: int | None
+    lama_mengumpulkan_bulan: int | None
+    target_amount_snapshot_cents: int | None
+    notes: str | None
+    archived: bool
+    archived_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+    @classmethod
+    def from_goal(cls, goal: object) -> GoalPublic:
+        """Build the public view, deriving ``archived`` from ``archived_at``."""
+        archived_at = getattr(goal, "archived_at", None)
+        return cls.model_validate(
+            {
+                **{k: v for k, v in goal.__dict__.items() if not k.startswith("_")},
+                "archived": archived_at is not None,
+            }
+        )
+
+
+class GoalListPublic(BaseModel):
+    """Response envelope for ``GET /goals`` (paginated).
+
+    ``total`` is the *unfiltered-by-page* count of the caller's
+    non-archived goals matching the kind filter so the FE can render
+    pagination without a second call. ``limit`` + ``offset`` are
+    echoed back. Default page size is 50 (matches the transactions
+    list endpoint — same client-side pagination primitive).
+    """
+
+    items: list[GoalPublic]
+    total: int
+    limit: int
+    offset: int
+
+
+class GoalProgressPublic(BaseModel):
+    """Response shape for ``GET /goals/{id}/progress``.
+
+    Mirrors the contract called out in sub-0005-01:
+
+    * ``current_amount_cents`` — read at request time. For sub-0005-01
+      this is the persisted ``current_amount_cents`` column (or the
+      ``linked_account_id`` account's live balance, when set). The
+      sub-0005-02 service layer replaces this with a race-safe compute
+      path; the wire shape stays the same.
+    * ``target_amount_cents`` — the persisted target.
+    * ``percentage`` — ``min(100, current / target * 100)`` rounded to
+      two decimals. ``0`` when ``target_amount_cents`` is ``0`` (the
+      schema enforces ``> 0`` so this is defensive only).
+    * ``achieved_at`` — the persisted row's ``updated_at`` timestamp
+      when ``current_amount_cents >= target_amount_cents``, else
+      ``null``. The wiring is simple today (a goal that crosses the
+      threshold picks up ``updated_at`` next time something writes to
+      the row); a more accurate "achievement moment" lands when
+      sub-0005-02 wires the live recompute path.
+    * ``kind``, ``tabungan_bulanan_cents``, ``lama_mengumpulkan_bulan``
+      are surfaced so the FE can render the progress card without a
+      second ``GET /goals/{id}`` round-trip.
+    """
+
+    goal_id: uuid.UUID
+    kind: GoalKind
+    current_amount_cents: int
+    target_amount_cents: int
+    percentage: float
+    achieved_at: datetime | None
+    tabungan_bulanan_cents: int | None
+    lama_mengumpulkan_bulan: int | None

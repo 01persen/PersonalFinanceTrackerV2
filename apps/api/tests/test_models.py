@@ -122,7 +122,8 @@ def test_full_graph_roundtrip(session: Session) -> None:
         kind=GoalKind.EMERGENCY_FUND,
         name="EF 3 bulan",
         target_amount_cents=9_000_000,
-        account_id=account.id,
+        start_date=__import__("datetime").date(2026, 7, 1),
+        linked_account_id=account.id,
     )
     session.add(goal)
 

@@ -12,6 +12,13 @@ interface AppHeaderProps {
   mobileNavigationOpen: boolean;
   onOpenNavigation: () => void;
   onLogout: () => Promise<void>;
+  /**
+   * Global search bar slot (sub-0004-05). When provided, the header
+   * reserves a centred column for the search input. The page decides
+   * whether to enable it — only routes with searchable content mount
+   * the search bar so unrelated pages stay focused.
+   */
+  searchSlot?: React.ReactNode;
 }
 
 function getDisplayName(email: string): string {
@@ -27,6 +34,7 @@ export function AppHeader({
   mobileNavigationOpen,
   onOpenNavigation,
   onLogout,
+  searchSlot,
 }: AppHeaderProps) {
   const pathname = usePathname();
   const currentItem = getCurrentNavigationItem(pathname);
@@ -53,11 +61,22 @@ export function AppHeader({
           <h1 className="truncate text-base font-bold text-slate-900 sm:text-lg">{currentItem.label}</h1>
         </div>
 
+        {searchSlot ? (
+          <div className="hidden min-w-0 flex-1 lg:flex lg:max-w-xl lg:justify-center">
+            {searchSlot}
+          </div>
+        ) : null}
+
         <div className="ml-auto flex min-w-0 items-center gap-2 sm:gap-3">
+          {searchSlot ? (
+            <div className="flex min-w-0 flex-1 items-center lg:hidden">
+              {searchSlot}
+            </div>
+          ) : null}
           <div className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-100 text-sm font-bold text-brand-700 sm:flex">
             {initial}
           </div>
-          <div className="min-w-0 max-w-24 sm:max-w-44 lg:max-w-56">
+          <div className="hidden min-w-0 max-w-24 sm:max-w-44 lg:max-w-56 sm:block">
             <p className="truncate text-xs font-semibold text-slate-800 sm:text-sm" title={displayName}>
               {displayName}
             </p>

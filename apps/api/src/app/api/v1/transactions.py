@@ -1,8 +1,9 @@
 """Transactions endpoints — CRUD for the authenticated user's transactions.
 
 Scope: sub-0003-01 (POST + GET list + validation) + sub-0003-02 (PATCH +
-DELETE soft delete) + sub-0003-04 (monthly summary aggregation). The paired
-``transfer`` flow lives in sub-0003-03.
+DELETE soft delete) + sub-0003-04 (monthly summary aggregation) +
+sub-0004-03 (search endpoint + index design). The paired ``transfer``
+flow lives in sub-0003-03.
 
 Conventions follow :mod:`app.api.v1.accounts` (per-router ``get_db``
 re-export, ``HTTPBearer`` via ``get_current_user``, auth-scoped queries
@@ -62,6 +63,7 @@ from app.api.schemas import (
     TransactionCreate,
     TransactionListPublic,
     TransactionPublic,
+    TransactionSearchListPublic,
     TransactionSummaryPublic,
     TransactionUpdate,
     TransferCreate,
@@ -71,9 +73,13 @@ from app.api.v1.auth import get_current_user
 from app.db.models.account import Account
 from app.db.models.category import Category
 from app.db.models.enums import CategoryKind, TransactionType
+from app.db.models.rule_audit_log import RuleAuditLog
 from app.db.models.transaction import Transaction
 from app.db.models.user import User
 from app.db.session import get_session
+from app.services.rule_engine import (
+    resolve_category_for_transaction,
+)
 
 router = APIRouter(prefix="/transactions", tags=["transactions"])
 
@@ -225,6 +231,38 @@ def create_transaction(
         deleted_at=None,
     )
     db.add(transaction)
+    db.flush()  # need ``transaction.id`` for the audit log row
+
+    # sub-0004-02 AC (1) — auto-apply active category rules when the caller
+    # didn't supply a category. ``note``-based match only; if no rule
+    # matches (or the row has no note) the category stays ``None`` (AC (2)
+    # "no-match preserve" — there's nothing to preserve, so this is a
+    # no-op). Audit row written inside the engine, in the same transaction
+    # as the parent insert so a failed commit drops both.
+    if transaction.category_id is None:
+        match = resolve_category_for_transaction(
+            db, transaction=transaction, current_user_id=current_user.id
+        )
+        if match is not None:
+            target = db.get(Category, match.category_id)
+            if (
+                target is not None
+                and target.user_id == current_user.id
+                and target.archived_at is None
+                and target.kind == type_enum.value
+            ):
+                transaction.category_id = target.id
+                db.add(
+                    RuleAuditLog(
+                        rule_id=match.rule_id,
+                        transaction_id=transaction.id,
+                        user_id=current_user.id,
+                        prev_category_id=None,
+                        new_category_id=target.id,
+                        origin="live",
+                    )
+                )
+
     db.commit()
     db.refresh(transaction)
     return TransactionPublic.model_validate(transaction)
@@ -443,6 +481,215 @@ def list_transactions(
     )
 
 
+_SEARCH_MAX_PAGE_SIZE = 200
+_SEARCH_DEFAULT_PAGE_SIZE = 50
+
+
+@router.get("/search", response_model=TransactionSearchListPublic)
+def search_transactions(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    q: str | None = Query(
+        default=None,
+        max_length=200,
+        description=(
+            "Free-text substring match against ``note`` (case-insensitive). "
+            "Empty / whitespace-only values disable the filter."
+        ),
+    ),
+    type: str | None = Query(
+        default=None,
+        description="Filter by transaction type (``income`` / ``expense`` / ``transfer``).",
+    ),
+    account_id: uuid.UUID | None = Query(
+        default=None,
+        description="Filter by the source account. Must belong to the caller.",
+    ),
+    category_id: uuid.UUID | None = Query(
+        default=None,
+        description="Filter by category id.",
+    ),
+    date_from: _date | None = Query(
+        default=None,
+        description="Inclusive lower bound on ``occurred_on`` (ISO date).",
+    ),
+    date_to: _date | None = Query(
+        default=None,
+        description="Inclusive upper bound on ``occurred_on`` (ISO date).",
+    ),
+    amount_min_cents: int | None = Query(
+        default=None,
+        ge=0,
+        description="Inclusive lower bound on ``amount_cents``.",
+    ),
+    amount_max_cents: int | None = Query(
+        default=None,
+        ge=0,
+        description="Inclusive upper bound on ``amount_cents``.",
+    ),
+    page: int = Query(
+        default=1,
+        ge=1,
+        description="1-indexed page number. Page 1 is the first page.",
+    ),
+    page_size: int = Query(
+        default=_SEARCH_DEFAULT_PAGE_SIZE,
+        ge=1,
+        le=_SEARCH_MAX_PAGE_SIZE,
+        description=(
+            f"Page size. Default {_SEARCH_DEFAULT_PAGE_SIZE}, max {_SEARCH_MAX_PAGE_SIZE}."
+        ),
+    ),
+) -> TransactionSearchListPublic:
+    """Composite search over the caller's transactions (sub-0004-03).
+
+    Filters are composable (AND): every query parameter may be sent
+    together. ``q`` is a case-insensitive substring match against
+    ``note`` (the only free-text field the FE surfaces); all other
+    filters are exact-match / range.
+
+    Acceptance criteria this endpoint satisfies:
+
+    * **(1)** All eight filter parameters + ``page`` / ``page_size``
+      pagination. ``page_size`` defaults to 50 and is hard-capped at
+      200 (the FE never needs more in one round-trip — anything bigger
+      is a UI bug, not a backend concern).
+    * **(2)** Deterministic ordering — ``occurred_on DESC,
+      amount_cents DESC, id ASC``. The same query returns the same
+      rows in the same order every time; the ``id ASC`` tie-break is
+      what kills the SQLite UUID-flake carried over from PR #22 (the
+      same fix sub-0004-00 applied to the list endpoint).
+    * **(3)** Soft-delete aware — ``deleted_at IS NULL`` is part of
+      the predicate so tombstoned rows never appear in search
+      results, mirroring the list endpoint (sub-0003-02).
+    * **(4)** Perf budget — ``p95 < 500 ms @ 5.000 transaksi``. The
+      benchmark script (``scripts/bench_transactions_search.py``)
+      measures this end-to-end against a fresh DB; the
+      index-design migration
+      (``alembic/versions/b2c4d6e8f0a5_transactions_search_indexes.py``)
+      is what makes the target achievable on PostgreSQL.
+
+    Validation (mirrors :func:`list_transactions`):
+
+    * ``account_id`` belongs to the caller → 404.
+    * ``category_id`` belongs to the caller → 404.
+    * ``type`` is a valid :class:`TransactionType` → 422.
+    * ``date_from <= date_to`` when both present → 422.
+    * ``amount_min_cents <= amount_max_cents`` when both present → 422.
+
+    Cross-user isolation: every clause in ``_search_where`` includes
+    ``Transaction.user_id == current_user.id`` so another user's
+    transactions can never bleed into the response — even when
+    ``account_id`` / ``category_id`` happen to be foreign ids (those
+    are filtered out by the ownership check above, but the
+    ``user_id`` predicate is the load-bearing isolation guarantee).
+    """
+    if date_from is not None and date_to is not None and date_from > date_to:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                f"date_from ({date_from.isoformat()}) must be <= date_to ({date_to.isoformat()})"
+            ),
+        )
+
+    if (
+        amount_min_cents is not None
+        and amount_max_cents is not None
+        and amount_min_cents > amount_max_cents
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                f"amount_min_cents ({amount_min_cents}) must be <= "
+                f"amount_max_cents ({amount_max_cents})"
+            ),
+        )
+
+    type_enum: TransactionType | None = None
+    if type is not None:
+        try:
+            type_enum = TransactionType(type)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(f"type must be one of {[t.value for t in TransactionType]}; got {type!r}"),
+            ) from exc
+
+    if account_id is not None:
+        _get_owned_account(db, account_id=account_id, current_user=current_user)
+
+    if category_id is not None:
+        category = db.get(Category, category_id)
+        if category is None or category.user_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="category not found",
+            )
+
+    # ``q`` normalisation — strip and treat empty / whitespace-only
+    # values as "no filter" so a stray space from the FE search box
+    # doesn't accidentally 0-out the result set. ``max_length=200``
+    # in the ``Query`` definition already caps how much the user
+    # can send, but we still trim before building the LIKE pattern.
+    q_stripped = q.strip() if q is not None else ""
+    if q_stripped == "":
+        like_pattern: str | None = None
+    else:
+        # Escape SQL ``%`` / ``_`` so a search for "100% discount" doesn't
+        # turn into a wildcard scan. ``ESCAPE '\\'`` is portable across
+        # SQLite + PostgreSQL.
+        like_pattern = (
+            "%" + q_stripped.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        )
+
+    where = [Transaction.user_id == current_user.id, Transaction.deleted_at.is_(None)]
+    if date_from is not None:
+        where.append(Transaction.occurred_on >= date_from)
+    if date_to is not None:
+        where.append(Transaction.occurred_on <= date_to)
+    if account_id is not None:
+        where.append(Transaction.account_id == account_id)
+    if type_enum is not None:
+        where.append(Transaction.type == type_enum)
+    if category_id is not None:
+        where.append(Transaction.category_id == category_id)
+    if amount_min_cents is not None:
+        where.append(Transaction.amount_cents >= amount_min_cents)
+    if amount_max_cents is not None:
+        where.append(Transaction.amount_cents <= amount_max_cents)
+    if like_pattern is not None:
+        # ``ilike`` translates to ``ILIKE`` on PostgreSQL (which can
+        # use the ``pg_trgm`` GIN index on ``note``) and to
+        # ``LIKE`` with the default SQLite case-insensitive ASCII
+        # collation on the test backend. Either way the predicate
+        # shape is identical.
+        where.append(Transaction.note.ilike(like_pattern, escape="\\"))
+
+    total = db.execute(select(func.count()).select_from(Transaction).where(*where)).scalar_one()
+
+    offset = (page - 1) * page_size
+    rows = list(
+        db.execute(
+            select(Transaction)
+            .where(*where)
+            .order_by(
+                Transaction.occurred_on.desc(),
+                Transaction.amount_cents.desc(),
+                Transaction.id.asc(),
+            )
+            .limit(page_size)
+            .offset(offset)
+        ).scalars()
+    )
+
+    return TransactionSearchListPublic(
+        items=[TransactionPublic.model_validate(row) for row in rows],
+        total=int(total),
+        page=page,
+        page_size=page_size,
+    )
+
+
 @router.patch("/{transaction_id}", response_model=TransactionPublic)
 def update_transaction(
     transaction_id: uuid.UUID,
@@ -484,6 +731,45 @@ def update_transaction(
 
     for field, value in data.items():
         setattr(transaction, field, value)
+
+    # sub-0004-02 AC (1) — auto-apply rules when EITHER:
+    #   (a) the caller sends an explicit ``category_id: null`` (clear
+    #       the manual override, let the engine decide), OR
+    #   (b) the caller edits a matching field (``note`` — the only
+    #       free-text key the engine indexes) and leaves
+    #       ``category_id`` untouched or sends ``null`` too.
+    # An explicit non-null ``category_id`` is a manual override and
+    # is preserved (no engine call). The engine's
+    # ``resolve_category_for_transaction`` honours no-match preserve
+    # (AC (2)) — if nothing matches the resulting note we leave the
+    # cleared ``None`` alone.
+    category_touched = "category_id" in data and data["category_id"] is None
+    note_changed = "note" in data
+    if category_touched or note_changed:
+        prev_category_id = transaction.category_id
+        match = resolve_category_for_transaction(
+            db, transaction=transaction, current_user_id=current_user.id
+        )
+        if match is not None:
+            target = db.get(Category, match.category_id)
+            if (
+                target is not None
+                and target.user_id == current_user.id
+                and target.archived_at is None
+                and target.kind == transaction.type.value
+                and prev_category_id != target.id
+            ):
+                transaction.category_id = target.id
+                db.add(
+                    RuleAuditLog(
+                        rule_id=match.rule_id,
+                        transaction_id=transaction.id,
+                        user_id=current_user.id,
+                        prev_category_id=prev_category_id,
+                        new_category_id=target.id,
+                        origin="live",
+                    )
+                )
 
     db.commit()
     db.refresh(transaction)

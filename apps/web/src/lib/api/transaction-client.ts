@@ -391,4 +391,168 @@ function snakeToTransactionField(snake: string): TransactionFormField | null {
   }
 }
 
+/* -------------------------------------------------------------------------- *
+ * Search endpoint (sub-0004-03)                                              *
+ * -------------------------------------------------------------------------- *
+ *
+ * `GET /api/v1/transactions/search` is the composite search endpoint that
+ * backs the global search bar + filter panel (sub-0004-05). It mirrors the
+ * regular list endpoint semantically but exposes ``page`` + ``page_size``
+ * instead of ``limit`` + ``offset`` because the FE search panel paginates
+ * by "page N of M".
+ *
+ * Sorting is server-controlled (``occurred_on DESC, amount_cents DESC, id
+ * ASC``) and matches the list endpoint, so the same renderer is reused on
+ * the FE side. The BE only returns rows that pass ``deleted_at IS NULL``
+ * (sub-0003-02 soft delete).
+ */
+
+/** Default page size — matches the backend default for the search route. */
+export const TRANSACTION_SEARCH_PAGE_SIZE = 50;
+/** Hard upper bound enforced by the backend ``Query(le=200)``. */
+export const TRANSACTION_SEARCH_MAX_PAGE_SIZE = 200;
+
+/**
+ * Filter + pagination payload for `GET /transactions/search` (sub-0004-05).
+ *
+ * All fields are optional. An empty payload returns the most recent
+ * default page with no filters — identical to calling the bare
+ * ``GET /transactions`` endpoint from the user's perspective.
+ *
+ * Amount filters are kept in **cents** so we don't fight floating-point
+ * rounding on the wire; the FE side converts IDR → cents at submit time
+ * and cents → IDR at render time (same convention as the create form in
+ * sub-0003-05).
+ */
+export interface TransactionSearchFilters {
+  /** Free-text substring match against ``note`` (case-insensitive). */
+  q: string;
+  /** Inclusive lower bound on ``occurred_on`` (ISO ``YYYY-MM-DD``). */
+  dateFrom: string | null;
+  /** Inclusive upper bound on ``occurred_on`` (ISO ``YYYY-MM-DD``). */
+  dateTo: string | null;
+  /** Filter by source account. Must belong to the caller. */
+  accountId: string | null;
+  /** Filter by transaction type. */
+  type: TransactionType | null;
+  /** Filter by category id. */
+  categoryId: string | null;
+  /** Inclusive lower bound on ``amount_cents``. */
+  amountMinCents: number | null;
+  /** Inclusive upper bound on ``amount_cents``. */
+  amountMaxCents: number | null;
+  /** 1-indexed page number (page 1 is the first page). */
+  page: number;
+  /** Page size (default 50, max 200). */
+  pageSize: number;
+}
+
+export const EMPTY_TRANSACTION_SEARCH_FILTERS: TransactionSearchFilters = {
+  q: "",
+  dateFrom: null,
+  dateTo: null,
+  accountId: null,
+  type: null,
+  categoryId: null,
+  amountMinCents: null,
+  amountMaxCents: null,
+  page: 1,
+  pageSize: TRANSACTION_SEARCH_PAGE_SIZE,
+};
+
+/**
+ * Response envelope for ``GET /transactions/search``. Mirrors
+ * ``TransactionSearchListPublic`` in
+ * ``apps/api/src/app/api/schemas.py`` (sub-0004-03).
+ */
+export interface TransactionSearchResult {
+  items: Transaction[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+interface RawTransactionSearchPayload {
+  items?: unknown;
+  total?: unknown;
+  page?: unknown;
+  page_size?: unknown;
+}
+
+function adaptTransactionSearch(raw: unknown): TransactionSearchResult | null {
+  if (!raw || typeof raw !== "object") return null;
+  const payload = raw as RawTransactionSearchPayload;
+  if (!Array.isArray(payload.items)) return null;
+
+  return {
+    items: adaptTransactions(payload.items),
+    total: toFiniteInt(payload.total),
+    page: Math.max(toFiniteInt(payload.page), 1),
+    pageSize: Math.max(toFiniteInt(payload.page_size), TRANSACTION_SEARCH_PAGE_SIZE),
+  };
+}
+
+function buildSearchQuery(filters: TransactionSearchFilters): string {
+  const params = new URLSearchParams();
+  const trimmed = filters.q.trim();
+  if (trimmed.length > 0) {
+    // sub-0004-03 quirk: BE already handles portable escape for ``%`` /
+    // ``_`` / ``\`` with the SQL ``ESCAPE '\'`` clause. Pre-escaping on
+    // the FE side would double-escape ``50%`` → ``50\%`` and make exact
+    // searches impossible. Send the raw user input and let the BE
+    // sanitize.
+    params.set("q", trimmed);
+  }
+  if (filters.dateFrom) params.set("date_from", filters.dateFrom);
+  if (filters.dateTo) params.set("date_to", filters.dateTo);
+  if (filters.accountId) params.set("account_id", filters.accountId);
+  if (filters.type) params.set("type", filters.type);
+  if (filters.categoryId) params.set("category_id", filters.categoryId);
+  if (filters.amountMinCents !== null && filters.amountMinCents >= 0) {
+    params.set("amount_min_cents", String(Math.trunc(filters.amountMinCents)));
+  }
+  if (filters.amountMaxCents !== null && filters.amountMaxCents >= 0) {
+    params.set("amount_max_cents", String(Math.trunc(filters.amountMaxCents)));
+  }
+  if (filters.page > 1) {
+    params.set("page", String(Math.trunc(filters.page)));
+  }
+  // Always send page_size so the FE can echo it back without a guess.
+  params.set("page_size", String(Math.trunc(filters.pageSize)));
+  const qs = params.toString();
+  return qs.length > 0 ? `?${qs}` : "";
+}
+
+/**
+ * Fetch a page of search results from ``GET /transactions/search``.
+ *
+ * The endpoint is the wire target for the global search bar + filter
+ * panel (sub-0004-05). Filters are composable (AND); see
+ * ``apps/api/src/app/api/v1/transactions.py`` for the server-side
+ * predicate list and the deterministic sort chain.
+ *
+ * Returns ``null`` when the response envelope is malformed (the caller
+ * renders the error-retry path). Throws the underlying ``ApiError`` for
+ * non-2xx responses so the caller can map the status to a friendly
+ * message (401/403 → sesi berakhir, 422 → validation message, 404 →
+ * foreign account/category id from a shared URL).
+ *
+ * Accepts an ``AbortSignal`` so the caller can drop in-flight requests
+ * when a newer load starts (race condition guard, see sub-0002-03 Cek 5).
+ */
+export async function fetchTransactionsSearch(
+  filters: TransactionSearchFilters,
+  options: { signal?: AbortSignal } = {},
+): Promise<TransactionSearchResult> {
+  const raw = await apiRequest<unknown>(
+    `/transactions/search${buildSearchQuery(filters)}`,
+    { signal: options.signal },
+  );
+  const adapted = adaptTransactionSearch(raw);
+  if (adapted === null) {
+    throw new ApiError(200, "Respons pencarian transaksi tidak dikenali.");
+  }
+  return adapted;
+}
+
 export type { ApiErrorBody };

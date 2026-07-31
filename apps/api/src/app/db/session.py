@@ -25,9 +25,26 @@ def _build_engine(url: str | None = None) -> Engine:
     settings = get_settings()
     target = url or settings.database_url
     connect_args: dict[str, object] = {}
+    kwargs: dict[str, object] = {"future": True, "connect_args": connect_args}
     if target.startswith("sqlite"):
         connect_args["check_same_thread"] = False
-    return create_engine(target, future=True, connect_args=connect_args)
+        # sub-0004-06 defect #3 fix: SQLAlchemy 2.0's
+        # ``insertmanyvalues`` path raises
+        # ``TypeError: 'NoneType' object is not subscriptable``
+        # on SQLite when two threads share the same connection
+        # (the test fixture uses ``StaticPool`` so the in-memory
+        # DB is shared across the two-thread executor). The
+        # failure happens at ``engine/default.py:883`` because
+        # ``cursor.description`` is ``None`` on the first commit
+        # of a fresh DB when the second thread reuses the same
+        # cursor. PostgreSQL is unaffected — its insertmanyvalues
+        # path uses server-side ``RETURNING`` and the
+        # cursor lifecycle is connection-scoped, not cursor-
+        # pooled. Disabling ``use_insertmanyvalues`` falls back
+        # to the explicit ``cursor.execute`` path which is
+        # thread-safe under SQLite + StaticPool.
+        kwargs["use_insertmanyvalues"] = False
+    return create_engine(target, **kwargs)
 
 
 def get_engine(url: str | None = None) -> Engine:

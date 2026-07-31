@@ -10,10 +10,22 @@ interface AppShellProps {
   user: AuthUser | null;
   isLoggingOut: boolean;
   onLogout: () => Promise<void>;
+  /**
+   * Global search bar slot for the header (sub-0004-05). When omitted,
+   * the header falls back to the legacy title-only layout so existing
+   * pages don't have to change.
+   */
+  searchSlot?: ReactNode;
   children: ReactNode;
 }
 
-export function AppShell({ user, isLoggingOut, onLogout, children }: AppShellProps) {
+export function AppShell({
+  user,
+  isLoggingOut,
+  onLogout,
+  searchSlot,
+  children,
+}: AppShellProps) {
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
 
   useEffect(() => {
@@ -66,6 +78,7 @@ export function AppShell({ user, isLoggingOut, onLogout, children }: AppShellPro
           mobileNavigationOpen={mobileNavigationOpen}
           onOpenNavigation={() => setMobileNavigationOpen(true)}
           onLogout={onLogout}
+          searchSlot={searchSlot}
         />
         <main id="main-content" className="mx-auto w-full max-w-7xl p-4 sm:p-6 lg:p-8">
           {children}

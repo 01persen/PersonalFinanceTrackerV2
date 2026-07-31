@@ -52,6 +52,19 @@ class UserPublic(BaseModel):
 
 
 class CategoryPublic(BaseModel):
+    """Output shape for a single category row.
+
+    Mirrors the columns on :class:`app.db.models.category.Category`. ``archived``
+    is the derived boolean (kept in sync with ``archived_at IS NOT NULL`` by
+    the API layer); ``archived_at`` is the authoritative tombstone timestamp
+    surfaced so the FE can badge a row (the default list endpoint still hides
+    it via ``archived_at IS NULL``).
+
+    ``parent_id`` is exposed so the FE can build a tree from the flat wire
+    format — exactly the same convention used by the read-side list endpoint
+    since sub-0001-08.
+    """
+
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
@@ -59,7 +72,92 @@ class CategoryPublic(BaseModel):
     kind: CategoryKind
     parent_id: uuid.UUID | None = None
     color: str | None = None
+    icon: str | None = None
     archived: bool = False
+    archived_at: datetime | None = None
+
+
+class CategoryCreate(BaseModel):
+    """Body for ``POST /categories``.
+
+    Required: ``name`` + ``kind``. ``parent_id`` is optional (NULL = root).
+
+    Validation rules (per sub-0004-01 AC):
+
+    * ``name`` is 1-120 chars (Pydantic → 422 for empty / oversized).
+    * ``kind`` must be a valid :class:`CategoryKind` value (Pydantic StrEnum
+      → 422 for unknown).
+    * ``parent_id`` (when set) must belong to the caller — enforced in the
+      route against the persisted row (404, not 403, to avoid leaking the
+      existence of other users' categories — same pattern as accounts /
+      transactions).
+    * ``parent_id`` must not form a cycle with the new row (cycle prevention,
+      AC (2)). Enforced in the route before any DB write.
+    * ``color`` / ``icon`` are optional short strings. No semantic validation
+      beyond max length.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=120)
+    kind: CategoryKind
+    parent_id: uuid.UUID | None = None
+    color: str | None = Field(default=None, max_length=16)
+    icon: str | None = Field(default=None, max_length=64)
+
+
+class CategoryUpdate(BaseModel):
+    """Body for ``PATCH /categories/{id}`` — every field is optional.
+
+    Editable fields mirror the user-editable portion of the create schema.
+    ``kind`` is intentionally editable here (AC (3) — the FE may rebucket a
+    subtree from expense → income during a personal-finance reorg), but the
+    route enforces that the ``parent_id`` belongs to the caller and that
+    flipping ``kind`` does not create a cycle with the existing tree.
+
+    ``extra="forbid"`` so a client attempting to edit server-controlled
+    fields (``id``, ``user_id``, ``archived``, ``archived_at``, timestamps)
+    gets a 422 with a clear Pydantic error before the route runs — exactly
+    the same surface as the transactions PATCH schema.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    kind: CategoryKind | None = None
+    parent_id: uuid.UUID | None = None
+    color: str | None = Field(default=None, max_length=16)
+    icon: str | None = Field(default=None, max_length=64)
+
+
+class CategoryArchiveRequest(BaseModel):
+    """Body for ``POST /categories/{id}/archive`` — ``reason`` is optional.
+
+    The route always sets ``archived_at = server-now`` (no client-supplied
+    timestamp). ``reason`` is reserved for an audit trail row that lands in
+    a follow-up sub-task (per the epic-level audit-trail decision); for now
+    it is accepted and discarded to keep the contract stable.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str | None = Field(default=None, max_length=500)
+
+
+class CategoryListPublic(BaseModel):
+    """Response envelope for ``GET /categories`` (paginated).
+
+    ``total`` is the *unfiltered-by-page* count of the caller's active
+    categories (``archived_at IS NULL``) so the FE can render pagination
+    controls without a follow-up count call. ``limit`` + ``offset`` are
+    echoed back so the FE can paginate without re-deriving them. The
+    default page size is 100 (AC (6)).
+    """
+
+    items: list[CategoryPublic]
+    total: int
+    limit: int
+    offset: int
 
 
 class UserPreferencePublic(BaseModel):
@@ -437,6 +535,28 @@ class TransactionListPublic(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class TransactionSearchListPublic(BaseModel):
+    """Response envelope for ``GET /transactions/search`` (sub-0004-03).
+
+    Mirrors :class:`TransactionListPublic` semantically (same item shape,
+    same deterministic sort chain ``occurred_on DESC, amount_cents DESC,
+    id ASC``) but exposes ``page`` + ``page_size`` instead of
+    ``limit`` + ``offset`` because the FE search panel paginates by
+    "page N of M" rather than by offset (acceptance criterion (1)).
+
+    ``page`` is 1-indexed (page 1 is the first page) and ``page_size`` is
+    clamped to ``[1, 200]`` by the route — see the ``Query`` defaults on
+    the search endpoint. ``total`` is the *unfiltered-by-page* row count
+    for the caller's filter set so the FE can render the page navigator
+    without a follow-up count call.
+    """
+
+    items: list[TransactionPublic]
+    total: int
+    page: int
+    page_size: int
 
 
 # --- Transactions summary (epic-0003, sub-0003-04) ----------------------------

@@ -2,6 +2,8 @@
 
 Source code untuk project Personal Finance Tracker.
 
+<!-- CI trigger smoke test: sub-0004-07 C1 verification (2026-07-31) -->
+
 ## Layout
 
 ```

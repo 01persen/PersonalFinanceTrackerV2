@@ -143,6 +143,114 @@ def test_upgrade_is_replayable(sqlite_db: Path) -> None:
     assert _run_alembic(sqlite_db, "downgrade", "base").returncode == 0
     assert _run_alembic(sqlite_db, "upgrade", "head").returncode == 0
 
+
+def test_goals_migration_preserves_data_over_prior_state(
+    sqlite_db: Path,
+) -> None:
+    """sub-0005-01 carry-over: SQLite < 3.35.0 portability.
+
+    CI flagged that ``ALTER COLUMN ... DROP NOT NULL`` and
+    ``ADD COLUMN ... NOT NULL DEFAULT <non-constant>`` aren't supported
+    on older SQLite. The f5a6 migration was patched to wrap those ops
+    in ``op.batch_alter_table(recreate="always")`` and to add
+    ``start_date`` as nullable first, backfill it with
+    ``UPDATE ... SET start_date = CURRENT_DATE``, then tighten to
+    NOT NULL in a second batch. This test pins the data-preservation
+    contract:
+
+    * The pre-existing goal row survives the upgrade.
+    * ``start_date`` is back-filled to a non-null value.
+    * The downgrade round-trips back to the f0a5 schema with the
+      goal row's ``current_amount_cents`` and renamed column still
+      intact.
+    """
+    up_to_f0a5 = _run_alembic(sqlite_db, "upgrade", "b2c4d6e8f0a5")
+    assert up_to_f0a5.returncode == 0, up_to_f0a5.stderr or up_to_f0a5.stdout
+
+    conn = sqlite3.connect(sqlite_db)
+    try:
+        conn.executescript(
+            """
+            INSERT INTO users (id, email, password_hash, created_at, updated_at)
+            VALUES ('11111111-1111-1111-1111-111111111111',
+                    'goals-data@example.com',
+                    'fakehash', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+            INSERT INTO goals (id, user_id, kind, name, target_amount_cents,
+                              current_amount_cents, account_id,
+                              created_at, updated_at)
+            VALUES ('22222222-2222-2222-2222-222222222222',
+                    '11111111-1111-1111-1111-111111111111',
+                    'saving', 'Pre-existing', 5000000, 1500000, NULL,
+                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+            """
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    # Upgrade to f5a6 — every column-nullability / column-add op must
+    # run inside the batch recreate path (verified indirectly: a bare
+    # ``ALTER COLUMN DROP NOT NULL`` on this CI SQLite would throw
+    # ``near "ALTER": syntax error`` here).
+    up = _run_alembic(sqlite_db, "upgrade", "f5a6b7c8d9e0")
+    assert up.returncode == 0, up.stderr or up.stdout
+
+    conn = sqlite3.connect(sqlite_db)
+    try:
+        row = conn.execute(
+            """
+            SELECT current_amount_cents, linked_account_id, start_date
+            FROM goals
+            WHERE id = '22222222-2222-2222-2222-222222222222'
+            """
+        ).fetchone()
+        assert row is not None
+        # Pre-existing ``current_amount_cents`` survives the recreate.
+        assert int(row[0]) == 1_500_000
+        # ``linked_account_id`` is the renamed version of ``account_id``
+        # and matches the persisted NULL.
+        assert row[1] is None
+        # ``start_date`` was back-filled to today's date (not NULL).
+        assert row[2] is not None
+    finally:
+        conn.close()
+
+    # Downgrade — table is recreated again with the original shape.
+    down = _run_alembic(sqlite_db, "downgrade", "b2c4d6e8f0a5")
+    assert down.returncode == 0, down.stderr or down.stdout
+
+    conn = sqlite3.connect(sqlite_db)
+    try:
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(goals)")}
+        # New columns from f5a6 are gone.
+        for new_col in (
+            "start_date",
+            "jangka_waktu_months",
+            "tabungan_bulanan_cents",
+            "monthly_expense_cents",
+            "jumlah_tanggungan",
+            "multiplier",
+            "lama_mengumpulkan_bulan",
+            "target_amount_snapshot_cents",
+            "notes",
+            "archived_at",
+            "linked_account_id",
+        ):
+            assert new_col not in cols, f"{new_col!r} should be dropped on downgrade"
+        # ``account_id`` is back.
+        assert "account_id" in cols
+
+        # Pre-existing data survives the round-trip — same
+        # ``current_amount_cents`` value, ``account_id`` still NULL.
+        row = conn.execute(
+            "SELECT current_amount_cents, account_id "
+            "FROM goals WHERE id = '22222222-2222-2222-2222-222222222222'"
+        ).fetchone()
+        assert int(row[0]) == 1_500_000
+        assert row[1] is None
+    finally:
+        conn.close()
+
     tables = _table_names(sqlite_db)
     assert EXPECTED_TABLES.issubset(tables)
 

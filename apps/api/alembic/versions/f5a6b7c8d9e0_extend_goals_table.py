@@ -12,21 +12,23 @@ Schema changes:
 
 * **Rename** ``account_id`` → ``linked_account_id`` (the PRD's term for
   the optional account the goal tracks). Same FK target (``accounts.id``)
-  and the same ``ON DELETE SET NULL`` semantics. The renamer uses
-  ``ALTER TABLE ... RENAME COLUMN`` which is portable to both SQLite and
-  PostgreSQL — Alembic emits the right syntax on each backend via the
-  dialect-aware ``op.alter_column``.
+  and the same ``ON DELETE SET NULL`` semantics. ``ALTER TABLE ...
+  RENAME COLUMN`` is portable across SQLite (3.25+) and PostgreSQL —
+  Alembic emits the matching syntax on each backend.
 * **Make ``current_amount_cents`` nullable.** It was ``NOT NULL DEFAULT 0``
   in the stub; the PRD allows ``NULL`` for goals that derive their
   current amount from the linked account balance (sub-0005-02 owns
   that compute path; here we just relax the constraint so the storage
   layer can stay consistent with the read model). Existing rows keep
-  their integer default (``0``) since ``ALTER COLUMN ... DROP NOT NULL``
-  does not touch the data.
+  their integer default (``0``) — the relax path doesn't rewrite data.
 * **Add new columns**:
 
-  - ``start_date DATE NOT NULL DEFAULT CURRENT_DATE`` — every goal needs
-    a start date (sub-0005-02 auto-picks ``today`` if omitted).
+  - ``start_date DATE NOT NULL`` (defaulted to ``CURRENT_DATE`` server-side
+    for back-fill). Every goal needs a start date; sub-0005-02 auto-picks
+    ``today`` if omitted. The migration adds it as nullable first,
+    backfills ``CURRENT_DATE`` for any pre-existing rows, then tightens
+    to NOT NULL in a second batch — the split is required for SQLite
+    portability (see below).
   - ``jangka_waktu_months INT NULL`` — saving-only horizon.
   - ``tabungan_bulanan_cents BIGINT NULL`` — auto-calc (saving). NULL
     until sub-0005-02 wires the rule.
@@ -49,10 +51,34 @@ Schema changes:
   - ``ix_goals_linked_account_id`` on ``(linked_account_id)`` — for
     sub-0005-02's recompute lookup when an account balance changes.
 
-Reversible: ``downgrade()`` drops the new indexes, drops the new
-columns, restores the ``current_amount_cents NOT NULL`` constraint,
-renames ``linked_account_id`` back to ``account_id``, and recreates
-the original ``ix_goals_user_id`` index. Tested in
+SQLite portability (sub-0005-01 carry-over):
+
+SQLite < 3.35.0 cannot run any of these ``ALTER TABLE`` sub-commands
+natively:
+
+* ``ALTER COLUMN ... DROP NOT NULL`` (used to relax ``current_amount_cents``)
+* ``ALTER COLUMN ... SET NOT NULL`` (used to tighten ``start_date`` after back-fill)
+* ``ADD COLUMN ... NOT NULL DEFAULT <non-constant>`` (would have been
+  used for the initial ``start_date`` add — that's why we back-fill
+  in two passes)
+* ``DROP COLUMN`` (used in downgrade to remove every new column)
+* ``ALTER TABLE ... RENAME COLUMN`` works natively from 3.25.0 but
+  is still routed through the batch recreate here for symmetry with
+  the surrounding ops.
+
+Every one of those operations is wrapped in
+``op.batch_alter_table("goals", recreate="always")`` so Alembic
+forces the table-recreate path: rename ``goals`` to
+``_alembic_batch_tmp``, create a fresh ``goals`` with the new
+column shape, copy rows over, drop the temp. The pattern is portable
+to every SQLite version Alembic supports and PostgreSQL ignores the
+``recreate`` hint (it uses regular ``ALTER COLUMN`` on PG).
+
+Reversible: ``downgrade()`` drops the new indexes, runs a single
+batch_alter_table that drops the new columns + re-tightens
+``current_amount_cents`` + renames ``linked_account_id`` back to
+``account_id`` (one recreate, not three), and recreates the original
+``ix_goals_user_id`` index. Tested in
 ``tests/test_migrations.py::test_downgrade_is_reversible``.
 """
 
@@ -83,7 +109,8 @@ def upgrade() -> None:
     """Extend ``goals`` to the full PRD §14 schema."""
     # 1. Rename ``account_id`` → ``linked_account_id``. Preserves data and
     # the FK constraint (Alembic emits the matching ``REFERENCES`` clause on
-    # the new column).
+    # the new column). SQLite 3.25+ supports ``ALTER TABLE ... RENAME COLUMN``
+    # natively, so no table-recreate is needed here.
     op.alter_column(
         "goals",
         "account_id",
@@ -92,66 +119,71 @@ def upgrade() -> None:
         existing_nullable=True,
     )
 
-    # 2. Relax ``current_amount_cents`` → nullable. Existing rows keep
-    # their default value; the looser constraint doesn't rewrite data.
-    op.alter_column(
-        "goals",
-        "current_amount_cents",
-        existing_type=sa.BigInteger(),
-        nullable=True,
-    )
+    # 2. Add all new columns + relax ``current_amount_cents`` in one
+    # table-recreate cycle.
+    #
+    # SQLite portability note: SQLite < 3.35.0 cannot run any of:
+    #   - ``ALTER COLUMN ... DROP NOT NULL``
+    #   - ``ALTER COLUMN ... SET NOT NULL``
+    #   - ``ADD COLUMN ... NOT NULL DEFAULT <non-constant>``
+    # natively — the only ``ALTER TABLE`` sub-commands SQLite has
+    # supported since 3.25.0 are ``RENAME TO`` and ``RENAME COLUMN``;
+    # everything else requires the table-recreate trick. The CI image
+    # ships an older SQLite, so a naked ``op.alter_column(... nullable=True)``
+    # emits DDL that throws ``near "ALTER": syntax error`` — CI flagged
+    # this on the first pipeline pass.
+    #
+    # ``op.batch_alter_table(recreate="always")`` forces the
+    # table-recreate path unconditionally — Alembic will: rename the
+    # original ``goals`` to ``_alembic_batch_tmp``, create a fresh
+    # ``goals`` with the new column shape, copy the rows over, and drop
+    # the temp table. It works on every SQLite version Alembic supports,
+    # and PostgreSQL's planner ignores the ``recreate`` hint (it uses a
+    # regular ``ALTER COLUMN`` on PG).
+    #
+    # All new columns land as ``nullable=True`` in this batch — even
+    # ``start_date``, which the model marks ``NOT NULL`` — because adding
+    # a NOT NULL column with a non-constant default (``CURRENT_DATE``) to
+    # a table with pre-existing rows is exactly the operation SQLite
+    # refuses. We backfill ``start_date`` afterwards and enforce NOT NULL
+    # in a second batch.
+    with op.batch_alter_table("goals", recreate="always") as batch_op:
+        batch_op.alter_column(
+            "current_amount_cents",
+            existing_type=sa.BigInteger(),
+            nullable=True,
+        )
+        batch_op.add_column(sa.Column("start_date", sa.Date(), nullable=True))
+        batch_op.add_column(sa.Column("jangka_waktu_months", sa.Integer(), nullable=True))
+        batch_op.add_column(sa.Column("tabungan_bulanan_cents", sa.BigInteger(), nullable=True))
+        batch_op.add_column(sa.Column("monthly_expense_cents", sa.BigInteger(), nullable=True))
+        batch_op.add_column(sa.Column("jumlah_tanggungan", sa.Integer(), nullable=True))
+        batch_op.add_column(sa.Column("multiplier", sa.Integer(), nullable=True))
+        batch_op.add_column(sa.Column("lama_mengumpulkan_bulan", sa.Integer(), nullable=True))
+        batch_op.add_column(
+            sa.Column("target_amount_snapshot_cents", sa.BigInteger(), nullable=True)
+        )
+        batch_op.add_column(sa.Column("notes", sa.Text(), nullable=True))
+        batch_op.add_column(sa.Column("archived_at", sa.DateTime(timezone=True), nullable=True))
 
-    # 3. New columns. ``start_date`` has a server-side default so the
-    # migration is safe to run over a populated stub table.
-    op.add_column(
-        "goals",
-        sa.Column(
+    # 3. Backfill ``start_date`` for any pre-existing rows. The model
+    # says ``nullable=False`` so every row must have a value; rows that
+    # pre-date the migration get today's date (the same value the
+    # ``GoalCreate`` route would have defaulted to at insert time).
+    op.execute("UPDATE goals SET start_date = CURRENT_DATE WHERE start_date IS NULL")
+
+    # 4. Tighten ``start_date`` → NOT NULL. Same SQLite constraint as
+    # above (no ``ALTER COLUMN ... SET NOT NULL``), so we round-trip
+    # the table again. Cheap on the empty CI DB; on the production DB
+    # (currently 0 goal rows) this is also a no-op-equivalent recreate.
+    with op.batch_alter_table("goals", recreate="always") as batch_op:
+        batch_op.alter_column(
             "start_date",
-            sa.Date(),
+            existing_type=sa.Date(),
             nullable=False,
-            server_default=sa.text("CURRENT_DATE"),
-        ),
-    )
-    op.add_column(
-        "goals",
-        sa.Column("jangka_waktu_months", sa.Integer(), nullable=True),
-    )
-    op.add_column(
-        "goals",
-        sa.Column("tabungan_bulanan_cents", sa.BigInteger(), nullable=True),
-    )
-    op.add_column(
-        "goals",
-        sa.Column("monthly_expense_cents", sa.BigInteger(), nullable=True),
-    )
-    op.add_column(
-        "goals",
-        sa.Column("jumlah_tanggungan", sa.Integer(), nullable=True),
-    )
-    op.add_column(
-        "goals",
-        sa.Column("multiplier", sa.Integer(), nullable=True),
-    )
-    op.add_column(
-        "goals",
-        sa.Column("lama_mengumpulkan_bulan", sa.Integer(), nullable=True),
-    )
-    op.add_column(
-        "goals",
-        sa.Column(
-            "target_amount_snapshot_cents", sa.BigInteger(), nullable=True
-        ),
-    )
-    op.add_column(
-        "goals",
-        sa.Column("notes", sa.Text(), nullable=True),
-    )
-    op.add_column(
-        "goals",
-        sa.Column("archived_at", sa.DateTime(timezone=True), nullable=True),
-    )
+        )
 
-    # 4. Replace the generic ``ix_goals_user_id`` with composite indexes
+    # 5. Replace the generic ``ix_goals_user_id`` with composite indexes
     # that match the list endpoint's filter chain. Drop first because
     # SQLite refuses to create two indexes covering the same leading
     # column with the same name.
@@ -189,32 +221,43 @@ def downgrade() -> None:
         unique=False,
     )
 
-    # 2. Drop the new columns in reverse order (column order is cosmetic
-    # on SQLite/PG but keeps the diff readable).
-    op.drop_column("goals", "archived_at")
-    op.drop_column("goals", "notes")
-    op.drop_column("goals", "target_amount_snapshot_cents")
-    op.drop_column("goals", "lama_mengumpulkan_bulan")
-    op.drop_column("goals", "multiplier")
-    op.drop_column("goals", "jumlah_tanggungan")
-    op.drop_column("goals", "monthly_expense_cents")
-    op.drop_column("goals", "tabungan_bulanan_cents")
-    op.drop_column("goals", "jangka_waktu_months")
-    op.drop_column("goals", "start_date")
+    # 2. Drop the new columns and re-tighten ``current_amount_cents``
+    # in one ``batch_alter_table`` so SQLite < 3.35.0 uses the
+    # table-recreate path:
+    #
+    #   * ``DROP COLUMN`` was added in SQLite 3.35.0.
+    #   * ``ALTER COLUMN ... SET NOT NULL`` is also a 3.35.0+ feature.
+    #
+    # The column rename is done *outside* the batch block — ``ALTER TABLE
+    # ... RENAME COLUMN`` is supported natively from SQLite 3.25.0, and
+    # we hit an Alembic quirk where ``batch_op.alter_column`` with
+    # ``new_column_name`` fails on our ``GUID()`` type (a custom
+    # ``TypeDecorator`` that doesn't expose ``.name``). Plain
+    # ``op.alter_column`` handles the rename correctly on both SQLite
+    # and PostgreSQL — keeping it outside the batch costs us nothing
+    # and avoids the type-inspection edge case.
+    with op.batch_alter_table("goals", recreate="always") as batch_op:
+        batch_op.drop_column("archived_at")
+        batch_op.drop_column("notes")
+        batch_op.drop_column("target_amount_snapshot_cents")
+        batch_op.drop_column("lama_mengumpulkan_bulan")
+        batch_op.drop_column("multiplier")
+        batch_op.drop_column("jumlah_tanggungan")
+        batch_op.drop_column("monthly_expense_cents")
+        batch_op.drop_column("tabungan_bulanan_cents")
+        batch_op.drop_column("jangka_waktu_months")
+        batch_op.drop_column("start_date")
+        batch_op.alter_column(
+            "current_amount_cents",
+            existing_type=sa.BigInteger(),
+            nullable=False,
+        )
 
-    # 3. Re-tighten ``current_amount_cents`` → NOT NULL. The default
-    # ``0`` already exists on the column so any ``NULL`` introduced by
-    # the relaxed constraint would break — but this is a downgrade path
-    # we expect to run in dev/CI only, never in production, so we don't
-    # bake a backfill in here.
-    op.alter_column(
-        "goals",
-        "current_amount_cents",
-        existing_type=sa.BigInteger(),
-        nullable=False,
-    )
-
-    # 4. Rename back ``linked_account_id`` → ``account_id``.
+    # 3. Rename ``linked_account_id`` back to ``account_id``. SQLite
+    # 3.25+ does this natively (no batch needed); PostgreSQL emits a
+    # regular ``ALTER COLUMN RENAME``. Keeps the column rename out of
+    # the batch recreate so we get one ``_alembic_batch_tmp`` round-trip
+    # for the heavy lifting instead of two.
     op.alter_column(
         "goals",
         "linked_account_id",

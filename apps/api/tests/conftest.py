@@ -50,6 +50,16 @@ def fresh_db(monkeypatch: pytest.MonkeyPatch) -> Iterator[Session]:
         future=True,
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
+        # sub-0004-06 defect #3 fix: mirror the production
+        # ``_build_engine`` setting so the test fixture sees the
+        # same engine behaviour. The StaticPool above means two
+        # threads share the same SQLite connection; without
+        # ``use_insertmanyvalues=False`` the second thread's
+        # ``cursor.description`` is ``None`` and SQLAlchemy
+        # raises a TypeError at ``engine/default.py:883``. The
+        # flag is SQLite-only — PostgreSQL is unaffected because
+        # its insertmanyvalues path uses server-side RETURNING.
+        use_insertmanyvalues=False,
     )
 
     @event.listens_for(engine, "connect")

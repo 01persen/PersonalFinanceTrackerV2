@@ -1,6 +1,6 @@
 # Project Tracker — Personal Finance Tracker
 
-> **Status:** v3.1 — epic-0001 **DONE** (8/8); epic-0002 **DONE** (7/7 sub-task
+> **Status:** v4.2 (2026-07-31) — epic-0001 **DONE** (8/8); epic-0002 **DONE** (7/7 sub-task
 > + Stage 5 release fixup complete; [PR #18](https://github.com/01persen/PersonalFinanceTrackerV2/pull/18)
 > merged ke `main` pada 2026-07-27 13:06 UTC, CI hijau `api quality` + `web quality`).
 > epic-0003 **DONE** (8/8 sub-task + Stage H squash-merged ke `main`).
@@ -11,19 +11,28 @@
 > `test_get_sort_is_stable_for_same_day`, waived per TL note post-merge
 > PR #22 + QA Stage-E PASS exclude via `-k 'not …'`); bypass di-justify
 > di PR comment. Pipeline status: `passed-with-known-flaky-bypass`.
-> Epic AC cross-check 4/4 PASS. epic-0004 **IN_PROGRESS** (sourced 2026-07-29,
-> topmost eligible setelah epic-0003 DONE; hanya butuh `epic-0003`).
-> epic-0006 tetap IN_PROGRESS (Stage B belum mulai). epic-0005/0007/0008/0009
-> masih NOT_STARTED. Catatan CI follow-up: workflow `ci.yml` belum trigger
-> pada push `release/*` sejak 2026-07-28T06:36:12Z — escalate tiket DevOps
-> terpisah. **Branch release/epic-0003 masih hidup** (protected=true,
-> `--delete-branch` skip oleh GitHub untuk protected branch) — bukan
-> blocker tapi flag untuk konsistensi v1.5/v2.5 closing pattern; admin
-> override atau unprotect dulu kalau mau dihapus. Kontrak FE: input nominal
-> `25.000` (titik sebagai desimal) ditolak client-side sesuai lokale IDR
-> (koma = desimal, titik = ribuan) — dokumentasikan ke stakeholder bila
-> ada user yang terbiasa titik desimal. **Owner:** Tech Leader (Engineering
-> Squad)
+> Epic AC cross-check 4/4 PASS. **epic-0004 DONE** (8/8 sub-task + Stage E QA
+> re-verify PASS + Stage H squash-merged ke `main` via
+> [PR #40](https://github.com/01persen/PersonalFinanceTrackerV2/pull/40)
+> commit `d886f15dde7f8bbd4e55c3b60ffd9339e0877b1f` @ 2026-07-31T08:42:57Z,
+> pipeline `api quality` + `web quality` SUCCESS, main advanced `546d2dc →
+> d886f15`, `release/epic-0004` branch deleted per `--delete-branch`).
+> **epic-0005 IN_PROGRESS** — Stage A complete (TL wake-up post v4.1
+> autopilot re-source): branch `release/epic-0005` re-cut dari `main`
+> HEAD `d886f15d` + push ke `origin/release/epic-0005`; parent issue
+> [GRE-56](https://multica/issues/GRE-56) metadata dipin
+> (`squad_id`, `release_branch=release/epic-0005`,
+> `base_sha=d886f15d…`, `epic_doc_url`, `tracker_url`, `prd_url`,
+> `github_repo_url`, `project_folder`, `tracker_version=v4.2`,
+> `stage=A`); status flip `in_progress`. Stage B (sub-task breakdown
+> TL + SA) di-trigger di routing yang sama. epic-0006/0007/0008/0009
+> belum disentuh (di luar scope Stage A ini). Catatan CI follow-up:
+> workflow `ci.yml` belum trigger pada push `release/*` sejak
+> 2026-07-28T06:36:12Z — escalate tiket DevOps terpisah (carry-over
+> dari epic-0003). Kontrak FE: input nominal `25.000` (titik sebagai
+> desimal) ditolak client-side sesuai lokale IDR (koma = desimal, titik
+> = ribuan) — dokumentasikan ke stakeholder bila ada user yang terbiasa
+> titik desimal. **Owner:** Tech Leader (Engineering Squad)
 
 Tracker mengikuti urutan dependency graph (bukan urgency bisnis), sesuai SOP.
 Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
@@ -35,8 +44,8 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
 | epic-0001 | Foundation, Auth & Data Model | P-FOUNDATION | **DONE** | — | Backend |
 | epic-0002 | Multi-Account Management | P-CORE | **DONE** | 0001 | Backend + Frontend |
 | epic-0003 | Transaction Core | P-CORE | **DONE** | 0001, 0002 | Backend + Frontend |
-| epic-0004 | Categorization & Search | P-CORE | **IN_PROGRESS** | 0003 | Backend + Frontend |
-| epic-0005 | Goal Trackers (Saving & Emergency Fund) | P-CORE | NOT_STARTED | 0002, 0003 | Backend + Frontend |
+| epic-0004 | Categorization & Search | P-CORE | **DONE** | 0003 | Backend + Frontend |
+| epic-0005 | Goal Trackers (Saving & Emergency Fund) | P-CORE | **IN_PROGRESS** | 0002, 0003 | Backend + Frontend |
 | epic-0006 | Debt Tracker | P-CORE | **IN_PROGRESS** | 0002 | Backend + Frontend |
 | epic-0007 | Networth, Dashboard & Visualization | P-CORE | NOT_STARTED | 0003, 0005, 0006 | Frontend + Backend |
 | epic-0008 | Export, Backup & Settings | P-ENHANCEMENT | NOT_STARTED | 0001 | Backend + Frontend |
@@ -75,27 +84,53 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
 
 ## Catatan
 
-- epic **0004** sekarang **IN_PROGRESS** (sourced 2026-07-29). Sub-task list
-  (Stage B complete 2026-07-29, 7 sub-task di 5 stage). Parent issue:
-  [GRE-38](https://multica/issues/GRE-38). Branch: `release/epic-0004`
-  (cut dari `main` @ `00dc91d`, yaitu HEAD post epic-0003 squash-merge
-  PR #28). Epic-0004 dipilih karena topmost eligible di tabel setelah
-  epic-0003 DONE — hanya butuh `epic-0003` (DONE). epic-0006 tetap
-  IN_PROGRESS (Stage B belum mulai); epic-0005 eligible (butuh 0002+0003
-  DONE), epic-0007 blocked (butuh 0005 NOT_STARTED + 0006 IN_PROGRESS),
+- epic **0005** sekarang **IN_PROGRESS** (sourced 2026-07-31, re-source
+  cycle post v4.0 user reset). Sub-task list masih kosong — Stage B
+  akan dijalankan TL dengan bantuan SA di routing berikutnya. Parent
+  issue: [GRE-56](https://multica/issues/GRE-56). Branch:
+  `release/epic-0005` (cut dari `main` @ `d886f15d`, post epic-0004
+  squash-merge [PR #40](https://github.com/01persen/PersonalFinanceTrackerV2/pull/40);
+  local stale branch dari v4.0 cycle dihapus dulu via `git branch -D`
+  sebelum re-cut dari main HEAD, push ke `origin/release/epic-0005`
+  sebagai branch baru). Epic-0005 dipilih karena topmost eligible di
+  tabel setelah epic-0004 DONE — butuh `epic-0002` (DONE) + `epic-0003`
+  (DONE), keduanya DONE. epic-0007 sekarang butuh `0005 IN_PROGRESS` +
+  `0006 IN_PROGRESS` (dependency partial) — setelah epic-0005 Stage H
+  merge, blocker epic-0007 tinggal 0006. epic-0006 tetap IN_PROGRESS
+  (Stage B belum mulai, di luar scope Stage A ini). Carry-over
+  housekeeping dari epic-0004: flaky test
+  `test_get_sort_is_stable_for_same_day` sudah di-fix (sub-0004-00 +
+  [PR #38](https://github.com/01persen/PersonalFinanceTrackerV2/pull/38)
+  + [PR #39](https://github.com/01persen/PersonalFinanceTrackerV2/pull/39)).
+  Epic-0005 BE CRUD `goals` akan independently test model `goals`
+  (tidak menyentuh `apps/api/tests/test_transactions.py`), risiko rendah
+  — tetap flagged untuk awareness.
+- epic **0004** sekarang **DONE** (8/8 sub-task + Stage H squash-merge
+  ke `main` via [PR #40](https://github.com/01persen/PersonalFinanceTrackerV2/pull/40)
+  commit `d886f15dde7f8bbd4e55c3b60ffd9339e0877b1f` @
+  2026-07-31T08:42:57Z, pipeline `api quality` + `web quality` SUCCESS,
+  `release/epic-0004` branch dihapus via `--delete-branch`). Sub-task
+  list (Stage B complete 2026-07-29, 7 sub-task di 5 stage + 1
+  housekeeping sub-0004-07). Parent issue:
+  [GRE-38](https://multica/issues/GRE-38) di-flip `done`. Epic-0004
+  dipilih karena topmost eligible di tabel setelah epic-0003 DONE —
+  hanya butuh `epic-0003` (DONE). epic-0006 tetap IN_PROGRESS (Stage B
+  belum mulai); epic-0005 eligible (butuh 0002+0003 DONE), epic-0007
+  blocked (butuh 0005 NOT_STARTED + 0006 IN_PROGRESS),
   epic-0008 + epic-0009 eligible. Carry-over penting ke sub-0004-03 search
   endpoint: **flaky test `test_get_sort_is_stable_for_same_day` sudah
   diangkat ke sub-task eksplisit `sub-0004-00`** (Stage 1 paralel, BE).
   Kontrak FE↔BE: kategori punya `parent_id` opsional untuk hirarki (sesuai
   spreadsheet user analysis).
-  - [ ] sub-0004-00 — Backend Pre-req: fix flaky `test_get_sort_is_stable_for_same_day` → **todo** ([GRE-39](https://multica/issues/GRE-39)), BE. Stage 1 paralel dengan 01.
-  - [ ] sub-0004-01 — Backend CRUD `/categories` + parent/child hirarki → **todo** ([GRE-40](https://multica/issues/GRE-40)), BE. Stage 1 paralel dengan 00.
-  - [ ] sub-0004-02 — Backend Auto-categorize rule engine + backfill opsional → **backlog** ([GRE-41](https://multica/issues/GRE-41)), BE. Stage 2 (butuh 01).
-  - [ ] sub-0004-03 — Backend Search endpoint + index design (perf < 500 ms @ 5k tx) → **backlog** ([GRE-42](https://multica/issues/GRE-42)), BE. Stage 2 (butuh 00).
-  - [ ] sub-0004-04 — Frontend UI Manajemen Kategori (mobile-first) → **backlog** ([GRE-43](https://multica/issues/GRE-43)), FE. Stage 3 (butuh 01).
-  - [ ] sub-0004-05 — Frontend UI Search global + filter panel (mobile-first) → **backlog** ([GRE-44](https://multica/issues/GRE-44)), FE. Stage 4 (butuh 03 + sub-0003-06 DONE).
-  - [ ] sub-0004-06 — QA Integration + e2e test plan Epic 0004 → **backlog** ([GRE-45](https://multica/issues/GRE-45)), QA. Stage 5 (butuh semua).
-  - Stage 1 kickoff rest-of-day 2026-07-29 (00 + 01 paralel, BE triggered via sub-issue assignment).
+  - [x] sub-0004-00 — Backend Pre-req: fix flaky `test_get_sort_is_stable_for_same_day` → **DONE** ([GRE-39](https://multica/issues/GRE-39)), BE. Migration `IS NOT DISTINCT FROM` (PR #38) + SQLite `use_insertmanyvalues=False` (PR #39) — fix verified via QA 100× sequential regression.
+  - [x] sub-0004-01 — Backend CRUD `/categories` + parent/child hirarki → **DONE** ([GRE-40](https://multica/issues/GRE-40)), BE. Stage 1 paralel dengan 00.
+  - [x] sub-0004-02 — Backend Auto-categorize rule engine + backfill opsional → **DONE** ([GRE-41](https://multica/issues/GRE-41)), BE.
+  - [x] sub-0004-03 — Backend Search endpoint + index design (perf < 500 ms @ 5k tx) → **DONE** 2026-07-30 ([GRE-42](https://multica/issues/GRE-42)), BE. [PR #34](https://github.com/01persen/PersonalFinanceTrackerV2/pull/34) merged `release/epic-0004` (squash `ec866fb`, 324/324 tests, PG bench p95 4.33 ms — 115× di bawah budget).
+  - [x] sub-0004-04 — Frontend UI Manajemen Kategori (mobile-first) → **DONE** 2026-07-29 ([GRE-43](https://multica/issues/GRE-43)), FE. [PR #31](https://github.com/01persen/PersonalFinanceTrackerV2/pull/31) merged `release/epic-0004` (squash `17419ea`).
+  - [x] sub-0004-05 — Frontend UI Search global + filter panel (mobile-first) → **DONE** 2026-07-31 ([GRE-44](https://multica/issues/GRE-44)), FE. [PR #37](https://github.com/01persen/PersonalFinanceTrackerV2/pull/37) merged `release/epic-0004` (squash `e8834e4`).
+  - [x] sub-0004-06 — QA Integration + e2e test plan Epic 0004 → **DONE** 2026-07-31 ([GRE-45](https://multica/issues/GRE-45)), QA. Defect loop 3/3 closed end-to-end (sub-0004-05, migration PG syntax, SQLite insertmanyvalues flake). 5/5 Epic AC PASS re-verified.
+  - [ ] sub-0004-07 — CI/CD Housekeeping: Perluas CI trigger `release/*` → **QA PASS dengan 3 catatan, hold `in_review`** ([GRE-48](https://multica/issues/GRE-48)), CI/CD Engineer. [PR #33](https://github.com/01persen/PersonalFinanceTrackerV2/pull/33) squash-merged ke `main` (commit `3b5b06b`); follow-up untuk 3 concerns (C1 test PR, C2 `workflow_dispatch` syntax, C3 push event) — di luar scope Stage A epic-0005.
+  - Sub-task status: **7/8 DONE** (sub-0004-07 housekeeping masih `in_review`); Epic AC 5/5 PASS; Stage H merged `d886f15d`.
 - epic **0006** sekarang **IN_PROGRESS** (sourced 2026-07-29). Sub-task list
   masih kosong — Stage B akan dijalankan TL dengan bantuan SA. Parent
   issue: [GRE-34](https://multica/issues/GRE-34). Branch: `release/epic-0006`
@@ -381,3 +416,44 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
   done per Stage Plan di Operating Manual §5.1. Carry-over penting:
   constraint (d) perf < 500 ms butuh index design di sub-0004-03; FE
   sub-task wajib mobile-first viewport 390×844 (sub-0003-05 baseline).
+- v3.2 (2026-07-30) — Tech Leader: epic-0004 sub-0004-00 flaky test
+  fix merged ([PR #38](https://github.com/01persen/PersonalFinanceTrackerV2/pull/38)
+  + [PR #39](https://github.com/01persen/PersonalFinanceTrackerV2/pull/39)).
+  Migration `IS NOT DISTINCT FROM` + SQLite `use_insertmanyvalues=False`.
+- v3.3 (2026-07-30) — Tech Leader: epic-0004 sub-0004-01 categories
+  CRUD + parent/child hirarki merged ke `release/epic-0004`.
+- v3.4 (2026-07-30) — Tech Leader: epic-0004 sub-0004-02 auto-categorize
+  rule engine + sub-0004-03 search endpoint merged ke `release/epic-0004`.
+  PG bench p95 4.33 ms @ 5k tx (115× di bawah budget 500 ms PRD §8 MVP).
+- v3.5..v3.8 (2026-07-30..2026-07-31) — Tech Leader: epic-0004
+  Stage C → E progression (sub-0004-04 FE Kategori [PR #31],
+  sub-0004-05 FE Search [PR #37], sub-0004-06 QA integration + e2e
+  [PR #34] wait, see notes). Stage F → H via
+  [PR #40](https://github.com/01persen/PersonalFinanceTrackerV2/pull/40)
+  (squash `d886f15d`). epic-0004 fully shipped.
+- v3.9 (2026-07-29) — Tech Leader (autopilot Stage A): sourced
+  epic-0009 → **IN_PROGRESS** di branch `release/epic-0009` (cut dari
+  main `d886f15d`). Tracker header v3.1 → v3.9 + table row epic-0009 +
+  Catatan entry epic-0009 + Riwayat entry v3.9. Catatan: epic-0009
+  tidak eligible untuk Stage C-H segera (BLOCKED — butuh klarifikasi
+  stakeholder scope gaji tetap manual) sehingga sourced dulu untuk
+  visibility tapi Stage B tertunda.
+- v4.2 (2026-07-31) — Tech Leader: epic-0005 **Stage A complete**.
+  Branch `release/epic-0005` re-cut dari `main` @ `d886f15d` (post
+  epic-0004 squash-merge
+  [PR #40](https://github.com/01persen/PersonalFinanceTrackerV2/pull/40))
+  + push ke `origin/release/epic-0005`. Local stale branch dari v4.0
+  cycle dihapus dulu (`git branch -D release/epic-0005`) sebelum
+  re-cut dari main HEAD. Parent issue
+  [GRE-56](https://multica/issues/GRE-56) metadata dipin: `squad_id`,
+  `release_branch=release/epic-0005`,
+  `base_sha=d886f15dde7f8bbd4e55c3b60ffd9339e0877b1f`, `epic_doc_url`,
+  `tracker_url`, `prd_url`, `github_repo_url`, `project_folder`,
+  `tracker_version=v4.2`, `stage=A`. Status parent flip `in_progress`.
+  Tracker header v3.1 → v4.2 + table row epic-0004 → DONE, epic-0005
+  → IN_PROGRESS + Catatan entry epic-0005 (Stage A complete) +
+  Catatan entry epic-0004 di-update ke DONE dengan sub-task list
+  status terkini + Riwayat entry v4.2. Stage B (sub-task breakdown TL
+  + SA) di-trigger di routing yang sama dengan comment hand-off ke
+  System Analyst. epic-0006 tetap IN_PROGRESS (Stage B belum mulai,
+  di luar scope Stage A ini).

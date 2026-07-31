@@ -1,22 +1,29 @@
-"""Goals endpoints — CRUD + progress for the authenticated user's goals.
+"""Goals endpoints -- CRUD + progress for the authenticated user's goals.
 
-Scope: epic-0005, sub-0005-01. The wire surface is intentionally narrow:
+Scope: epic-0005, sub-0005-01 (CRUD + endpoint progress) + sub-0005-02
+(engine: live-derive current from linked account, EF target snapshot
+frozen at creation, saving tabungan_bulanan auto-calc, achieved_at
+column + recompute hook fired from the transactions router).
 
-* ``GET /goals`` — paginated list with ``kind`` + ``archived`` filters.
-* ``POST /goals`` — create with kind-specific validation.
-* ``GET /goals/{id}`` — detail (404 for cross-user / archived).
-* ``PATCH /goals/{id}`` — partial update with re-validated kind rules.
-* ``DELETE /goals/{id}`` — soft delete via ``archived_at``.
-* ``GET /goals/{id}/progress`` — current vs. target percentage plus
-  achieved-at and the auto-calc hints the FE renders in the progress
-  card.
+Wire surface:
 
-The compute path that derives ``current_amount_cents`` from the linked
-account balance is owned by sub-0005-02; for now the progress endpoint
-returns the persisted column as-is and falls back to the linked
-account's live balance (via the saldo engine) when the persisted value
-is ``NULL`` — i.e. a goal that opted in to "track my savings account"
-semantics.
+* ``GET /goals`` -- paginated list with ``kind`` + ``archived`` filters.
+* ``POST /goals`` -- create with kind-specific validation; sub-0005-02
+  adds the EF ``target_amount_snapshot_cents`` auto-calc and the
+  saving ``tabungan_bulanan_cents`` auto-calc as server-side writes
+  the FE cannot bypass.
+* ``GET /goals/{id}`` -- detail (404 for cross-user / archived).
+* ``PATCH /goals/{id}`` -- partial update; sub-0005-02 keeps the EF
+  snapshot frozen (TL decision -- patch does NOT re-derive the EF
+  formula) and re-runs the saving tabungan_bulanan auto-calc +
+  ``lama_mengumpulkan_bulan`` when inputs change.
+* ``DELETE /goals/{id}`` -- soft delete via ``archived_at``.
+* ``GET /goals/{id}/progress`` -- pure read; sub-0005-02 builds the
+  payload via
+  :func:`app.services.goal_engine.compute_goal_progress` so linked
+  vs unlinked semantics + clamp + percentage rounding stay in one
+  place, and ``achieved_at`` is the *persisted* column set by the
+  recompute hook (never written by this endpoint).
 
 Conventions follow :mod:`app.api.v1.categories` (per-router ``get_db``
 re-export, ``HTTPBearer`` via ``get_current_user``, 404 instead of 403
@@ -25,7 +32,7 @@ for ``not yours``, ``archived_at IS NULL`` exclusion everywhere).
 Cross-cutting TL decisions:
 
 * **404 not 403 for cross-user / archived.** Mirrors the categories /
-  accounts / transactions pattern — no leak.
+  accounts / transactions pattern -- no leak.
 * **Sort chain on list.** ``kind asc, start_date desc, created_at desc,
   id asc`` so the FE gets a deterministic order and the auto-calc
   fields can be edited without the row jumping around the page.
@@ -35,6 +42,11 @@ Cross-cutting TL decisions:
 * **Per-kind ``model_validator``** on the create schema so a saving goal
   with an EF-only field surfaces as a clear 422 instead of silently
   landing in the DB.
+* **EF snapshot frozen at create.** ``PATCH`` does NOT re-derive
+  ``target_amount_snapshot_cents`` even if ``monthly_expense_cents`` or
+  ``jumlah_tanggungan`` are changed (TL confirm in parent issue).
+  ``lama_mengumpulkan_bulan`` *is* re-derived because it depends on
+  the (mutable) ``monthly_expense_cents`` rate.
 """
 
 from __future__ import annotations
@@ -61,7 +73,12 @@ from app.db.models.enums import GoalKind
 from app.db.models.goal import Goal
 from app.db.models.user import User
 from app.db.session import get_session
-from app.services.balance import calculate_account_balance
+from app.services.goal_engine import (
+    compute_ef_lama_mengumpulkan_bulan,
+    compute_ef_target_snapshot_cents,
+    compute_goal_progress,
+    compute_saving_tabungan_bulanan_cents,
+)
 
 router = APIRouter(prefix="/goals", tags=["goals"])
 
@@ -101,7 +118,7 @@ def _get_owned_goal(
 ) -> Goal:
     """Load a goal and assert it belongs to the calling user.
 
-    404 — not 403 — for both ``not found`` and ``not yours``. Archived
+    404 -- not 403 -- for both ``not found`` and ``not yours``. Archived
     rows are 404 unless ``include_archived`` is set; the DELETE route
     uses ``include_archived=True`` so an idempotent second DELETE on a
     tombstoned row is still 204 (not 404).
@@ -137,7 +154,7 @@ def _validate_kind_specific(
 
     * ``target_date >= start_date`` for saving goals.
     * ``linked_account_id`` re-validated against the caller when
-      supplied (handled by ``_get_owned_account`` instead — kept
+      supplied (handled by ``_get_owned_account`` instead -- kept
       separate from this validator because it requires a DB roundtrip).
     """
     target_date = getattr(payload, "target_date", None)
@@ -162,37 +179,128 @@ def _validate_kind_specific(
         )
 
 
-def _compute_current_amount_cents(
+def _build_goal_from_create(
+    db: Session,
+    *,
+    current_user: User,
+    payload: GoalCreate,
+) -> Goal:
+    """Construct the new ``Goal`` row, applying sub-0005-02 auto-calcs.
+
+    * EF -- ``target_amount_snapshot_cents`` frozen via
+      :func:`compute_ef_target_snapshot_cents`; ``lama_mengumpulkan_bulan``
+      derived from the snapshot / ``monthly_expense_cents`` rate. None
+      of the auto-calc fields are user-editable; the route ignores
+      whatever the request sent.
+    * Saving -- ``tabungan_bulanan_cents`` derived from
+      ``target_amount_cents / jangka_waktu_months``; ``lama_mengumpulkan_bulan``
+      is unused for saving (return ``None``).
+    """
+    start_date: _date = payload.start_date or datetime.now(UTC).date()
+
+    if payload.kind == GoalKind.EMERGENCY_FUND:
+        # ``monthly_expense_cents`` and ``jumlah_tanggungan`` are
+        # enforced >0 / >=0 by Pydantic; we still defensive-null
+        # them so the EF formula doesn't crash on a missing row.
+        monthly_expense = payload.monthly_expense_cents or 0
+        jumlah_tanggungan = payload.jumlah_tanggungan or 0
+        target_snapshot = compute_ef_target_snapshot_cents(
+            db,
+            user_id=current_user.id,
+            monthly_expense_cents=monthly_expense,
+            jumlah_tanggungan=jumlah_tanggungan,
+            override_multiplier=payload.multiplier,
+        )
+        lama_mengumpulkan = compute_ef_lama_mengumpulkan_bulan(
+            target_amount_snapshot_cents=target_snapshot,
+            monthly_expense_cents=payload.monthly_expense_cents,
+        )
+        return Goal(
+            user_id=current_user.id,
+            kind=payload.kind,
+            name=payload.name,
+            target_amount_cents=payload.target_amount_cents,
+            current_amount_cents=payload.current_amount_cents,
+            linked_account_id=payload.linked_account_id,
+            start_date=start_date,
+            target_date=None,
+            jangka_waktu_months=None,
+            tabungan_bulanan_cents=None,
+            monthly_expense_cents=payload.monthly_expense_cents,
+            jumlah_tanggungan=payload.jumlah_tanggungan,
+            multiplier=payload.multiplier,
+            lama_mengumpulkan_bulan=lama_mengumpulkan,
+            target_amount_snapshot_cents=target_snapshot,
+            notes=payload.notes,
+            archived_at=None,
+            achieved_at=None,
+        )
+
+    # SAVING -- auto-calc ``tabungan_bulanan_cents`` from the horizon.
+    tabungan_bulanan = compute_saving_tabungan_bulanan_cents(
+        target_amount_cents=payload.target_amount_cents,
+        jangka_waktu_months=payload.jangka_waktu_months or 0,
+    )
+    return Goal(
+        user_id=current_user.id,
+        kind=payload.kind,
+        name=payload.name,
+        target_amount_cents=payload.target_amount_cents,
+        current_amount_cents=payload.current_amount_cents,
+        linked_account_id=payload.linked_account_id,
+        start_date=start_date,
+        target_date=payload.target_date,
+        jangka_waktu_months=payload.jangka_waktu_months,
+        tabungan_bulanan_cents=tabungan_bulanan,
+        monthly_expense_cents=None,
+        jumlah_tanggungan=None,
+        multiplier=None,
+        lama_mengumpulkan_bulan=None,
+        target_amount_snapshot_cents=None,
+        notes=payload.notes,
+        archived_at=None,
+        achieved_at=None,
+    )
+
+
+def _reapply_autocalcs_on_patch(
     db: Session,
     *,
     goal: Goal,
-) -> int:
-    """Return the current amount for a goal at request time.
+    payload: GoalUpdate,
+) -> None:
+    """Re-run sub-0005-02 auto-calcs on PATCH without touching the EF snapshot.
 
-    sub-0005-01 keeps the persistence path simple: if the goal has a
-    ``current_amount_cents`` value stored, return it (this covers
-    unlinked goals and any caller that wrote a manual value via PATCH);
-    otherwise, if the goal is linked to an account, fall back to that
-    account's live balance via the saldo engine.
+    EF: the snapshot is intentionally **frozen** at creation (TL decision),
+    so patching ``monthly_expense_cents`` or ``jumlah_tanggungan`` does NOT
+    re-derive ``target_amount_snapshot_cents``. ``lama_mengumpulkan_bulan``
+    IS re-derived because it depends on the (mutable) ``monthly_expense_cents``
+    rate.
 
-    sub-0005-02 will replace this with a race-safe service-layer
-    compute path that always derives from the linked account when set
-    and ignores the stored column. Until then, this gives the FE the
-    right number for both flavours without forcing a second round-trip
-    on every progress click.
+    Saving: re-derive ``tabungan_bulanan_cents`` whenever ``target_amount_cents``
+    or ``jangka_waktu_months`` change so the saving-rate column stays in
+    sync with the user-edited inputs.
     """
-    if goal.current_amount_cents is not None:
-        return goal.current_amount_cents
-    if goal.linked_account_id is not None:
-        balance = calculate_account_balance(
-            db,
-            user_id=goal.user_id,
-            account_id=uuid.UUID(str(goal.linked_account_id)),
-            as_of=datetime.now(UTC).date(),
+    data = payload.model_dump(exclude_unset=True)
+
+    if goal.kind == GoalKind.SAVING and (
+        "target_amount_cents" in data or "jangka_waktu_months" in data
+    ):
+        effective_target = data.get("target_amount_cents", goal.target_amount_cents)
+        effective_horizon = data.get("jangka_waktu_months", goal.jangka_waktu_months)
+        goal.tabungan_bulanan_cents = compute_saving_tabungan_bulanan_cents(
+            target_amount_cents=int(effective_target or 0),
+            jangka_waktu_months=int(effective_horizon or 0),
         )
-        if balance is not None:
-            return balance.balance_cents
-    return 0
+
+    elif goal.kind == GoalKind.EMERGENCY_FUND and "monthly_expense_cents" in data:
+        # Snapshot is frozen -- never overwrite it on PATCH. We only refresh
+        # ``lama_mengumpulkan_bulan`` because that's a function of the
+        # (mutable) ``monthly_expense_cents`` rate and the snapshot.
+        goal.lama_mengumpulkan_bulan = compute_ef_lama_mengumpulkan_bulan(
+            target_amount_snapshot_cents=goal.target_amount_snapshot_cents,
+            monthly_expense_cents=data["monthly_expense_cents"],
+        )
 
 
 @router.post(
@@ -207,19 +315,26 @@ def create_goal(
 ) -> GoalPublic:
     """Create a new goal owned by the authenticated user.
 
-    Validation runs at two layers:
+    Validation runs at three layers:
 
-    * Pydantic (``GoalCreate._validate_kind_specific``) — rejects
+    * Pydantic (``GoalCreate._validate_kind_specific``) -- rejects
       cross-field leaks (EF-only fields on a saving goal, etc.) with
       a 422 before the route handler runs.
-    * The route here — re-checks ``linked_account_id`` ownership (404)
-      and the ``target_date >= start_date`` cross-field rule (422). The
-      Pydantic check can't see the persisted row, so a future sub-task
-      that introduces "default start_date to today" wouldn't be
-      catched there.
+    * The route here -- re-checks ``linked_account_id`` ownership (404)
+      and the ``target_date >= start_date`` cross-field rule (422).
+      The Pydantic check can't see the persisted row, so a future
+      sub-task that introduces "default start_date to today" wouldn't
+      be catched there.
+    * :func:`_build_goal_from_create` -- applies the sub-0005-02
+      auto-calc formulas server-side (saving ``tabungan_bulanan``,
+      EF ``target_amount_snapshot`` + ``lama_mengumpulkan_bulan``).
+      The FE cannot bypass these by sending a body field with the
+      same name (``extra="forbid"``); the server writes them last
+      on top of whatever the request carried.
 
-    The new row is always created with ``archived_at = NULL``;
-    archive is a separate endpoint (DELETE).
+    The new row is always created with ``archived_at = NULL`` and
+    ``achieved_at = NULL``; archive is a separate endpoint (DELETE)
+    and achievement comes from the recompute hook (sub-0005-02).
     """
     if payload.linked_account_id is not None:
         _get_owned_account(
@@ -239,25 +354,7 @@ def create_goal(
             ),
         )
 
-    goal = Goal(
-        user_id=current_user.id,
-        kind=payload.kind,
-        name=payload.name,
-        target_amount_cents=payload.target_amount_cents,
-        current_amount_cents=payload.current_amount_cents,
-        linked_account_id=payload.linked_account_id,
-        start_date=start_date,
-        target_date=payload.target_date,
-        jangka_waktu_months=payload.jangka_waktu_months,
-        tabungan_bulanan_cents=payload.tabungan_bulanan_cents,
-        monthly_expense_cents=payload.monthly_expense_cents,
-        jumlah_tanggungan=payload.jumlah_tanggungan,
-        multiplier=payload.multiplier,
-        lama_mengumpulkan_bulan=None,
-        target_amount_snapshot_cents=None,
-        notes=payload.notes,
-        archived_at=None,
-    )
+    goal = _build_goal_from_create(db, current_user=current_user, payload=payload)
     db.add(goal)
     db.commit()
     db.refresh(goal)
@@ -275,9 +372,9 @@ def list_goals(
     archived: bool = Query(
         default=False,
         description=(
-            "``false`` (default) returns active goals only — those with "
+            "``false`` (default) returns active goals only -- those with "
             "``archived_at IS NULL``. ``true`` returns the archived set "
-            "exclusively — those with ``archived_at IS NOT NULL``."
+            "exclusively -- those with ``archived_at IS NOT NULL``."
         ),
     ),
     limit: int = Query(
@@ -294,7 +391,7 @@ def list_goals(
 ) -> GoalListPublic:
     """Return the caller's goals with optional ``kind`` + ``archived`` filters.
 
-    Active rows (``archived_at IS NULL``) are returned by default — the
+    Active rows (``archived_at IS NULL``) are returned by default -- the
     FE pagination is built on top of those. Pass ``?archived=true`` to
     surface *only* the tombstoned set (e.g. for an "Archived" tab).
 
@@ -368,17 +465,33 @@ def update_goal(
 
     Only the fields present in the request body are touched. The
     server-controlled fields (``id``, ``user_id``, ``created_at``,
-    ``updated_at``, ``archived_at``, the auto-calc EF fields) are
-    never editable through this endpoint — the schema rejects unknown
-    fields with 422 before the route runs.
+    ``updated_at``, ``archived_at``, ``achieved_at``, and the EF
+    ``target_amount_snapshot_cents``) are never editable through this
+    endpoint -- the schema rejects unknown fields with 422 before the
+    route runs and the route explicitly refuses to re-derive
+    ``target_amount_snapshot_cents`` on PATCH (TL-confirmed decision).
+
+    ``extra="forbid"`` rejects any unknown / server-controlled
+    fields so a client attempting to edit ``kind`` (or set
+    ``target_amount_snapshot_cents`` directly) gets a 422.
 
     Cross-user rows return 404 (same as create / list endpoints), and
     PATCH on an archived row also returns 404 so a stale id from the
     client never resurrects a tombstoned goal.
 
-    ``linked_account_id`` can be cleared by sending ``null`` — the
+    ``linked_account_id`` can be cleared by sending ``null`` -- the
     route accepts the explicit ``None`` and writes it through. A new
     non-null id is validated via ``_get_owned_account``.
+
+    sub-0005-02 auto-calc behaviour on PATCH:
+
+    * Saving -- ``tabungan_bulanan_cents`` re-derived whenever the
+      persisted ``target_amount_cents`` or ``jangka_waktu_months``
+      change.
+    * EF -- ``target_amount_snapshot_cents`` is **frozen** at creation
+      and never re-derived. ``lama_mengumpulkan_bulan`` IS
+      re-derived when ``monthly_expense_cents`` changes because
+      it's a function of the mutable rate.
     """
     goal = _get_owned_goal(db, goal_id=goal_id, current_user=current_user)
 
@@ -395,6 +508,8 @@ def update_goal(
 
     for field, value in data.items():
         setattr(goal, field, value)
+
+    _reapply_autocalcs_on_patch(db, goal=goal, payload=payload)
 
     db.commit()
     db.refresh(goal)
@@ -413,7 +528,7 @@ def delete_goal(
 ) -> Response:
     """Soft-delete a goal by setting ``archived_at = now()``.
 
-    Idempotent — a second DELETE on an already-archived row is a no-op
+    Idempotent -- a second DELETE on an already-archived row is a no-op
     (still 204). The tombstone timestamp is captured server-side
     (mirrors the ``archived_at`` pattern on categories, sub-0004-01).
     """
@@ -437,36 +552,36 @@ def get_goal_progress(
 ) -> GoalProgressPublic:
     """Return the progress snapshot for a goal.
 
-    See :class:`GoalProgressPublic` for the contract. ``percentage`` is
-    capped at 100 (a goal that overshoots its target still surfaces as
-    100% in the progress bar) and rounded to 2 decimals so the FE
-    doesn't have to format.
+    sub-0005-02 owns the compute path. The pure-read rule is:
 
-    ``achieved_at`` is the persisted row's ``updated_at`` timestamp
-    when the goal has crossed the threshold (current >= target). This
-    is the best signal we have in sub-0005-01 — a more accurate
-    "achievement moment" lands when sub-0005-02 wires the live
-    recompute path.
+    * ``current_amount_cents`` from :func:`compute_goal_progress` --
+      linked-account saldo when ``linked_account_id IS NOT NULL``,
+      stored value when ``linked_account_id IS NULL``.
+    * ``percentage`` is ``min(100, current / target * 100)`` rounded
+      to two decimals, ``0`` when ``target <= 0``.
+    * ``achieved_at`` is the *persisted* column on the goal row --
+      written by :func:`app.services.goal_progress_recompute.
+      recompute_achieved_at_for_goal` once on the first crossing.
+      This endpoint never writes.
+
+    Note: a freshly-created saving goal whose ``current_amount_cents``
+    is ``0`` and whose ``target_amount_cents`` is ``100`` ships
+    ``percentage == 0.0`` and ``achieved_at is None``. The recompute
+    hook (transactions router + BackgroundTasks) sets ``achieved_at``
+    once a tx on the linked account pushes the live saldo past the
+    target.
     """
     goal = _get_owned_goal(db, goal_id=goal_id, current_user=current_user)
 
-    current_amount_cents = _compute_current_amount_cents(db, goal=goal)
-    target = goal.target_amount_cents
-    if target > 0:
-        raw = (current_amount_cents / target) * 100.0
-        percentage = round(min(raw, 100.0), 2)
-    else:
-        percentage = 0.0
-
-    achieved_at: datetime | None = goal.updated_at if current_amount_cents >= target else None
+    progress = compute_goal_progress(db, goal=goal)
 
     return GoalProgressPublic(
-        goal_id=goal.id,
-        kind=goal.kind,
-        current_amount_cents=current_amount_cents,
-        target_amount_cents=target,
-        percentage=percentage,
-        achieved_at=achieved_at,
-        tabungan_bulanan_cents=goal.tabungan_bulanan_cents,
-        lama_mengumpulkan_bulan=goal.lama_mengumpulkan_bulan,
+        goal_id=progress.goal_id,
+        kind=progress.kind,
+        current_amount_cents=progress.current_amount_cents,
+        target_amount_cents=progress.target_amount_cents,
+        percentage=progress.percentage,
+        achieved_at=progress.achieved_at,
+        tabungan_bulanan_cents=progress.tabungan_bulanan_cents,
+        lama_mengumpulkan_bulan=progress.lama_mengumpulkan_bulan,
     )

@@ -153,7 +153,10 @@ def test_create_saving_goal_minimal(client: TestClient, fresh_db: Session) -> No
     assert body["start_date"] == "2026-08-01"
     assert body["target_date"] == "2027-08-01"
     assert body["jangka_waktu_months"] == 12
-    assert body["tabungan_bulanan_cents"] is None
+    # sub-0005-02 — server-side auto-calc ``tabungan_bulanan_cents``
+    # = target_amount_cents (5_000_000) / jangka_waktu_months (12) =
+    # 416666 (integer division drops the cents).
+    assert body["tabungan_bulanan_cents"] == 416666
     assert body["monthly_expense_cents"] is None
     assert body["jumlah_tanggungan"] is None
     assert body["multiplier"] is None
@@ -162,13 +165,31 @@ def test_create_saving_goal_minimal(client: TestClient, fresh_db: Session) -> No
     assert body["notes"] is None
     assert body["archived"] is False
     assert body["archived_at"] is None
+    # sub-0005-02 — ``achieved_at`` is the *first* time the goal
+    # crossed 100%; a brand-new goal with current_amount=0 never
+    # crosses, so the column stays null until the recompute hook
+    # (or a BackgroundTasks event) sets it.
+    assert body["achieved_at"] is None
     assert body["id"]
     assert body["created_at"]
     assert body["updated_at"]
 
 
 def test_create_emergency_fund_goal_with_inputs(client: TestClient, fresh_db: Session) -> None:
-    """EF goal with all EF-specific fields → 201 + body."""
+    """EF goal with all EF-specific fields → 201 + body.
+
+    sub-0005-02 — the EF formula is computed server-side at create
+    time:
+
+        target_amount_snapshot_cents =
+            monthly_expense_cents x jumlah_tanggungan x multiplier
+        lama_mengumpulkan_bulan =
+            target_amount_snapshot_cents / monthly_expense_cents
+
+    With the inputs in this test (5_000_000 x 2 x 6 = 60_000_000 and
+    60_000_000 / 5_000_000 = 12 months) the FE never has to recompute
+    these on the client — the server is authoritative.
+    """
     headers = _auth_headers(_register(client, "ef-full@example.com")["access_token"])
 
     resp = client.post(
@@ -191,10 +212,11 @@ def test_create_emergency_fund_goal_with_inputs(client: TestClient, fresh_db: Se
     assert body["monthly_expense_cents"] == 5_000_000
     assert body["jumlah_tanggungan"] == 2
     assert body["multiplier"] == 6
-    # Auto-calc fields stay NULL — sub-0005-02 owns the service-layer
-    # formula; sub-0005-01 just stores the user inputs.
-    assert body["lama_mengumpulkan_bulan"] is None
-    assert body["target_amount_snapshot_cents"] is None
+    # sub-0005-02 — server-side EF formula. Snapshot is frozen at this
+    # value forever (patching monthly_expense_cents / jumlah_tanggungan
+    # does NOT re-derive it).
+    assert body["target_amount_snapshot_cents"] == 60_000_000
+    assert body["lama_mengumpulkan_bulan"] == 12
 
 
 def test_create_saving_rejects_ef_fields(client: TestClient, fresh_db: Session) -> None:
@@ -757,7 +779,17 @@ def test_progress_with_stored_current_amount(client: TestClient, fresh_db: Sessi
 
 
 def test_progress_caps_at_100_when_overshot(client: TestClient, fresh_db: Session) -> None:
-    """``current > target`` → ``percentage`` capped at 100, achieved set."""
+    """``current > target`` → ``percentage`` capped at 100.
+
+    sub-0005-02 — ``achieved_at`` is now a *persisted* column written
+    by the recompute hook on first threshold-cross; the read endpoint
+    (``GET /goals/{id}/progress``) doesn't write. A freshly created
+    unlinked saving goal with ``current_amount_cents`` overshot
+    returns ``achieved_at is None`` until the recompute hook fires.
+    The end-to-end achieved-state behaviour is covered in
+    :mod:`tests.test_goal_engine` (where the recompute runs and
+    persists the timestamp).
+    """
     headers = _auth_headers(_register(client, "progress-capped@example.com")["access_token"])
     goal = _create_goal(
         client,
@@ -774,7 +806,9 @@ def test_progress_caps_at_100_when_overshot(client: TestClient, fresh_db: Sessio
 
     assert body["current_amount_cents"] == 15_000_000
     assert body["percentage"] == 100.0
-    assert body["achieved_at"] is not None
+    # achieved_at is None on the read path until the recompute hook
+    # (or test-side recompute) writes it; see test_goal_engine.py.
+    assert body["achieved_at"] is None
 
 
 def test_progress_falls_back_to_linked_account_balance(

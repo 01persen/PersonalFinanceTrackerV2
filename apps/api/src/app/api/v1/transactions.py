@@ -53,7 +53,7 @@ from collections.abc import Iterator
 from datetime import UTC, datetime
 from datetime import date as _date
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -77,6 +77,7 @@ from app.db.models.rule_audit_log import RuleAuditLog
 from app.db.models.transaction import Transaction
 from app.db.models.user import User
 from app.db.session import get_session
+from app.services.goal_progress_recompute import enqueue_goal_progress_recompute
 from app.services.rule_engine import (
     resolve_category_for_transaction,
 )
@@ -197,6 +198,7 @@ def _get_owned_transaction(
 )
 def create_transaction(
     payload: TransactionCreate,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> TransactionPublic:
@@ -204,6 +206,13 @@ def create_transaction(
 
     Returns 201 with the persisted row. ``deleted_at`` defaults to NULL so
     the row is immediately visible to GET /transactions.
+
+    sub-0005-02 — enqueues the goal-progress recompute hook after the
+    commit finishes so any goal linked to ``payload.account_id`` picks
+    up the new balance on the next read. The hook is in-process
+    (FastAPI BackgroundTasks); tests using ``TestClient`` see it run
+    synchronously on response cleanup, production gets eventual
+    consistency ``≤ 1 s``.
     """
     type_enum = TransactionType(payload.type)
     account = _get_owned_account(db, account_id=payload.account_id, current_user=current_user)
@@ -265,6 +274,12 @@ def create_transaction(
 
     db.commit()
     db.refresh(transaction)
+
+    # sub-0005-02 — enqueue the goal-progress recompute for the
+    # affected account (no-op when the account has no linked goal —
+    # the recompute body's empty result returns ``0`` immediately).
+    enqueue_goal_progress_recompute(background_tasks, account.id)
+
     return TransactionPublic.model_validate(transaction)
 
 
@@ -275,6 +290,7 @@ def create_transaction(
 )
 def create_transfer(
     payload: TransferCreate,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> TransferPublic:
@@ -308,6 +324,13 @@ def create_transfer(
     * Both accounts belong to the caller and are non-archived →
       404 for ownership/missing, 404 for archived (mirrors the
       accounts router).
+
+    sub-0005-02 — a transfer touches BOTH legs at once, so the
+    goal-progress recompute hook fires for both accounts in a single
+    background task. The ``enqueue_goal_progress_recompute`` helper
+    dedupes the account ids, so a transfer between two of the same
+    user's accounts (only one of which has a linked goal) still
+    schedules exactly one recompute per *unique* account id.
     """
     source = _get_owned_account(db, account_id=payload.source_account_id, current_user=current_user)
     destination = _get_owned_account(
@@ -348,6 +371,11 @@ def create_transfer(
     db.commit()
     db.refresh(source_tx)
     db.refresh(destination_tx)
+
+    # sub-0005-02 — fire the recompute for both legs in one call. The
+    # helper dedupes by id, so a transfer where source == destination
+    # (caught by Pydantic, but defensive) would only schedule once.
+    enqueue_goal_progress_recompute(background_tasks, [source.id, destination.id])
 
     return TransferPublic(
         source=TransactionPublic.model_validate(source_tx),
@@ -694,6 +722,7 @@ def search_transactions(
 def update_transaction(
     transaction_id: uuid.UUID,
     payload: TransactionUpdate,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> TransactionPublic:
@@ -711,12 +740,19 @@ def update_transaction(
     Validation mirrors POST: ``amount_cents > 0`` (Pydantic), ``currency ==
     "IDR"`` (model validator), ``account_id`` ownership (404), and
     ``category_id`` ownership + kind match (404 / 422).
+
+    sub-0005-02 — editing ``amount_cents`` or ``account_id`` changes the
+    linked account's running balance, so the goal-progress recompute
+    hook fires for the OLD account (before the PATCH) AND the NEW
+    account (if it changed). The recompute helper dedupes both, so a
+    no-op PATCH (``amount_cents`` unchanged) only fires once.
     """
     transaction = _get_owned_transaction(
         db, transaction_id=transaction_id, current_user=current_user
     )
 
     data = payload.model_dump(exclude_unset=True)
+    old_account_id = transaction.account_id
 
     if "account_id" in data:
         _get_owned_account(db, account_id=data["account_id"], current_user=current_user)
@@ -773,6 +809,17 @@ def update_transaction(
 
     db.commit()
     db.refresh(transaction)
+
+    # sub-0005-02 — enqueue the recompute for the old account (always,
+    # because the saldo aggregate changed) and the new account (when
+    # the caller swapped ``account_id``). The helper dedupes both
+    # sides; an unchanged PATCH still fires once for ``old_account_id``.
+    new_account_id = transaction.account_id if "account_id" in data else None
+    enqueue_goal_progress_recompute(
+        background_tasks,
+        [old_account_id, new_account_id] if new_account_id is not None else old_account_id,
+    )
+
     return TransactionPublic.model_validate(transaction)
 
 
@@ -783,6 +830,7 @@ def update_transaction(
 )
 def delete_transaction(
     transaction_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Response:
@@ -796,6 +844,14 @@ def delete_transaction(
     Calling DELETE on a soft-deleted row is a no-op (idempotent) — the
     row is already hidden from the list endpoint and the final 204 makes
     the retry safe to issue without state-checking first.
+
+    sub-0005-02 — soft-delete excludes the row from the saldo
+    aggregate, so any goal linked to ``transaction.account_id`` is
+    due for a recompute. We enqueue the recompute ONLY on the
+    *first* delete (the idempotent retry path doesn't refire it),
+    so a duplicate DELETE doesn't re-stamp an already-achieved
+    goal (the recompute is idempotent, but the extra work is still
+    wasted log volume).
     """
     transaction = db.get(Transaction, transaction_id)
     if transaction is None or transaction.user_id != current_user.id:
@@ -803,9 +859,13 @@ def delete_transaction(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="transaction not found",
         )
-    if transaction.deleted_at is None:
+    first_soft_delete = transaction.deleted_at is None
+    if first_soft_delete:
         transaction.deleted_at = datetime.now(UTC)
         db.commit()
+        # sub-0005-02 — recompute on the first soft-delete path only;
+        # idempotent retries don't refire.
+        enqueue_goal_progress_recompute(background_tasks, transaction.account_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

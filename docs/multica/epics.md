@@ -115,11 +115,13 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
   - [x] sub-0005-03 — FE UI daftar goal + progress bar (mobile-first) → **DONE** 2026-08-02 ([GRE-59](https://multica/issues/GRE-59)), FE. [PR #43](https://github.com/01persen/PersonalFinanceTrackerV2/pull/43) squash-merged `release/epic-0005` (`f9fbfc3`). QA PASS semua AC + race defense + state UI komplit.
   - [x] sub-0005-04 — FE UI form buat/edit goal (saving + EF) → **DONE** 2026-08-02 ([GRE-61](https://multica/issues/GRE-61)), FE. [PR #44](https://github.com/01persen/PersonalFinanceTrackerV2/pull/44) squash-merged `release/epic-0005` (`cb1cdd4`). QA PASS setelah defect loop: EF submit bypass `target_amount_snapshot_cents` (server-validated setelah fix), titik-sebagai-ribuan ditolak client-side (IDR koma-only), prefill multiplier race vs `/users/me/settings` + `/accounts` resolve.
   - [x] sub-0005-05 — FE Banner notifikasi progress (threshold-based, in-app) → **DONE** 2026-08-02 ([GRE-60](https://multica/issues/GRE-60)), FE. [PR #46](https://github.com/01persen/PersonalFinanceTrackerV2/pull/46) merged `release/epic-0005` (`295be2b`). QA PASS (Stage E) semua 9 AC verified: `apps/web/src/components/goals/progress-banner*.{tsx,ts}` (4 files, 997 LOC) + `apps/web/src/lib/api/goal-progress.ts` (404→null defensive fetch) + `apps/web/src/app/goals/page.tsx` (ProgressBannerList above GoalList, `clearBannerSession` on logout) + 24 unit test cases. Pipeline `web quality` + `api quality` hijau.
-  - [ ] sub-0005-06 — QA Integration + e2e test plan Epic 0005 → **todo** ([GRE-62](https://multica/issues/GRE-62)), QA. Stage 5, depend on 01–05 DONE (semua DONE). Promote `backlog → todo` post Stage 3 closure (Stage G post v4.7). QA Tester auto-fire via assignment.
-  - Stage 1-3 closed (sub-0005-01..05 DONE, 5 PR merged ke `release/epic-0005`). Stage 5 dipromote (`sub-0005-06` → `todo`, QA auto-fire). Tidak ada backlog tersisa setelah ini — Stage H trigger setelah Stage 5 PASS.
-  - **High-risk area QA direct test** (TL-confirmed, bukan BE re-impl): (1) concurrent test linked account recompute eventual consistency ≤ 1 s; (2) EF snapshot freeze post-creation; (3) multiplier auto-fetch default + per-goal override; (4) auto-update hook no-op untuk akun unlinked (no infinite loop). (1)-(4) PASS via QA Stage E re-test pada `ce81b73` (sub-0005-02). Stage 5 sub-0005-06 akan re-verify end-to-end (semua AC + high-risk area tests).
+  - [x] sub-0005-06 — QA Integration + e2e test plan Epic 0005 → **DONE** 2026-08-02 ([GRE-62](https://multica/issues/GRE-62)), QA. QA PASS (Stage E) semua 4 Epic AC (a–d) + 4 high-risk area tests end-to-end. Backend regression full clean + FE `next build` hijau + mobile e2e Playwright 390×844 + DB migration upgrade + downgrade tested. `feat/sub-0005-06-fix-tz-as-of` last commit di `release/epic-0005` HEAD (`d42478f`).
+  - [ ] sub-0005-07 — Stage H.1 CI/CD: Open + squash-merge PR `release/epic-0005 → main` → **todo** ([GRE-63](https://multica/issues/GRE-63)), CI/CD Engineer. Stage 6 (Stage H). Depend on sub-0005-06 DONE. CI/CD Engineer auto-fire via assignment.
+  - [ ] sub-0005-08 — Stage H.2 TL: Cross-check Epic AC + flip parent ke `done` + close parent issue → **backlog** ([GRE-64](https://multica/issues/GRE-64)), Tech Leader. Stage 6 (Stage H). Depend on sub-0005-07 DONE (squash-merge SUCCESS). Promote setelah Stage H.1 closed.
+  - Stage 1-5 closed (sub-0005-01..06 DONE, 6 sub-task closed; 6 PR merged ke `release/epic-0005`). Stage 6 (Stage H) dipromote: sub-0005-07 (CI/CD merge PR `release/epic-0005 → main`) → `todo`, sub-0005-08 (TL finalize) → `backlog`. **Catatan:** issue body explicitly notes `enable-auto-merge` workflow belum cover `release/* → main` — CI/CD perlu manual `gh pr merge --squash --delete-branch` (atau extend workflow dulu via housekeeping `sub-0004-07`).
+  - **High-risk area QA direct test** (TL-confirmed, bukan BE re-impl): (1) concurrent test linked account recompute eventual consistency ≤ 1 s; (2) EF snapshot freeze post-creation; (3) multiplier auto-fetch default + per-goal override; (4) auto-update hook no-op untuk akun unlinked (no infinite loop). (1)-(4) PASS via QA Stage E re-test pada `ce81b73` (sub-0005-02) + end-to-end re-verify pada sub-0005-06.
   - **Security patch inherited:** [PR #45](https://github.com/01persen/PersonalFinanceTrackerV2/pull/45) `Bump next to 14.2.35 + postcss override to clear audit CVEs` rebase ke `release/epic-0005` @ `a182b02` (sebelum sub-0005-03 squash). Inherited otomatis oleh sub-0005-03 + sub-0005-04 + sub-0005-05 saat rebase.
-  - Sub-task status: **5/6 DONE** (sub-0005-01..05 closed; sub-0005-06 in-flight — QA integration + e2e).
+  - Sub-task status: **6/8 DONE** (sub-0005-01..06 closed; sub-0005-07 in-flight — Stage H.1 CI/CD merge; sub-0005-08 backlog — Stage H.2 TL finalize).
   Epic-0005 BE CRUD `goals` akan independently test model `goals`
   (tidak menyentuh `apps/api/tests/test_transactions.py`), risiko rendah
   — tetap flagged untuk awareness.
@@ -619,3 +621,34 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
   re-verify + epic AC cross-check 4/4). Tracker header v4.6 → v4.7 +
   Catatan entry epic-0005 (sub-task list: 01–05 DONE, 06 todo, status
   5/6) + Riwayat entry v4.7.
+- v4.8 (2026-08-02) — Tech Leader: epic-0005 **Stage H created**. Stage 5
+  closed (sub-0005-06 [GRE-62](https://multica/issues/GRE-62) QA
+  integration + e2e test plan DONE — QA PASS semua 4 Epic AC (a–d) +
+  4 high-risk area tests end-to-end, backend regression full clean +
+  FE `next build` hijau + mobile e2e Playwright 390×844 + DB
+  migration upgrade + downgrade tested, `feat/sub-0005-06-fix-tz-as-of`
+  last commit di `release/epic-0005` HEAD via
+  [PR #47](https://github.com/01persen/PersonalFinanceTrackerV2/pull/47)
+  squash `d42478f`). Wake dari system hand-off comment (Stage G
+  auto-progress trigger) — TL decide issue NOT actually complete
+  (code belum merge ke `main`, parent belum flip ke `done`). Stage 6
+  (Stage H) created dengan 2 sub-task:
+  - [GRE-63](https://multica/issues/GRE-63) `sub-0005-07` Stage H.1
+    CI/CD Engineer (todo, assignee `b2e08d1f-ed2e-459c-85e7-2b44914da9a9`,
+    auto-fire via assignment) — Open + squash-merge PR
+    `release/epic-0005 → main` (manual merge per issue body, `enable-auto-merge`
+    workflow belum cover `release/* → main`).
+  - [GRE-64](https://multica/issues/GRE-64) `sub-0005-08` Stage H.2
+    Tech Leader (backlog, assignee TL
+    `7057d6be-6a0a-4b53-9314-26886a72b2be`) — Cross-check 4 Epic AC
+    end-to-end + flip parent [GRE-56](https://multica/issues/GRE-56)
+    ke `done` + close parent issue. Promote dari `backlog → todo`
+    setelah Stage H.1 closed.
+  Issue body note: `release/epic-0003`/`0006`/`0009` masih hidup
+  (protected atau di luar scope epic-0005) — bukan blocker. epic-0007
+  (Networth Dashboard) eligible di-sourcing setelah epic-0005 + epic-0006
+  DONE (saat ini blocker partial — epic-0006 IN_PROGRESS, Stage B belum
+  mulai). epic-0008 (Export & Settings, P-ENHANCEMENT) + epic-0009
+  (Recurring, BLOCKED scope sempit) eligible paralel. Tracker header
+  v4.7 → v4.8 + Catatan entry epic-0005 (sub-task list update: 01–06
+  DONE, 07 todo, 08 backlog, status 6/8) + Riwayat entry v4.8.

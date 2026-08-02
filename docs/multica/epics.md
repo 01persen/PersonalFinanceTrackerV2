@@ -494,3 +494,76 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
   (PRD §14 default 3) + FE boleh override per-goal. Tracker header
   v4.2 → v4.3 + Catatan entry epic-0005 (sub-task list + TL-confirmed
   keputusan + high-risk area notes) + Riwayat entry v4.3.
+- v4.4 (2026-08-02) — Tech Leader: epic-0005 **Stage 1 closed**.
+  Backend Engineer (selama beberapa hari) merge Stage 1 ke
+  `release/epic-0005`:
+  - `sub-0005-01` BE Goal CRUD + schema migration + progress endpoint
+    merged via [PR #41](https://github.com/01persen/PersonalFinanceTrackerV2/pull/41)
+    (squash `9f9665d`) setelah CI feedback fix migration SQLite
+    `<3.35` portability (commit `1bf29c5` di feat branch sebelum
+    squash). Endpoint `POST/GET/PATCH/DELETE /goals` +
+    `GET /goals/{id}/progress` sesuai kontrak PRD §14.
+  - `sub-0005-02` BE Engine progress + auto-update hook + EF formula
+    + multiplier config merged via
+    [PR #42](https://github.com/01persen/PersonalFinanceTrackerV2/pull/42)
+    (squash `7563554`, 416/416 tests pass post-merge, pipeline
+    `api quality` + `web quality` SUCCESS). Service-layer
+    `goal_engine.compute_goal_progress()` + BackgroundTasks hook di
+    `goal_progress_recompute.py` + EF snapshot formula + new endpoint
+    `GET/PATCH /users/me/settings` (default `ef_multiplier=3`).
+    Migration tambahan `c5a7b9c1d3e4_add_goals_achieved_at_column.py`
+    reversible (downgrade tested). QA Stage E re-test PASS pada
+    `ce81b73` setelah defect loop: hook DELETE gagal refresh linked
+    progress karena `balance.py` JOIN predicate tidak menyertakan
+    `Transaction.deleted_at.is_(None)` (cross-scope bug-fix epic-0003
+    AC (b) carry-over — strict fix, tidak menambah behaviour).
+    Regression +4 test ditambahkan di `test_balance_engine.py`:
+    `test_soft_deleted_transactions_excluded_from_saldo`,
+    `test_soft_deleted_income_excluded_from_saldo`,
+    `test_delete_transaction_refreshes_linked_goal_progress`,
+    `test_delete_income_refreshes_linked_goal_progress_down`.
+  - High-risk area (1)–(4) semua PASS: (1) concurrent recompute
+    eventual consistency ≤ 1 s terverifikasi; (2) EF snapshot frozen
+    post-creation (PATCH tidak recompute); (3) multiplier auto-fetch
+    default 3 + override per-goal; (4) auto-update hook no-op untuk
+    akun unlinked (no infinite loop). Sub-task status **2/6 DONE**.
+  - Stage 2 promote paralel: `sub-0005-03` (FE list goal + progress
+    bar, [GRE-59](https://multica/issues/GRE-59)) +
+    `sub-0005-04` (FE form buat/edit goal,
+    [GRE-61](https://multica/issues/GRE-61)) → `todo` (assignee
+    Frontend Engineer `173f6cbb-e459-43ad-a699-f990a6fe2e18`,
+    auto-fire). Stage 3 (`sub-0005-05` banner FE,
+    [GRE-60](https://multica/issues/GRE-60)) + Stage 5
+    (`sub-0005-06` QA integration + e2e,
+    [GRE-62](https://multica/issues/GRE-62)) tetap `backlog`,
+    auto-promote per Stage G setelah Stage 2/3 closure.
+  - Tracker header v4.3 → v4.4 + Catatan entry epic-0005
+    (sub-task list update: 01/02 DONE, 03/04 todo, status 2/6) +
+    Riwayat entry v4.4. Parent issue
+    [GRE-56](https://multica/issues/GRE-56) metadata di-update
+    (`tracker_version=v4.4`, `stage=C-F`).
+- v4.5 (2026-08-02) — Tech Leader: epic-0005 **Stage 2 promotion
+  verified**. Wake dari system hand-off comment (Stage G auto-progress
+  trigger) — Stage 2 sub-issues
+  ([GRE-59](https://multica/issues/GRE-59) +
+  [GRE-61](https://multica/issues/GRE-61)) sudah `todo` di system
+  state sejak `2026-08-02T05:53:16Z` (system auto-flipped dari
+  `backlog` setelah Stage 1 closure detected). TL verify dependency
+  per description: `sub-0005-03` butuh `sub-0005-01` + `sub-0005-02`
+  DONE (keduanya DONE, [PR #41](https://github.com/01persen/PersonalFinanceTrackerV2/pull/41) +
+  [PR #42](https://github.com/01persen/PersonalFinanceTrackerV2/pull/42)
+  merged); `sub-0005-04` butuh `sub-0005-02` DONE (DONE). **Tidak
+  ada konflik** antara description dependency vs higher-level
+  breakdown parent — kedua sub-issue eligible untuk Stage 2 kickoff.
+  Catatan: sub-issue di-create dengan `--status backlog` saat Stage B
+  (per workflow sub-task lebih dulu `backlog` lalu promote saat prior
+  stage close), sehingga `--status todo + --assignee FE` auto-fire
+  tidak terjadi saat creation. System flip `backlog → todo` kemudian
+  + Frontend Engineer auto-fire via assignment di system — trust
+  system trigger. TL tidak menambah `@mention FE` untuk menghindari
+  double-trigger per workflow rule. **Stage 2 kickoff aktif**
+  (paralel sub-0005-03 + sub-0005-04). Tracker header v4.4 → v4.5 +
+  Riwayat entry v4.5. Local worktree stale state dari prior session
+  di-clean (`git reset --hard HEAD` + `git pull --ff-only origin
+  release/epic-0005`) untuk sinkronkan dengan remote HEAD
+  `7563554` sebelum commit tracker v4.5.

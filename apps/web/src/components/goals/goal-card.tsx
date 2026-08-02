@@ -1,6 +1,6 @@
 "use client";
 
-import type { Account } from "@/lib/api/accounts";
+import type { Account, AccountBalance } from "@/lib/api/accounts";
 import { GOAL_KIND_LABEL, type Goal, type GoalKind } from "@/lib/api/goal-client";
 import { GoalProgressBar } from "@/components/goals/goal-progress-bar";
 import {
@@ -12,6 +12,18 @@ interface GoalCardProps {
   goal: Goal;
   /** Lookup map so the linked account name resolves without a second fetch. */
   accountsById: Map<string, Account>;
+  /**
+   * Lookup map for live account saldo (`balanceCents` per
+   * `apps/api/src/app/api/v1/accounts.py` balance endpoint). When a
+   * goal has `linkedAccountId` set, the live saldo drives the
+   * progress display — this mirrors the BE progress engine in
+   * sub-0005-02 so a freshly-created saving goal whose persisted
+   * `current_amount_cents` is still 0 doesn't render at 0% before
+   * the recompute hook runs. When the lookup is empty (e.g. the
+   * balances endpoint hasn't been fetched yet) the card falls back
+   * to the persisted `currentAmountCents`.
+   */
+  balanceByAccountId: Map<string, AccountBalance>;
 }
 
 const KIND_BADGE_STYLES: Record<
@@ -62,6 +74,30 @@ function formatTimestamp(value: string): string {
 }
 
 /**
+ * Resolve the displayed ``currentCents`` for a goal.
+ *
+ * For linked goals (`linkedAccountId` set), the live saldo from the
+ * balances snapshot wins — same source-of-truth as the BE progress
+ * engine (`compute_goal_progress` in sub-0005-02). The persisted
+ * ``current_amount_cents`` is only used when the goal is unlinked
+ * (no live source to read from) or when the balances lookup doesn't
+ * cover the linked account yet (stale lookup or the linked account
+ * was archived after the snapshot).
+ */
+function resolveCurrentCents(
+  goal: Goal,
+  balanceByAccountId: Map<string, AccountBalance>,
+): number {
+  if (goal.linkedAccountId) {
+    const live = balanceByAccountId.get(goal.linkedAccountId);
+    if (live && typeof live.balanceCents === "number") {
+      return live.balanceCents;
+    }
+  }
+  return goal.currentAmountCents ?? 0;
+}
+
+/**
  * Single goal card — used in the goals list page (sub-0005-03). The
  * card surfaces:
  *
@@ -78,16 +114,19 @@ function formatTimestamp(value: string): string {
  * Mobile-first: tap area ≥ 44 px on the wrapper, full-width on the
  * 390 px baseline.
  */
-export function GoalCard({ goal, accountsById }: GoalCardProps) {
+export function GoalCard({ goal, accountsById, balanceByAccountId }: GoalCardProps) {
   const styles = KIND_BADGE_STYLES[goal.kind];
   const linkedAccount = goal.linkedAccountId
     ? accountsById.get(goal.linkedAccountId)
     : null;
   const achieved = goal.achievedAt !== null;
-  const currentCents = goal.currentAmountCents ?? 0;
+  const currentCents = resolveCurrentCents(goal, balanceByAccountId);
   const targetRupiah = centsToRupiah(goal.targetAmountCents);
   const currentRupiah = centsToRupiah(currentCents);
   const hasLinkedAccount = linkedAccount !== null && linkedAccount !== undefined;
+  const displayedPercent = Math.round(
+    (currentCents / Math.max(goal.targetAmountCents, 1)) * 100,
+  );
 
   return (
     <article
@@ -130,7 +169,7 @@ export function GoalCard({ goal, accountsById }: GoalCardProps) {
 
       <div className="mt-1 flex flex-col gap-1.5">
         <GoalProgressBar
-          currentCents={goal.currentAmountCents}
+          currentCents={currentCents}
           targetCents={goal.targetAmountCents}
           kind={goal.kind}
           achieved={achieved}
@@ -149,7 +188,7 @@ export function GoalCard({ goal, accountsById }: GoalCardProps) {
             </span>
           ) : (
             <span className="font-semibold tabular-nums text-slate-700">
-              {Math.round((currentCents / Math.max(goal.targetAmountCents, 1)) * 100)}%
+              {displayedPercent}%
             </span>
           )}
         </div>

@@ -14,8 +14,12 @@ import { GoalFilterChips, type GoalFilterValue } from "@/components/goals/goal-f
 import { GoalList } from "@/components/goals/goal-list";
 import { AppShell } from "@/components/shell/app-shell";
 import { ActionIcon, NavigationIcon } from "@/components/shell/icons";
-import { fetchAccounts } from "@/lib/api/account-client";
-import type { Account } from "@/lib/api/accounts";
+import {
+  fetchAccounts,
+  fetchBalances,
+  formatIdrFromCents,
+} from "@/lib/api/account-client";
+import type { Account, AccountBalance, AccountBalances } from "@/lib/api/accounts";
 import {
   EMPTY_GOAL_FILTERS,
   fetchGoals,
@@ -47,9 +51,10 @@ import { AuthGuard } from "@/lib/auth/auth-guard";
  *   2. Filter state ↔ data — the `load()` effect triggers a fetch
  *      whenever the filter object changes, with race defense identical
  *      to the rest of the FE (sub-0003-06 / sub-0003-07 / sub-0004-04).
- *   3. Lookup data — ``accounts`` are fetched once on mount so the
- *      goal-card can resolve the linked account name without
- *      re-fetching per goal row.
+ *   3. Lookup data — ``accounts`` + ``balances`` are fetched once on
+ *      mount so the goal-card can resolve both the linked account
+ *      name and the live saldo (sub-0005-02 progress engine) without
+ *      a per-row round-trip.
  *
  * UI composition:
  *
@@ -62,13 +67,39 @@ import { AuthGuard } from "@/lib/auth/auth-guard";
  *   - **List** — ``GoalList`` renders the cards with progress bars.
  *   - **Empty / error / skeleton states** — mirror the rest of the
  *     dashboard (sub-0003-05/06, sub-0004-04).
+ *
+ * Defect fix (PR #43 reviewer, CI/CD Engineer):
+ *
+ *   - **Blocker 1 — linked goal 0%**: ``GET /goals`` returns the
+ *     persisted ``current_amount_cents`` column. For linked goals
+ *     the live saldo from the linked account is the source of truth
+ *     (sub-0005-02). We fetch ``/accounts/balances`` once on mount
+ *     and let ``GoalCard`` resolve ``currentCents`` from that
+ *     snapshot, falling back to the persisted column when the goal
+ *     is unlinked.
+ *   - **Blocker 2 — lookup error hides list**: the lookup error is
+ *     now surfaced as a non-blocking amber banner above the goals
+ *     list. The list itself still renders (cards fall back to
+ *     "Akun tidak diketahui" for linked-account resolution).
+ *   - **Blocker 3 — saving not sorted by ``created_at desc``**:
+ *     ``sortGoalsForDisplay`` now sorts EF first (priority), then
+ *     within each kind by ``createdAt`` descending (matches the
+ *     issue spec verbatim). Same tiebreaker for EF so rows stay
+ *     stable across renders.
  */
 
 type LoadStatus = "loading" | "ready" | "error";
 
-interface LookupState {
+interface LookupAccountsState {
   status: LoadStatus;
   accounts: Account[];
+  errorMessage: string | null;
+}
+
+interface LookupBalancesState {
+  status: LoadStatus;
+  balances: AccountBalance[];
+  totals: AccountBalances | null;
   errorMessage: string | null;
 }
 
@@ -79,9 +110,16 @@ interface GoalsState {
   errorMessage: string | null;
 }
 
-const INITIAL_LOOKUP: LookupState = {
+const INITIAL_LOOKUP_ACCOUNTS: LookupAccountsState = {
   status: "loading",
   accounts: [],
+  errorMessage: null,
+};
+
+const INITIAL_LOOKUP_BALANCES: LookupBalancesState = {
+  status: "loading",
+  balances: [],
+  totals: null,
   errorMessage: null,
 };
 
@@ -107,7 +145,7 @@ function sameGoalFilters(
   return left.kind === right.kind;
 }
 
-function summarizeLookupError(error: unknown): string {
+function summarizeAccountsError(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.status === 401 || error.status === 403) {
       return "Sesi kamu sudah berakhir. Masuk lagi untuk memuat daftar akun.";
@@ -118,6 +156,19 @@ function summarizeLookupError(error: unknown): string {
     return error.message || "Gagal memuat daftar akun.";
   }
   return "Tidak bisa memuat daftar akun. Periksa koneksi lalu coba lagi.";
+}
+
+function summarizeBalancesError(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.status === 401 || error.status === 403) {
+      return "Sesi kamu sudah berakhir. Saldo akun mungkin tidak akurat.";
+    }
+    if (error.status >= 500) {
+      return "Server sedang bermasalah. Saldo akun mungkin tidak akurat.";
+    }
+    return error.message || "Gagal memuat saldo akun.";
+  }
+  return "Tidak bisa memuat saldo akun. Periksa koneksi lalu coba lagi.";
 }
 
 export default function GoalsPage() {
@@ -135,7 +186,12 @@ function GoalsContent() {
 
   const initialKind = parseGoalKindParam(searchParams.get("kind"));
   const [kindFilter, setKindFilter] = useState<GoalKind | null>(initialKind);
-  const [lookup, setLookup] = useState<LookupState>(INITIAL_LOOKUP);
+  const [accounts, setAccounts] = useState<LookupAccountsState>(
+    INITIAL_LOOKUP_ACCOUNTS,
+  );
+  const [balances, setBalances] = useState<LookupBalancesState>(
+    INITIAL_LOOKUP_BALANCES,
+  );
   const [goalsState, setGoalsState] = useState<GoalsState>(INITIAL_GOALS);
 
   // Race defense mirrors sub-0003-06: bump a load id per fetch and
@@ -143,8 +199,10 @@ function GoalsContent() {
   // response mid-flight.
   const latestGoalsLoadIdRef = useRef<number>(0);
   const goalsAbortRef = useRef<AbortController | null>(null);
-  const latestLookupLoadIdRef = useRef<number>(0);
-  const lookupAbortRef = useRef<AbortController | null>(null);
+  const latestAccountsLoadIdRef = useRef<number>(0);
+  const accountsAbortRef = useRef<AbortController | null>(null);
+  const latestBalancesLoadIdRef = useRef<number>(0);
+  const balancesAbortRef = useRef<AbortController | null>(null);
 
   const lastPushedKindRef = useRef<string | null>(
     initialKind === null ? null : initialKind,
@@ -190,44 +248,93 @@ function GoalsContent() {
     [],
   );
 
-  const loadLookup = useCallback(async () => {
-    lookupAbortRef.current?.abort();
+  const loadAccounts = useCallback(async () => {
+    accountsAbortRef.current?.abort();
     const controller = new AbortController();
-    lookupAbortRef.current = controller;
-    const loadId = ++latestLookupLoadIdRef.current;
+    accountsAbortRef.current = controller;
+    const loadId = ++latestAccountsLoadIdRef.current;
     const dropStale = (): boolean =>
-      loadId !== latestLookupLoadIdRef.current || controller.signal.aborted;
+      loadId !== latestAccountsLoadIdRef.current || controller.signal.aborted;
 
-    setLookup((current) => ({ ...current, status: "loading" }));
+    setAccounts((current) => ({ ...current, status: "loading" }));
 
     try {
-      const accounts = await fetchAccounts({ signal: controller.signal });
+      const fetched = await fetchAccounts({ signal: controller.signal });
       if (dropStale()) return;
-      setLookup({
+      setAccounts({
         status: "ready",
-        accounts,
+        accounts: fetched,
         errorMessage: null,
       });
     } catch (error) {
       if (dropStale()) return;
       if (controller.signal.aborted) return;
-      setLookup({
+      setAccounts({
         status: "error",
         accounts: [],
-        errorMessage: summarizeLookupError(error),
+        errorMessage: summarizeAccountsError(error),
       });
     }
   }, []);
 
-  // Lookup on mount only — the linked account list rarely changes
-  // during a session, so we don't refetch on filter changes.
+  const loadBalances = useCallback(async () => {
+    balancesAbortRef.current?.abort();
+    const controller = new AbortController();
+    balancesAbortRef.current = controller;
+    const loadId = ++latestBalancesLoadIdRef.current;
+    const dropStale = (): boolean =>
+      loadId !== latestBalancesLoadIdRef.current || controller.signal.aborted;
+
+    setBalances((current) => ({ ...current, status: "loading" }));
+
+    try {
+      const fetched = await fetchBalances({ signal: controller.signal });
+      if (dropStale()) return;
+      if (fetched === null) {
+        setBalances({
+          status: "error",
+          balances: [],
+          totals: null,
+          errorMessage: "Respons saldo tidak dikenali.",
+        });
+        return;
+      }
+      setBalances({
+        status: "ready",
+        balances: fetched.accounts,
+        totals: fetched,
+        errorMessage: null,
+      });
+    } catch (error) {
+      if (dropStale()) return;
+      if (controller.signal.aborted) return;
+      setBalances({
+        status: "error",
+        balances: [],
+        totals: null,
+        errorMessage: summarizeBalancesError(error),
+      });
+    }
+  }, []);
+
+  // Lookups on mount only — the linked account list + balances
+  // snapshot rarely change during a session, so we don't refetch on
+  // filter changes.
   useEffect(() => {
-    void loadLookup();
+    void loadAccounts();
     return () => {
-      lookupAbortRef.current?.abort();
-      lookupAbortRef.current = null;
+      accountsAbortRef.current?.abort();
+      accountsAbortRef.current = null;
     };
-  }, [loadLookup]);
+  }, [loadAccounts]);
+
+  useEffect(() => {
+    void loadBalances();
+    return () => {
+      balancesAbortRef.current?.abort();
+      balancesAbortRef.current = null;
+    };
+  }, [loadBalances]);
 
   // Goals refetch whenever the kind filter changes.
   useEffect(() => {
@@ -267,9 +374,13 @@ function GoalsContent() {
     void loadGoals(kindFilter);
   }, [kindFilter, loadGoals]);
 
-  const handleRetryLookup = useCallback(() => {
-    void loadLookup();
-  }, [loadLookup]);
+  const handleRetryAccounts = useCallback(() => {
+    void loadAccounts();
+  }, [loadAccounts]);
+
+  const handleRetryBalances = useCallback(() => {
+    void loadBalances();
+  }, [loadBalances]);
 
   const handleLogout = async () => {
     await logout();
@@ -290,9 +401,22 @@ function GoalsContent() {
   const activeFilterValue: GoalFilterValue = kindFilter ?? "all";
   const showAllKinds = activeFilterValue === "all";
 
+  // The lookup errors are intentionally non-blocking for the goals
+  // list itself (PR #43 reviewer blocker 2). The cards still render —
+  // when the account lookup fails the linked-account section is
+  // skipped, when the balance snapshot fails the card falls back to
+  // the persisted `current_amount_cents`.
+  const accountsErrorVisible = accounts.status === "error";
+  const balancesErrorVisible = balances.status === "error";
+
+  const networthLabel =
+    balances.totals !== null
+      ? formatIdrFromCents(balances.totals.networthCents)
+      : null;
+
   return (
     <AppShell user={user} isLoggingOut={isLoggingOut} onLogout={handleLogout}>
-      <GoalsHeader />
+      <GoalsHeader networthLabel={networthLabel} />
 
       <div className="mt-6">
         <GoalFilterChips
@@ -302,35 +426,46 @@ function GoalsContent() {
         />
       </div>
 
-      {lookup.status === "error" ? (
-        <LookupError message={lookup.errorMessage} onRetry={handleRetryLookup} />
+      {accountsErrorVisible ? (
+        <LookupWarning
+          kind="accounts"
+          message={accounts.errorMessage}
+          onRetry={handleRetryAccounts}
+        />
       ) : null}
 
-      {lookup.status !== "error" && goalsState.status === "loading" ? (
-        <GoalsSkeleton />
+      {balancesErrorVisible ? (
+        <LookupWarning
+          kind="balances"
+          message={balances.errorMessage}
+          onRetry={handleRetryBalances}
+        />
       ) : null}
 
-      {lookup.status !== "error" && goalsState.status === "error" ? (
+      {goalsState.status === "loading" ? <GoalsSkeleton /> : null}
+
+      {goalsState.status === "error" ? (
         <GoalsError
           message={goalsState.errorMessage}
           onRetry={handleRetryGoals}
         />
       ) : null}
 
-      {lookup.status !== "error" && goalsState.status === "ready" ? (
+      {goalsState.status === "ready" ? (
         goalsState.rows.length === 0 ? (
           <GoalsEmptyState kindFilter={kindFilter} />
         ) : (
           <GoalList
             goals={goalsState.rows}
-            accounts={lookup.accounts}
+            accounts={accounts.accounts}
+            balances={balances.balances}
             total={goalsState.total}
             showAllKinds={showAllKinds}
           />
         )
       ) : null}
 
-      {lookup.status === "ready" && goalsState.status === "ready" && goalsState.total > GOAL_PAGE_SIZE ? (
+      {goalsState.status === "ready" && goalsState.total > GOAL_PAGE_SIZE ? (
         <p className="mt-4 text-xs text-slate-500">
           Menampilkan halaman pertama ({goalsState.rows.length} dari{" "}
           {goalsState.total} target). Pagination lengkap menyusul di sub-0005-06.
@@ -340,7 +475,7 @@ function GoalsContent() {
   );
 }
 
-function GoalsHeader() {
+function GoalsHeader({ networthLabel }: { networthLabel: string | null }) {
   return (
     <header className="flex flex-wrap items-end justify-between gap-3">
       <div>
@@ -354,6 +489,16 @@ function GoalsHeader() {
           Pantau tabungan dan dana darurat dalam satu layar. Pilih jenis
           target lewat chip di atas, atau buka detail dengan mengetuk kartu.
         </p>
+        {networthLabel !== null ? (
+          <p className="mt-2 text-xs text-slate-500" aria-live="polite">
+            Networth saat ini:{" "}
+            <span className="font-semibold text-slate-700 tabular-nums">
+              {networthLabel}
+            </span>
+            {" "}
+            · saldo live dipakai untuk target yang ditautkan ke akun.
+          </p>
+        ) : null}
       </div>
       <Link
         href="/goals/new"
@@ -428,28 +573,36 @@ function GoalsError({
   );
 }
 
-function LookupError({
+function LookupWarning({
+  kind,
   message,
   onRetry,
 }: {
+  kind: "accounts" | "balances";
   message: string | null;
   onRetry: () => void;
 }) {
+  const heading =
+    kind === "accounts"
+      ? "Daftar akun tidak dapat dimuat"
+      : "Saldo akun tidak dapat dimuat";
+  const description =
+    kind === "accounts"
+      ? "Target tetap tampil. Nama akun tertaut akan kosong sampai daftar akun berhasil dimuat."
+      : "Target tetap tampil. Progress target tertaut akan memakai nilai terakhir yang tersimpan sampai saldo berhasil dimuat.";
   return (
     <section
-      className="card mt-6 flex flex-col items-start gap-3 border-amber-200 bg-amber-50"
-      role="alert"
-      aria-live="assertive"
+      className="card mt-4 flex flex-col items-start gap-3 border-amber-200 bg-amber-50"
+      role="status"
+      aria-live="polite"
+      data-warning-kind={kind}
     >
       <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100 text-amber-700">
         <ActionIcon name="close" className="h-5 w-5" />
       </div>
-      <h3 className="text-base font-semibold text-amber-900">
-        Gagal memuat daftar akun
-      </h3>
+      <h3 className="text-base font-semibold text-amber-900">{heading}</h3>
       <p className="text-sm leading-6 text-amber-800">
-        {message ??
-          "Akun tidak dapat dimuat. Target tetap tampil, namun nama akun tertaut mungkin belum tersedia."}
+        {message ?? description}
       </p>
       <button
         type="button"

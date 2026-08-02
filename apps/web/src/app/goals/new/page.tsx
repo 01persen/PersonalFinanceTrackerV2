@@ -162,13 +162,13 @@ function NewGoalContent() {
 
   const persist = useCallback(
     async (values: GoalFormValues): Promise<void> => {
-      const targetValidation = validateTargetAmount(values.targetAmount);
-      if (!targetValidation.ok) {
-        form.setFieldError("targetAmountCents", targetValidation.reason);
-        form.setGeneralError("Periksa kembali isian formulir.");
-        return;
-      }
-
+      // Name + notes + start-date cross-field checks apply to both
+      // kinds. The user-entered `targetAmount` is only relevant for
+      // saving goals — the EF form computes the target snapshot from
+      // its own inputs (sub-0005-02 mirror in `computeGoalPreview`).
+      // Catatan QA defect (sub-0005-04 cek 1): validating
+      // `values.targetAmount` before the kind branch blocked every EF
+      // submit because the field is empty for EF.
       const name = values.name.trim();
       if (name.length === 0) {
         form.setFieldError("name", "Nama goal wajib diisi.");
@@ -204,18 +204,13 @@ function NewGoalContent() {
         return;
       }
 
-      // Kind-specific validation. Collect the failed field so we can
-      // surface a clean message instead of having the user guess which
-      // kind-specific input was wrong.
-      const common = {
-        kind: values.kind,
-        name,
-        targetAmountCents: targetValidation.cents,
-        startDate,
-        notes: values.notes.trim() === "" ? null : values.notes.trim(),
-      };
-
       if (values.kind === "saving") {
+        const targetValidation = validateTargetAmount(values.targetAmount);
+        if (!targetValidation.ok) {
+          form.setFieldError("targetAmountCents", targetValidation.reason);
+          form.setGeneralError("Periksa kembali isian formulir.");
+          return;
+        }
         const horizonValidation = validatePositiveInteger(
           values.jangkaWaktuMonths,
           "Jangka waktu",
@@ -228,11 +223,15 @@ function NewGoalContent() {
         setSubmit({ kind: "submitting" });
         try {
           const created: Goal = await createGoal({
-            ...common,
+            kind: values.kind,
+            name,
+            targetAmountCents: targetValidation.cents,
+            startDate,
             targetDate: values.targetDate === "" ? null : values.targetDate,
             jangkaWaktuMonths: horizonValidation.value,
             linkedAccountId:
               values.linkedAccountId === "" ? null : values.linkedAccountId,
+            notes: values.notes.trim() === "" ? null : values.notes.trim(),
           });
           setSubmit({ kind: "success", goalId: created.id });
           window.setTimeout(() => {
@@ -251,7 +250,12 @@ function NewGoalContent() {
         return;
       }
 
-      // Emergency fund branch
+      // Emergency fund branch — `target_amount_cents` is required by the
+      // BE schema (`gt=0`) but the FE doesn't render a targetAmount
+      // input for EF. We compute it client-side from the EF formula
+      // (mirror of sub-0005-02 `compute_ef_target_snapshot_cents`) so
+      // the wire value matches what the server will recompute and
+      // freeze into `target_amount_snapshot_cents`.
       const monthlyValidation = validateTargetAmount(values.monthlyExpense);
       if (!monthlyValidation.ok) {
         form.setFieldError("monthlyExpenseCents", monthlyValidation.reason);
@@ -277,13 +281,28 @@ function NewGoalContent() {
         return;
       }
 
+      const efTargetSnapshot =
+        monthlyValidation.cents * tanggunganValidation.value * multiplierValidation.value;
+      if (efTargetSnapshot <= 0) {
+        form.setFieldError(
+          "monthlyExpenseCents",
+          "Hasil kalkulasi dana darurat harus lebih dari Rp 0.",
+        );
+        form.setGeneralError("Periksa kembali isian formulir.");
+        return;
+      }
+
       setSubmit({ kind: "submitting" });
       try {
         const created: Goal = await createGoal({
-          ...common,
+          kind: values.kind,
+          name,
+          targetAmountCents: efTargetSnapshot,
+          startDate,
           monthlyExpenseCents: monthlyValidation.cents,
           jumlahTanggungan: tanggunganValidation.value,
           multiplier: multiplierValidation.value,
+          notes: values.notes.trim() === "" ? null : values.notes.trim(),
         });
         setSubmit({ kind: "success", goalId: created.id });
         window.setTimeout(() => {

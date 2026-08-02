@@ -181,13 +181,20 @@ export function validateTargetAmount(raw: string): AmountValidation | AmountVali
       };
     }
   } else {
-    if (/\./.test(trimmed)) {
-      return {
-        ok: false,
-        reason: "Pakai koma untuk desimal (contoh: 25,5). Titik diproses sebagai pemisah ribuan.",
-      };
-    }
-    intPart = trimmed.replace(/[\s_]/g, "");
+    // Indonesian bookkeeping convention (PRD §10): titik, spasi, dan
+    // underscore adalah pemisah ribuan — semuanya di-strip dari integer
+    // part. Koma adalah satu-satunya pemisah desimal. Catatan QA
+    // defect (sub-0005-04 cek 2): hint UI menjanjikan "titik untuk
+    // ribuan" tapi validator lama menolak semua titik. Sekarang titik
+    // diterima konsisten dengan `account-form-fields` (saldo pembuka)
+    // dan PRD §10; untuk desimal user tetap harus pakai koma.
+    //
+    // Catatan keamanan: pola "25.000.000" → strip dots → "25000000".
+    // Edge case seperti "0.005" (satu titik, bukan thousand sep)
+    // juga di-strip jadi "0005" = 5 rupiah. Itu bukan silent round-up
+    // (hasilnya 5 rupiah, bukan 0); user yang ingin desimal wajib pakai
+    // koma sesuai konvensi Indonesia.
+    intPart = trimmed.replace(/[\s._]/g, "");
     decPart = "";
     if (!/^\d+$/.test(intPart)) {
       return { ok: false, reason: "Nominal hanya angka (contoh: 25000000)." };
@@ -1072,6 +1079,7 @@ function MonthlyExpenseField({
       ) : (
         <p id={fieldId("monthlyExpense-hint")} className="mt-1 text-xs text-slate-500">
           Snapshot total pengeluaran rumah tangga per bulan. Wajib lebih dari Rp 0.
+          Pakai koma untuk desimal, titik untuk ribuan.
         </p>
       )}
     </div>

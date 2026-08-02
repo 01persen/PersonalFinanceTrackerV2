@@ -186,13 +186,11 @@ function EditGoalContent({ goalId }: { goalId: string }) {
 
   const persist = useCallback(
     async (values: GoalFormValues): Promise<void> => {
-      const targetValidation = validateTargetAmount(values.targetAmount);
-      if (!targetValidation.ok) {
-        form.setFieldError("targetAmountCents", targetValidation.reason);
-        form.setGeneralError("Periksa kembali isian formulir.");
-        return;
-      }
-
+      // `targetAmount` only matters for saving goals — the EF form
+      // computes its own snapshot from monthly × tanggungan ×
+      // multiplier (mirror of sub-0005-02). Catatan QA defect
+      // (sub-0005-04 cek 1): validating `values.targetAmount` before
+      // the kind branch blocked every EF submit.
       const name = values.name.trim();
       if (name.length === 0) {
         form.setFieldError("name", "Nama goal wajib diisi.");
@@ -232,6 +230,13 @@ function EditGoalContent({ goalId }: { goalId: string }) {
 
       try {
         if (values.kind === "saving") {
+          const targetValidation = validateTargetAmount(values.targetAmount);
+          if (!targetValidation.ok) {
+            setSubmit({ kind: "idle" });
+            form.setFieldError("targetAmountCents", targetValidation.reason);
+            form.setGeneralError("Periksa kembali isian formulir.");
+            return;
+          }
           const horizonValidation = validatePositiveInteger(
             values.jangkaWaktuMonths,
             "Jangka waktu",
@@ -280,9 +285,28 @@ function EditGoalContent({ goalId }: { goalId: string }) {
             form.setGeneralError("Periksa kembali isian formulir.");
             return;
           }
+          // EF `target_amount_cents` is required by BE schema (`gt=0`)
+          // even though the BE freezes its own snapshot into
+          // `target_amount_snapshot_cents` (TL decision, PRD §14).
+          // We send the snapshot so the wire value matches what the
+          // server recomputes — the PATCH path intentionally does NOT
+          // re-derive `target_amount_snapshot_cents` so any drift
+          // between FE and BE on this field would surface as a
+          // visible mismatch in the persisted goal row.
+          const efTargetSnapshot =
+            monthlyValidation.cents * tanggunganValidation.value * multiplierValidation.value;
+          if (efTargetSnapshot <= 0) {
+            setSubmit({ kind: "idle" });
+            form.setFieldError(
+              "monthlyExpenseCents",
+              "Hasil kalkulasi dana darurat harus lebih dari Rp 0.",
+            );
+            form.setGeneralError("Periksa kembali isian formulir.");
+            return;
+          }
           await updateGoal(goalId, {
             name,
-            targetAmountCents: targetValidation.cents,
+            targetAmountCents: efTargetSnapshot,
             startDate,
             monthlyExpenseCents: monthlyValidation.cents,
             jumlahTanggungan: tanggunganValidation.value,

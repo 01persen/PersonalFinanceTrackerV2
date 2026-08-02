@@ -1277,3 +1277,215 @@ def test_soft_deleted_income_excluded_from_saldo(fresh_db: Session) -> None:
     )
     assert after is not None
     assert after.balance_cents == 200
+
+
+# ---------------------------------------------------------------------------
+# sub-0005-06 / QA DEFECT-1: live saldo uses local calendar date (not UTC)
+# ---------------------------------------------------------------------------
+
+
+def test_as_of_filter_includes_today_local_date(
+    fresh_db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """QA DEFECT-1 repro: a transaction logged on the caller's local
+    calendar date must be reflected in the live saldo, regardless of
+    the UTC date being behind (UTC+ timezones during the rollover
+    window).
+
+    Pre-fix the default ``as_of`` was ``datetime.now(UTC).date()``,
+    which can be 1 day behind ``date.today()`` for users in UTC+
+    during their local morning. The fix switches the default to
+    ``date.today()`` so today's transactions are visible immediately.
+
+    This test pins the engine-level behaviour: with an explicit
+    ``as_of=date.today()`` the txn is included even when the UTC
+    date is 1 day behind. The companion test
+    ``test_default_as_of_uses_local_date_not_utc`` covers the
+    default-arg path in :func:`app.services.goal_engine.
+    _linked_account_balance_cents`.
+    """
+    user = _make_user(fresh_db)
+    account = _make_account(fresh_db, user_id=user.id, opening_balance_cents=0)
+
+    # Pretend local today is 2026-08-03 (Monday) while UTC is still on
+    # 2026-08-02 (Sunday). This mirrors Asia/Shanghai at 00:30 local.
+    local_today = date(2026, 8, 3)
+    utc_today = date(2026, 8, 2)
+    assert local_today > utc_today
+
+    _add_tx(
+        fresh_db,
+        user_id=user.id,
+        account_id=account.id,
+        type_=TransactionType.INCOME,
+        amount_cents=250_000,
+        occurred_on=local_today,
+    )
+
+    # With UTC as_of, the txn is excluded (the old broken behaviour).
+    utc_only = calculate_account_balance(
+        fresh_db, user_id=user.id, account_id=account.id, as_of=utc_today
+    )
+    assert utc_only is not None
+    assert utc_only.balance_cents == 0, "with UTC as_of the local-today txn is hidden"
+
+    # With local as_of, the txn is included (the new fixed behaviour).
+    local_view = calculate_account_balance(
+        fresh_db, user_id=user.id, account_id=account.id, as_of=local_today
+    )
+    assert local_view is not None
+    assert local_view.balance_cents == 250_000
+
+
+def test_default_as_of_uses_local_date_not_utc(
+    fresh_db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Calling :func:`compute_goal_progress` without an explicit ``as_of``
+    must use the caller's local calendar date, not UTC.
+
+    Repro: a user in UTC+ posts a goal creation + linked account, then
+    attaches an income dated ``date.today()`` (local). The progress
+    endpoint must surface the income immediately, not wait for UTC
+    to roll over.
+
+    The fix is in :func:`app.services.goal_engine._linked_account_balance_cents`
+    which used to default ``as_of`` to ``datetime.now(UTC).date()`` --
+    now ``date.today()``. We patch the engine module's ``date`` alias
+    and ``datetime.now(UTC)`` so the test simulates the UTC+ rollover
+    window deterministically without needing to flip the system TZ.
+    """
+    from app.db.models.enums import GoalKind
+    from app.db.models.goal import Goal
+    from app.services.goal_engine import compute_goal_progress
+
+    user = _make_user(fresh_db)
+    account = _make_account(fresh_db, user_id=user.id, opening_balance_cents=0)
+
+    local_today = date(2026, 8, 3)
+    utc_today = date(2026, 8, 2)
+
+    # Insert a transaction dated local_today. The default-arg
+    # ``compute_goal_progress`` must read ``date.today()`` for as_of, so
+    # the income is included.
+    _add_tx(
+        fresh_db,
+        user_id=user.id,
+        account_id=account.id,
+        type_=TransactionType.INCOME,
+        amount_cents=750_000,
+        occurred_on=local_today,
+    )
+
+    goal = Goal(
+        user_id=user.id,
+        kind=GoalKind.SAVING,
+        name="tz-test",
+        target_amount_cents=2_000_000,
+        current_amount_cents=None,
+        linked_account_id=account.id,
+        start_date=local_today,
+        archived_at=None,
+        achieved_at=None,
+    )
+    fresh_db.add(goal)
+    fresh_db.commit()
+    fresh_db.refresh(goal)
+
+    # Patch the engine module so that ``date.today()`` returns local_today
+    # while ``datetime.now(UTC).date()`` returns utc_today. After the fix
+    # the default path uses ``date.today()`` so the txn is included.
+    import datetime as _dt
+
+    import app.services.goal_engine as goal_engine_module
+
+    class _LocalDate(date):
+        """Subclass that pins ``today()`` to the patched local date."""
+
+        @classmethod
+        def today(cls) -> date:  # type: ignore[override]
+            return local_today
+
+    class _FrozenDatetime(_dt.datetime):
+        @classmethod
+        def now(cls, tz=None):  # type: ignore[override]
+            if tz is None or tz is _dt.UTC:
+                return _dt.datetime.combine(utc_today, _dt.time(0, 0, 0), tzinfo=_dt.UTC)
+            return _dt.datetime.combine(local_today, _dt.time(0, 0, 0), tzinfo=tz)
+
+    monkeypatch.setattr(goal_engine_module, "_date", _LocalDate)
+    monkeypatch.setattr(goal_engine_module, "datetime", _FrozenDatetime)
+
+    progress = compute_goal_progress(fresh_db, goal=goal)
+    assert progress.current_amount_cents == 750_000, (
+        "default-arg compute_goal_progress must use local date.today() "
+        "so today's tx is visible in UTC+ timezones"
+    )
+
+
+def test_default_as_of_uses_local_date_not_utc_for_api_balance_endpoint(
+    client: TestClient, fresh_db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """End-to-end regression: ``GET /accounts/{id}/balance`` and
+    ``GET /accounts/balances`` use the caller's local date for the
+    ``as_of`` filter. The pre-fix code used ``datetime.now(UTC).date()``
+    which lagged 1 day behind local in UTC+ environments.
+
+    Pins the same fix in :mod:`app.api.v1.accounts` (the routers
+    route the default ``as_of`` through ``date.today()`` after the
+    sub-0005-06 fix).
+    """
+    local_today = date(2026, 8, 3)
+    utc_today = date(2026, 8, 2)
+
+    body = _register(client, "tz-balance@example.com")
+    headers = _auth_headers(body["access_token"])
+    account = _create_account_api(client, headers, opening_balance_cents=100_000)
+
+    # Insert a transaction dated local_today -- the pre-fix code would
+    # hide it because as_of was UTC (utc_today).
+    user_id = uuid.UUID(account["user_id"])
+    account_id = uuid.UUID(account["id"])
+    fresh_db.add(
+        Transaction(
+            user_id=user_id,
+            account_id=account_id,
+            category_id=None,
+            type=TransactionType.INCOME,
+            amount_cents=42_000,
+            currency="IDR",
+            occurred_on=local_today,
+            note=None,
+            transfer_pair_id=None,
+            recurring_rule_id=None,
+        )
+    )
+    fresh_db.commit()
+
+    # Patch the accounts router module so the API behaves as if it's
+    # still Sunday in UTC (utc_today) but local Monday (local_today).
+    import datetime as _dt
+
+    import app.api.v1.accounts as accounts_module
+
+    class _LocalDate(date):
+        @classmethod
+        def today(cls) -> date:  # type: ignore[override]
+            return local_today
+
+    class _FrozenDatetime(_dt.datetime):
+        @classmethod
+        def now(cls, tz=None):  # type: ignore[override]
+            return _dt.datetime.combine(utc_today, _dt.time(23, 0, 0), tzinfo=tz)
+
+    monkeypatch.setattr(accounts_module, "date", _LocalDate)
+    monkeypatch.setattr(accounts_module, "datetime", _FrozenDatetime)
+
+    response = client.get(f"/api/v1/accounts/{account['id']}/balance", headers=headers)
+    assert response.status_code == 200, response.text
+    assert response.json()["balance_cents"] == 142_000, (
+        "after the fix /accounts/{id}/balance uses local date.today() so "
+        "today's income is included even when UTC is still on yesterday"
+    )
+
+    summary = client.get("/api/v1/accounts/balances", headers=headers).json()
+    assert summary["accounts"][0]["balance_cents"] == 142_000

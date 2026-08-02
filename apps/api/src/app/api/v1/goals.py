@@ -195,8 +195,13 @@ def _build_goal_from_create(
     * Saving -- ``tabungan_bulanan_cents`` derived from
       ``target_amount_cents / jangka_waktu_months``; ``lama_mengumpulkan_bulan``
       is unused for saving (return ``None``).
+
+    The omitted-``start_date`` default uses the caller's local
+    calendar date (``date.today()``) so a user in UTC+ creating a
+    goal at 00:30 local gets a ``start_date`` matching their local
+    Monday, not UTC's Sunday (sub-0005-06 / QA DEFECT-1 fix).
     """
-    start_date: _date = payload.start_date or datetime.now(UTC).date()
+    start_date: _date = payload.start_date or _date.today()
 
     if payload.kind == GoalKind.EMERGENCY_FUND:
         # ``monthly_expense_cents`` and ``jumlah_tanggungan`` are
@@ -343,7 +348,7 @@ def create_goal(
             current_user=current_user,
         )
 
-    start_date: _date = payload.start_date or datetime.now(UTC).date()
+    start_date: _date = payload.start_date or _date.today()
 
     if payload.target_date is not None and payload.target_date < start_date:
         raise HTTPException(

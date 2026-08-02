@@ -47,8 +47,8 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from datetime import date as _date
+from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -194,6 +194,16 @@ def _linked_account_balance_cents(
     goal whose link was archived is treated as "no balance" rather
     than raising -- the FE displays 0% and the recompute hook skips
     it via the ``archived_at IS NULL`` predicate.
+
+    The default ``as_of`` resolves to the caller's *local* calendar
+    date (``date.today()``), not UTC. ``Transaction.occurred_on`` is
+    a plain date the user typed in their own timezone, so filtering
+    by UTC date would otherwise exclude today's transactions for any
+    user in UTC+ until the UTC date rolls over (sub-0005-06 / QA
+    DEFECT-1 repro). Fix vs. the previous ``datetime.now(UTC).date()``
+    fallback: a transaction logged on local Monday morning at 00:30
+    UTC+8 is visible immediately on Monday, not at 16:00 UTC the
+    same day.
     """
     if goal.linked_account_id is None:
         return 0
@@ -201,7 +211,7 @@ def _linked_account_balance_cents(
         db,
         user_id=goal.user_id,
         account_id=uuid.UUID(str(goal.linked_account_id)),
-        as_of=as_of or datetime.now(UTC).date(),
+        as_of=as_of or _date.today(),
     )
     if balance is None:
         return 0
@@ -224,7 +234,8 @@ def compute_goal_progress(
     Resolution of ``current_amount_cents``:
 
     * ``linked_account_id IS NOT NULL`` -> live saldo from the linked
-      account at ``as_of`` (defaults to today UTC).
+      account at ``as_of`` (defaults to the caller's local calendar
+      date, ``date.today()`` -- sub-0005-06 / QA DEFECT-1 fix).
     * ``linked_account_id IS NULL`` -> stored ``current_amount_cents``
       (manual input via PATCH). ``None`` is treated as 0 so the FE
       can never see ``NaN``/null for a progress bar.

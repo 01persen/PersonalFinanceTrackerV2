@@ -73,6 +73,7 @@ function NewGoalContent() {
   const { user, logout, isLoading: isLoggingOut } = useAuth();
 
   const [prefetch, setPrefetch] = useState<FormPrefetchState>({ kind: "loading" });
+  const [settingsMultiplier, setSettingsMultiplier] = useState<number | null>(null);
   const latestLoadIdRef = useRef<number>(0);
   const settingsLoadIdRef = useRef<number>(0);
 
@@ -114,10 +115,16 @@ function NewGoalContent() {
       if (loadId !== latestLoadIdRef.current) return;
 
       const activeAccounts = accounts.filter((account) => !account.archived);
+      // Resolve the multiplier from the latest settings value (or the
+      // seed fallback) — never from a hardcoded `3`. Catatan CI/CD
+      // defect: a hardcoded fallback here would clobber the user's
+      // setting if `loadSettings` resolved first.
+      const resolvedMultiplier =
+        settingsMultiplier ?? DEFAULT_EF_MULTIPLIER_FALLBACK;
       setPrefetch({
         kind: "ready",
         accounts: activeAccounts,
-        defaultEfMultiplier: DEFAULT_EF_MULTIPLIER_FALLBACK,
+        defaultEfMultiplier: resolvedMultiplier,
       });
     } catch (error) {
       if (loadId !== latestLoadIdRef.current) return;
@@ -127,7 +134,7 @@ function NewGoalContent() {
           : "Tidak bisa memuat formulir. Periksa koneksi lalu coba lagi.";
       setPrefetch({ kind: "error", message });
     }
-  }, []);
+  }, [settingsMultiplier]);
 
   const loadSettings = useCallback(async () => {
     const settingsLoadId = ++settingsLoadIdRef.current;
@@ -135,6 +142,13 @@ function NewGoalContent() {
       const settings = await fetchMySettings();
       if (settingsLoadId !== settingsLoadIdRef.current) return;
       const next = settings?.efMultiplier ?? DEFAULT_EF_MULTIPLIER_FALLBACK;
+      // Always mirror the value into `settingsMultiplier` so a late
+      // `loadFormData` can read it when it transitions to ready. The
+      // old implementation only updated `prefetch.defaultEfMultiplier`
+      // when state was already `ready`, silently dropping the value
+      // when settings arrived before accounts — the second race the
+      // CI/CD review caught.
+      setSettingsMultiplier(next);
       setPrefetch((current) => {
         if (current.kind !== "ready") return current;
         return { ...current, defaultEfMultiplier: next };
@@ -152,6 +166,32 @@ function NewGoalContent() {
   useEffect(() => {
     void loadSettings();
   }, [loadSettings]);
+
+  // Prefill the EF multiplier with the per-user default. The gate ref
+  // ensures we seed exactly once per (kind, defaultEfMultiplier) tuple
+  // so clearing the field by hand doesn't trigger a re-seed, while a
+  // fresh saving→EF toggle (which resets the field) — or a settings
+  // row arriving after mount — does. Catatan CI/CD defect: sebelumnya
+  // multiplier hanya jadi `placeholder`; submit dengan input kosong
+  // selalu ditolak `Multiplier wajib diisi.`.
+  const multiplierPrefillGateRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!isFormActive) return;
+    if (form.values.kind !== "emergency_fund") return;
+    if (form.values.multiplier !== "") return;
+    const gate = `emergency_fund:${defaultEfMultiplier}`;
+    if (multiplierPrefillGateRef.current === gate) return;
+    multiplierPrefillGateRef.current = gate;
+    form.setValues({
+      ...form.values,
+      multiplier: String(defaultEfMultiplier),
+    });
+    // We intentionally don't depend on `form` — the gate ref protects
+    // against re-fires and we capture the latest values via the
+    // closure. The functional form isn't needed since we read
+    // `form.values` directly in the dep list.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.values.kind, form.values.multiplier, defaultEfMultiplier, isFormActive]);
 
   const handleLogout = useCallback(async () => {
     if (!confirmLeave()) return;

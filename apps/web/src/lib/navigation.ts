@@ -51,7 +51,11 @@ export const navigationItems: readonly NavigationItem[] = [
     href: "/goals",
     description: "Pantau tabungan dan dana darurat.",
     icon: "goals",
-    available: false,
+    // sub-0005-03 ships the read-only list (filter chip + progress bar
+    // + empty/error states); create / edit / detail land in
+    // sub-0005-04 + sub-0005-05 but the sidebar entry stays available
+    // from this commit forward so users can navigate to /goals.
+    available: true,
   },
   {
     label: "Utang",

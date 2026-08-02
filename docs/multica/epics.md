@@ -110,15 +110,16 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
   atau `multiplier` berubah post-creation (snapshot semantics); (ii)
   multiplier auto-fetch default dari `user_settings.ef_multiplier`
   (PRD §14 default 3), FE boleh override per-goal.
-  - [ ] sub-0005-01 — BE CRUD `goals` + schema migration + endpoint progress → **todo** ([GRE-57](https://multica/issues/GRE-57)), BE. Stage 1 kickoff, serial dengan 02.
-  - [ ] sub-0005-02 — BE Engine progress + auto-update hook + EF formula + multiplier config → **backlog** ([GRE-58](https://multica/issues/GRE-58)), BE. Stage 1, depend on 01 DONE (promote ke `todo` setelah 01 done).
-  - [ ] sub-0005-03 — FE UI daftar goal + progress bar (mobile-first) → **backlog** ([GRE-59](https://multica/issues/GRE-59)), FE. Stage 2, depend on 01+02 DONE.
-  - [ ] sub-0005-04 — FE UI form buat/edit goal (saving + EF) → **backlog** ([GRE-61](https://multica/issues/GRE-61)), FE. Stage 2 paralel dengan 03, depend on 02 DONE (EF formula + multiplier exposed untuk client preview).
-  - [ ] sub-0005-05 — FE Banner notifikasi progress (threshold-based, in-app) → **backlog** ([GRE-60](https://multica/issues/GRE-60)), FE. Stage 3, depend on 03 DONE. Stage 4 skip — banner FE-only.
+  - [x] sub-0005-01 — BE CRUD `goals` + schema migration + endpoint progress → **DONE** 2026-07-31 ([GRE-57](https://multica/issues/GRE-57)), BE. [PR #41](https://github.com/01persen/PersonalFinanceTrackerV2/pull/41) squash-merged `release/epic-0005` (`9f9665d`).
+  - [x] sub-0005-02 — BE Engine progress + auto-update hook + EF formula + multiplier config → **DONE** 2026-08-02 ([GRE-58](https://multica/issues/GRE-58)), BE. [PR #42](https://github.com/01persen/PersonalFinanceTrackerV2/pull/42) squash-merged `release/epic-0005` (`7563554`, 416/416 tests pass). QA Stage E re-test PASS di `ce81b73` (defect loop: `balance.py` JOIN predicate `Transaction.deleted_at.is_(None)` — strict cross-scope bug-fix epic-0003 AC (b) carry-over).
+  - [x] sub-0005-03 — FE UI daftar goal + progress bar (mobile-first) → **DONE** 2026-08-02 ([GRE-59](https://multica/issues/GRE-59)), FE. [PR #43](https://github.com/01persen/PersonalFinanceTrackerV2/pull/43) squash-merged `release/epic-0005` (`f9fbfc3`). QA PASS semua AC + race defense + state UI komplit.
+  - [x] sub-0005-04 — FE UI form buat/edit goal (saving + EF) → **DONE** 2026-08-02 ([GRE-61](https://multica/issues/GRE-61)), FE. [PR #44](https://github.com/01persen/PersonalFinanceTrackerV2/pull/44) squash-merged `release/epic-0005` (`cb1cdd4`). QA PASS setelah defect loop: EF submit bypass `target_amount_snapshot_cents` (server-validated setelah fix), titik-sebagai-ribuan ditolak client-side (IDR koma-only), prefill multiplier race vs `/users/me/settings` + `/accounts` resolve.
+  - [ ] sub-0005-05 — FE Banner notifikasi progress (threshold-based, in-app) → **todo** ([GRE-60](https://multica/issues/GRE-60)), FE. Stage 3, depend on 03 DONE. Stage 4 skip — banner FE-only. Promote ke `todo` post Stage 2 closure (Stage G post v4.6).
   - [ ] sub-0005-06 — QA Integration + e2e test plan Epic 0005 → **backlog** ([GRE-62](https://multica/issues/GRE-62)), QA. Stage 5, depend on 01–05 DONE. Cover 4 Epic AC (a–d) + 4 high-risk area validation (race linked account, EF snapshot, multiplier config, auto-update hook).
-  - Stage 1 kickoff: Backend Engineer di-trigger via sub-0005-01 assignment (`todo` + assignee BE auto-fire). Stage 2-5 backlog, auto-promote per Stage Plan Operating Manual §5.1.
-  - **High-risk area QA direct test** (TL-confirmed, bukan BE re-impl): (1) concurrent test linked account recompute eventual consistency ≤ 1 s; (2) EF snapshot freeze post-creation; (3) multiplier auto-fetch default + per-goal override; (4) auto-update hook no-op untuk akun unlinked (no infinite loop).
-  - Sub-task status: **0/6 DONE** (Stage 1 kickoff rest-of-day 2026-07-31).
+  - Stage 1-2 closed (sub-0005-01..04 DONE, 4 PR merged ke `release/epic-0005`). Stage 3 dipromote (`sub-0005-05` → `todo`, FE auto-fire). Stage 5 backlog, auto-promote per Stage G setelah Stage 3 closure.
+  - **High-risk area QA direct test** (TL-confirmed, bukan BE re-impl): (1) concurrent test linked account recompute eventual consistency ≤ 1 s; (2) EF snapshot freeze post-creation; (3) multiplier auto-fetch default + per-goal override; (4) auto-update hook no-op untuk akun unlinked (no infinite loop). (1)-(4) PASS via QA Stage E re-test pada `ce81b73`.
+  - **Security patch inherited:** [PR #45](https://github.com/01persen/PersonalFinanceTrackerV2/pull/45) `Bump next to 14.2.35 + postcss override to clear audit CVEs` rebase ke `release/epic-0005` @ `a182b02` (sebelum sub-0005-03 squash). Inherited otomatis oleh sub-0005-03 + sub-0005-04 saat rebase.
+  - Sub-task status: **4/6 DONE** (sub-0005-01..04 closed; sub-0005-05 in-flight; sub-0005-06 backlog).
   Epic-0005 BE CRUD `goals` akan independently test model `goals`
   (tidak menyentuh `apps/api/tests/test_transactions.py`), risiko rendah
   — tetap flagged untuk awareness.
@@ -567,3 +568,27 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
   di-clean (`git reset --hard HEAD` + `git pull --ff-only origin
   release/epic-0005`) untuk sinkronkan dengan remote HEAD
   `7563554` sebelum commit tracker v4.5.
+- v4.6 (2026-08-02) — Tech Leader: epic-0005 **Stage 2 closed + Stage 3
+  promotion**. Wake dari system hand-off comment (Stage G auto-progress
+  trigger) — Stage 2 sub-issues
+  ([GRE-59](https://multica/issues/GRE-59) +
+  [GRE-61](https://multica/issues/GRE-61)) DONE via
+  [PR #43](https://github.com/01persen/PersonalFinanceTrackerV2/pull/43)
+  squash-merged `release/epic-0005` @ `f9fbfc3` +
+  [PR #44](https://github.com/01persen/PersonalFinanceTrackerV2/pull/44)
+  squash-merged `release/epic-0005` @ `cb1cdd4`. Stage 3 sub-issue
+  ([GRE-60](https://multica/issues/GRE-60) `sub-0005-05` FE banner
+  notifikasi progress) → `todo` via `multica issue status` post TL
+  dependency verification. Dependency per description: `sub-0005-03`
+  DONE ([PR #43](https://github.com/01persen/PersonalFinanceTrackerV2/pull/43)
+  merged). **MET** — no description-vs-breakdown conflict. Frontend
+  Engineer auto-fire via assignment (`todo` + assignee FE
+  `173f6cbb-e459-43ad-a699-f990a6fe2e18`). Stage 5
+  ([GRE-62](https://multica/issues/GRE-62) QA integration + e2e) tetap
+  `backlog` (dep 01–05 DONE) — auto-promote per Stage G setelah Stage 3
+  closure. **Catatan carry-over:** security patch
+  [PR #45](https://github.com/01persen/PersonalFinanceTrackerV2/pull/45)
+  rebase ke `release/epic-0005` @ `a182b02` (sebelum sub-0005-03
+  squash) inherited otomatis oleh sub-0005-03 + sub-0005-04. Tracker
+  header v4.5 → v4.6 + Catatan entry epic-0005 (sub-task list update:
+  01–04 DONE, 05 todo, 06 backlog, status 4/6) + Riwayat entry v4.6.

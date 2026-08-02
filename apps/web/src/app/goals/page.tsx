@@ -12,6 +12,8 @@ import {
 
 import { GoalFilterChips, type GoalFilterValue } from "@/components/goals/goal-filter-chips";
 import { GoalList } from "@/components/goals/goal-list";
+import { ProgressBannerList } from "@/components/goals/progress-banner-list";
+import { clearBannerSession } from "@/components/goals/progress-banner-state";
 import { AppShell } from "@/components/shell/app-shell";
 import { ActionIcon, NavigationIcon } from "@/components/shell/icons";
 import {
@@ -37,9 +39,8 @@ import { AuthGuard } from "@/lib/auth/auth-guard";
 /**
  * `/goals` — list of saving + emergency-fund goals for the current
  * user (sub-0005-03). Additive over the BE `GET /goals` endpoint
- * (sub-0005-01) and the progress engine (sub-0005-02). The page is
- * read-only: create / edit / banner-notification sub-tasks live in
- * sub-0005-04 / sub-0005-05.
+ * (sub-0005-01), the progress engine (sub-0005-02), the create/edit
+ * form (sub-0005-04), and the progress-notification banner (sub-0005-05).
  *
  * State flow:
  *
@@ -55,6 +56,10 @@ import { AuthGuard } from "@/lib/auth/auth-guard";
  *      mount so the goal-card can resolve both the linked account
  *      name and the live saldo (sub-0005-02 progress engine) without
  *      a per-row round-trip.
+ *   4. Banner refresh key — bumped on every successful balances /
+ *      goals reload so the `<ProgressBannerList>` re-derives the
+ *      ladder from the freshest snapshot without leaking our own
+ *      fetch state into the page (sub-0005-05).
  *
  * UI composition:
  *
@@ -64,6 +69,9 @@ import { AuthGuard } from "@/lib/auth/auth-guard";
  *   - **Filter chips** — "Semua" / "Tabungan" / "Dana darurat". The
  *     ``Semua`` view sorts EF top + saving below per the FE spec
  *     (EF is the priority bucket per PRD §14).
+ *   - **Banners** — sub-0005-05 adds up to 3 in-app notification
+ *     banners for goals that just crossed a 25/50/75/100% threshold.
+ *     Dismissed-via-localStorage. See `progress-banner-list.tsx`.
  *   - **List** — ``GoalList`` renders the cards with progress bars.
  *   - **Empty / error / skeleton states** — mirror the rest of the
  *     dashboard (sub-0003-05/06, sub-0004-04).
@@ -86,6 +94,20 @@ import { AuthGuard } from "@/lib/auth/auth-guard";
  *     within each kind by ``createdAt`` descending (matches the
  *     issue spec verbatim). Same tiebreaker for EF so rows stay
  *     stable across renders.
+ *
+ * Sub-0005-05 additions (banner notifications):
+ *
+ *   - The `<ProgressBannerList>` is rendered above the goal list
+ *     inside the ``ready`` branch (so banners never appear during
+ *     loading / error states). It owns its own per-goal fetch via
+ *     `fetchGoalProgress` and its own `useReducer` for the
+ *     loading/ready/error/absent per-row state machine.
+ *   - `progressRefreshKey` is bumped whenever balances or goals
+ *     reload successfully so the banner list re-derives the threshold
+ *     ladder from fresh data.
+ *   - `handleLogout` clears the banner session (last-seen percentage
+ *     + dismissals) so a future user on the same browser doesn't
+ *     inherit today's state.
  */
 
 type LoadStatus = "loading" | "ready" | "error";
@@ -382,7 +404,36 @@ function GoalsContent() {
     void loadBalances();
   }, [loadBalances]);
 
+  // sub-0005-05 — bump every time the balances snapshot or the
+  // goals themselves reload. Linked-account progress is derived from
+  // the live saldo (sub-0005-02), so any fresh snapshot may push a
+  // goal over a threshold; without this version key the banner list
+  // would only re-derive when its `goals` prop reference changes.
+  const [progressRefreshKey, setProgressRefreshKey] = useState<number>(0);
+  const bumpProgressRefresh = useCallback(() => {
+    setProgressRefreshKey((value) => value + 1);
+  }, []);
+
+  // Mirror the per-load bumps onto the banner refresh key. The banner
+  // list owns its own fetch + state, but the *trigger* is here so a
+  // balances refetch from the "Saldo akun tidak dapat dimuat" retry
+  // button doesn't leave a stale banner above the list.
+  useEffect(() => {
+    if (balances.status === "ready") bumpProgressRefresh();
+  }, [balances.status, bumpProgressRefresh]);
+  // depends on `goalsState` identity too — a refetch produces a new
+  // object even when status is unchanged, which is exactly the signal
+  // we want.
+  useEffect(() => {
+    if (goalsState.status === "ready") bumpProgressRefresh();
+  }, [goalsState, bumpProgressRefresh]);
+
   const handleLogout = async () => {
+    // sub-0005-05 — wipe the localStorage banner session so the next
+    // user on this browser doesn't inherit today's dismissals +
+    // last-seen values. Cheap local op, run before navigation so a
+    // fast back-button doesn't reveal the cleared list mid-render.
+    clearBannerSession();
     await logout();
     router.replace("/login");
   };
@@ -455,13 +506,19 @@ function GoalsContent() {
         goalsState.rows.length === 0 ? (
           <GoalsEmptyState kindFilter={kindFilter} />
         ) : (
-          <GoalList
-            goals={goalsState.rows}
-            accounts={accounts.accounts}
-            balances={balances.balances}
-            total={goalsState.total}
-            showAllKinds={showAllKinds}
-          />
+          <>
+            <ProgressBannerList
+              goals={goalsState.rows}
+              refreshKey={progressRefreshKey}
+            />
+            <GoalList
+              goals={goalsState.rows}
+              accounts={accounts.accounts}
+              balances={balances.balances}
+              total={goalsState.total}
+              showAllKinds={showAllKinds}
+            />
+          </>
         )
       ) : null}
 

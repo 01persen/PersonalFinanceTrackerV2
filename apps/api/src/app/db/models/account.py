@@ -34,4 +34,4 @@ class Account(Base, UUIDPKMixin, UserFKMixin, TimestampMixin):
     transactions: Mapped[list[Transaction]] = relationship(
         back_populates="account", cascade="all, delete-orphan"
     )
-    goals: Mapped[list[Goal]] = relationship(back_populates="account")
+    goals: Mapped[list[Goal]] = relationship(back_populates="linked_account")

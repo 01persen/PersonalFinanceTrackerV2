@@ -40,9 +40,7 @@ def _calculate_balances(
         (Transaction.type == TransactionType.TRANSFER, Transaction.amount_cents),
         else_=0,
     )
-    summed_delta = func.coalesce(func.sum(transaction_delta), 0).label(
-        "transaction_delta_cents"
-    )
+    summed_delta = func.coalesce(func.sum(transaction_delta), 0).label("transaction_delta_cents")
     statement = (
         select(
             Account.id.label("account_id"),
@@ -56,6 +54,13 @@ def _calculate_balances(
                 Transaction.account_id == Account.id,
                 Transaction.user_id == user_id,
                 Transaction.occurred_on <= as_of,
+                # sub-0005-02 -- exclude soft-deleted transactions from
+                # the saldo aggregate. Mirrors the ``deleted_at IS NULL``
+                # predicate the list / search / summary endpoints
+                # already use (epic-0003 AC (b)). Without this filter,
+                # a soft-deleted expense would still count as a debit
+                # and the linked goal's progress would never refresh.
+                Transaction.deleted_at.is_(None),
             ),
         )
         .where(Account.user_id == user_id, Account.archived.is_(False))
@@ -74,8 +79,7 @@ def _calculate_balances(
     return [
         AccountBalance(
             account_id=row.account_id,
-            balance_cents=int(row.opening_balance_cents)
-            + int(row.transaction_delta_cents),
+            balance_cents=int(row.opening_balance_cents) + int(row.transaction_delta_cents),
             is_asset=row.account_type != AccountType.CREDIT_CARD,
         )
         for row in db.execute(statement)

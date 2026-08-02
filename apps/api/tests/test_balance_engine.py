@@ -36,7 +36,7 @@ Risk notes (R1/R2/R3 from the sub-task brief):
 from __future__ import annotations
 
 import uuid
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from time import perf_counter
 
 import pytest
@@ -187,9 +187,7 @@ def test_opening_balance_only_returns_opening(fresh_db: Session) -> None:
 def test_income_is_added(fresh_db: Session) -> None:
     """income row: balance = opening + amount."""
     user = _make_user(fresh_db)
-    account = _make_account(
-        fresh_db, user_id=user.id, opening_balance_cents=100_000
-    )
+    account = _make_account(fresh_db, user_id=user.id, opening_balance_cents=100_000)
     _add_tx(
         fresh_db,
         user_id=user.id,
@@ -209,9 +207,7 @@ def test_income_is_added(fresh_db: Session) -> None:
 def test_expense_is_subtracted(fresh_db: Session) -> None:
     """expense row: balance = opening - amount."""
     user = _make_user(fresh_db)
-    account = _make_account(
-        fresh_db, user_id=user.id, opening_balance_cents=500_000
-    )
+    account = _make_account(fresh_db, user_id=user.id, opening_balance_cents=500_000)
     _add_tx(
         fresh_db,
         user_id=user.id,
@@ -237,9 +233,7 @@ def test_transfer_uses_sign_convention(fresh_db: Session) -> None:
     pattern the transaction service will produce.
     """
     user = _make_user(fresh_db)
-    source = _make_account(
-        fresh_db, user_id=user.id, name="Source", opening_balance_cents=500_000
-    )
+    source = _make_account(fresh_db, user_id=user.id, name="Source", opening_balance_cents=500_000)
     destination = _make_account(
         fresh_db, user_id=user.id, name="Destination", opening_balance_cents=200_000
     )
@@ -261,9 +255,7 @@ def test_transfer_uses_sign_convention(fresh_db: Session) -> None:
         transfer_pair_id=pair_id,
     )
 
-    balances = calculate_user_balances(
-        fresh_db, user_id=user.id, as_of=date.today()
-    )
+    balances = calculate_user_balances(fresh_db, user_id=user.id, as_of=date.today())
     by_account = {row.account_id: row.balance_cents for row in balances.accounts}
 
     assert by_account[source.id] == 400_000
@@ -276,9 +268,7 @@ def test_transfer_uses_sign_convention(fresh_db: Session) -> None:
 def test_multiple_income_and_expense_rows_accumulate(fresh_db: Session) -> None:
     """Engine sums every matching row — explicit aggregation test."""
     user = _make_user(fresh_db)
-    account = _make_account(
-        fresh_db, user_id=user.id, opening_balance_cents=1_000_000
-    )
+    account = _make_account(fresh_db, user_id=user.id, opening_balance_cents=1_000_000)
     for amount in (100_000, 200_000, 50_000):
         _add_tx(
             fresh_db,
@@ -313,9 +303,7 @@ def test_multiple_income_and_expense_rows_accumulate(fresh_db: Session) -> None:
 def test_account_without_transactions_is_explicitly_handled(fresh_db: Session) -> None:
     """No transactions → balance equals opening_balance_cents (engine branch)."""
     user = _make_user(fresh_db)
-    account = _make_account(
-        fresh_db, user_id=user.id, opening_balance_cents=0
-    )
+    account = _make_account(fresh_db, user_id=user.id, opening_balance_cents=0)
 
     balance = calculate_account_balance(
         fresh_db, user_id=user.id, account_id=account.id, as_of=date.today()
@@ -328,9 +316,7 @@ def test_account_without_transactions_is_explicitly_handled(fresh_db: Session) -
 def test_archived_account_is_excluded_from_user_summary(fresh_db: Session) -> None:
     """``archived=True`` filters the account out of ``calculate_user_balances``."""
     user = _make_user(fresh_db)
-    active = _make_account(
-        fresh_db, user_id=user.id, name="Active", opening_balance_cents=100_000
-    )
+    active = _make_account(fresh_db, user_id=user.id, name="Active", opening_balance_cents=100_000)
     archived = _make_account(
         fresh_db,
         user_id=user.id,
@@ -339,9 +325,7 @@ def test_archived_account_is_excluded_from_user_summary(fresh_db: Session) -> No
         archived=True,
     )
 
-    balances = calculate_user_balances(
-        fresh_db, user_id=user.id, as_of=date.today()
-    )
+    balances = calculate_user_balances(fresh_db, user_id=user.id, as_of=date.today())
 
     account_ids = {row.account_id for row in balances.accounts}
     assert active.id in account_ids
@@ -387,9 +371,7 @@ def test_archived_account_keeps_transaction_history_intact(
     the rows readable even when the account is hidden from listings.
     """
     user = _make_user(fresh_db)
-    account = _make_account(
-        fresh_db, user_id=user.id, opening_balance_cents=400_000
-    )
+    account = _make_account(fresh_db, user_id=user.id, opening_balance_cents=400_000)
     _add_tx(
         fresh_db,
         user_id=user.id,
@@ -415,9 +397,7 @@ def test_archived_account_keeps_transaction_history_intact(
 
     # … but the underlying transaction rows are still present and
     # addressable — un-archiving would re-surface the balance.
-    remaining = (
-        fresh_db.query(Transaction).filter(Transaction.account_id == account.id).count()
-    )
+    remaining = fresh_db.query(Transaction).filter(Transaction.account_id == account.id).count()
     assert remaining == 1
 
 
@@ -468,12 +448,8 @@ def test_transfer_roundtrip_ab_is_idempotent(fresh_db: Session) -> None:
     engine ever changed the sign convention, this test would catch it.
     """
     user = _make_user(fresh_db)
-    a = _make_account(
-        fresh_db, user_id=user.id, name="A", opening_balance_cents=1_000_000
-    )
-    b = _make_account(
-        fresh_db, user_id=user.id, name="B", opening_balance_cents=500_000
-    )
+    a = _make_account(fresh_db, user_id=user.id, name="A", opening_balance_cents=1_000_000)
+    b = _make_account(fresh_db, user_id=user.id, name="B", opening_balance_cents=500_000)
 
     # A → B 100k
     pair_id = uuid.uuid4()
@@ -514,12 +490,8 @@ def test_transfer_roundtrip_ab_is_idempotent(fresh_db: Session) -> None:
     )
 
     as_of = date.today()
-    balance_a = calculate_account_balance(
-        fresh_db, user_id=user.id, account_id=a.id, as_of=as_of
-    )
-    balance_b = calculate_account_balance(
-        fresh_db, user_id=user.id, account_id=b.id, as_of=as_of
-    )
+    balance_a = calculate_account_balance(fresh_db, user_id=user.id, account_id=a.id, as_of=as_of)
+    balance_b = calculate_account_balance(fresh_db, user_id=user.id, account_id=b.id, as_of=as_of)
 
     assert balance_a is not None
     assert balance_b is not None
@@ -538,9 +510,7 @@ def test_each_transaction_row_counted_exactly_once(
     break the math.
     """
     user = _make_user(fresh_db)
-    account = _make_account(
-        fresh_db, user_id=user.id, opening_balance_cents=0
-    )
+    account = _make_account(fresh_db, user_id=user.id, opening_balance_cents=0)
     for _ in range(3):
         _add_tx(
             fresh_db,
@@ -556,18 +526,13 @@ def test_each_transaction_row_counted_exactly_once(
 
     assert balance is not None
     assert balance.balance_cents == 300_000
-    assert (
-        fresh_db.query(Transaction).filter(Transaction.account_id == account.id).count()
-        == 3
-    )
+    assert fresh_db.query(Transaction).filter(Transaction.account_id == account.id).count() == 3
 
 
 def test_transactions_after_as_of_are_excluded(fresh_db: Session) -> None:
     """``as_of`` filter: rows with ``occurred_on > as_of`` don't count."""
     user = _make_user(fresh_db)
-    account = _make_account(
-        fresh_db, user_id=user.id, opening_balance_cents=100_000
-    )
+    account = _make_account(fresh_db, user_id=user.id, opening_balance_cents=100_000)
     today = date.today()
     _add_tx(
         fresh_db,
@@ -597,9 +562,7 @@ def test_transactions_after_as_of_are_excluded(fresh_db: Session) -> None:
 def test_transactions_with_equal_as_of_are_included(fresh_db: Session) -> None:
     """Boundary: ``occurred_on == as_of`` is included (``<=`` semantics)."""
     user = _make_user(fresh_db)
-    account = _make_account(
-        fresh_db, user_id=user.id, opening_balance_cents=0
-    )
+    account = _make_account(fresh_db, user_id=user.id, opening_balance_cents=0)
     today = date.today()
     _add_tx(
         fresh_db,
@@ -640,9 +603,7 @@ def test_user_balances_returns_empty_for_user_with_no_accounts(
     """Brand-new user → empty summary, all totals zero."""
     user = _make_user(fresh_db)
 
-    balances = calculate_user_balances(
-        fresh_db, user_id=user.id, as_of=date.today()
-    )
+    balances = calculate_user_balances(fresh_db, user_id=user.id, as_of=date.today())
 
     assert isinstance(balances, UserBalances)
     assert balances.accounts == []
@@ -662,12 +623,8 @@ def test_user_balances_is_scoped_per_user(fresh_db: Session) -> None:
         fresh_db, user_id=bob.id, name="Bob-Only", opening_balance_cents=100_000
     )
 
-    alice_b = calculate_user_balances(
-        fresh_db, user_id=alice.id, as_of=date.today()
-    )
-    bob_b = calculate_user_balances(
-        fresh_db, user_id=bob.id, as_of=date.today()
-    )
+    alice_b = calculate_user_balances(fresh_db, user_id=alice.id, as_of=date.today())
+    bob_b = calculate_user_balances(fresh_db, user_id=bob.id, as_of=date.today())
 
     assert [row.account_id for row in alice_b.accounts] == [alice_account.id]
     assert [row.account_id for row in bob_b.accounts] == [bob_account.id]
@@ -702,9 +659,7 @@ def test_summary_groups_assets_and_liabilities_by_is_asset(
         opening_balance_cents=750_000,
     )
 
-    balances = calculate_user_balances(
-        fresh_db, user_id=user.id, as_of=date.today()
-    )
+    balances = calculate_user_balances(fresh_db, user_id=user.id, as_of=date.today())
 
     by_id = {row.account_id: row for row in balances.accounts}
     assert by_id[bank.id].is_asset is True
@@ -720,15 +675,11 @@ def test_summary_orders_assets_before_liabilities_and_alphabetically(
 ) -> None:
     """``ORDER BY is_asset DESC, name`` is honored — assets first, then name."""
     user = _make_user(fresh_db)
-    _make_account(
-        fresh_db, user_id=user.id, name="Z-Liability", type_=AccountType.CREDIT_CARD
-    )
+    _make_account(fresh_db, user_id=user.id, name="Z-Liability", type_=AccountType.CREDIT_CARD)
     _make_account(fresh_db, user_id=user.id, name="B-Asset", type_=AccountType.BANK)
     _make_account(fresh_db, user_id=user.id, name="A-Asset", type_=AccountType.CASH)
 
-    balances = calculate_user_balances(
-        fresh_db, user_id=user.id, as_of=date.today()
-    )
+    balances = calculate_user_balances(fresh_db, user_id=user.id, as_of=date.today())
 
     asset_names = [a.account_id for a in balances.accounts if a.is_asset]
     liability_names = [a.account_id for a in balances.accounts if not a.is_asset]
@@ -745,9 +696,7 @@ def test_balance_is_zero_when_opening_and_transactions_cancel(
 ) -> None:
     """Income + matching expense → balance == opening."""
     user = _make_user(fresh_db)
-    account = _make_account(
-        fresh_db, user_id=user.id, opening_balance_cents=250_000
-    )
+    account = _make_account(fresh_db, user_id=user.id, opening_balance_cents=250_000)
     _add_tx(
         fresh_db,
         user_id=user.id,
@@ -780,9 +729,7 @@ def test_engine_kwargs_are_keyword_only(fresh_db: Session) -> None:
     would raise a ``TypeError`` today.
     """
     user = _make_user(fresh_db)
-    account = _make_account(
-        fresh_db, user_id=user.id, opening_balance_cents=10_000
-    )
+    account = _make_account(fresh_db, user_id=user.id, opening_balance_cents=10_000)
 
     with pytest.raises(TypeError):
         # intentionally positional — strict keyword-only contract.
@@ -1030,9 +977,7 @@ def test_perf_5k_rows_under_200ms(fresh_db: Session) -> None:
     shipping a slow endpoint.
     """
     user = _make_user(fresh_db)
-    account = _make_account(
-        fresh_db, user_id=user.id, opening_balance_cents=0
-    )
+    account = _make_account(fresh_db, user_id=user.id, opening_balance_cents=0)
 
     rows = [
         Transaction(
@@ -1053,15 +998,13 @@ def test_perf_5k_rows_under_200ms(fresh_db: Session) -> None:
     fresh_db.commit()
 
     started = perf_counter()
-    balances = calculate_user_balances(
-        fresh_db, user_id=user.id, as_of=date.today()
-    )
+    balances = calculate_user_balances(fresh_db, user_id=user.id, as_of=date.today())
     elapsed = perf_counter() - started
 
     # 2500 income rows + 2500 expense rows → net delta = 0.
     assert balances.accounts[0].balance_cents == 0
     # Headroom for CI variance — PRD bound is 200ms.
-    assert elapsed < 0.2, f"engine took {elapsed*1000:.1f}ms (>200ms)"
+    assert elapsed < 0.2, f"engine took {elapsed * 1000:.1f}ms (>200ms)"
 
 
 # ---------------------------------------------------------------------------
@@ -1079,12 +1022,8 @@ def test_negative_transfer_ab_100rb_keeps_networth(
     is broken and the rest of the suite is damaged.
     """
     user = _make_user(fresh_db)
-    a = _make_account(
-        fresh_db, user_id=user.id, name="A", opening_balance_cents=1_000_000
-    )
-    b = _make_account(
-        fresh_db, user_id=user.id, name="B", opening_balance_cents=500_000
-    )
+    a = _make_account(fresh_db, user_id=user.id, name="A", opening_balance_cents=1_000_000)
+    b = _make_account(fresh_db, user_id=user.id, name="B", opening_balance_cents=500_000)
 
     # Capture networth before transfer.
     initial = calculate_user_balances(fresh_db, user_id=user.id, as_of=date.today())
@@ -1112,12 +1051,8 @@ def test_negative_transfer_ab_100rb_keeps_networth(
 
     # Re-read per-account balances.
     as_of = date.today()
-    balance_a = calculate_account_balance(
-        fresh_db, user_id=user.id, account_id=a.id, as_of=as_of
-    )
-    balance_b = calculate_account_balance(
-        fresh_db, user_id=user.id, account_id=b.id, as_of=as_of
-    )
+    balance_a = calculate_account_balance(fresh_db, user_id=user.id, account_id=a.id, as_of=as_of)
+    balance_b = calculate_account_balance(fresh_db, user_id=user.id, account_id=b.id, as_of=as_of)
     summary = calculate_user_balances(fresh_db, user_id=user.id, as_of=as_of)
 
     # AC (e) verbatim.
@@ -1142,9 +1077,7 @@ def test_api_summary_matches_engine_for_transfer_pair(
     body = _register(client, "api-engine@example.com")
     headers = _auth_headers(body["access_token"])
 
-    source = _create_account_api(
-        client, headers, name="Source", opening_balance_cents=750_000
-    )
+    source = _create_account_api(client, headers, name="Source", opening_balance_cents=750_000)
     destination = _create_account_api(
         client, headers, name="Destination", opening_balance_cents=125_000
     )
@@ -1197,9 +1130,7 @@ def test_account_balance_lookup_via_api_matches_engine(
     """``GET /accounts/{id}/balance`` returns the engine's number."""
     body = _register(client, "api-lookup@example.com")
     headers = _auth_headers(body["access_token"])
-    account = _create_account_api(
-        client, headers, opening_balance_cents=100_000
-    )
+    account = _create_account_api(client, headers, opening_balance_cents=100_000)
 
     _add_tx(
         fresh_db,
@@ -1209,9 +1140,7 @@ def test_account_balance_lookup_via_api_matches_engine(
         amount_cents=42_000,
     )
 
-    response = client.get(
-        f"/api/v1/accounts/{account['id']}/balance", headers=headers
-    )
+    response = client.get(f"/api/v1/accounts/{account['id']}/balance", headers=headers)
     assert response.status_code == 200, response.text
     assert response.json()["balance_cents"] == 142_000
 
@@ -1226,9 +1155,7 @@ def test_api_returns_404_for_account_balance_of_archived_account(
 
     assert client.delete(f"/api/v1/accounts/{account['id']}", headers=headers).status_code == 204
 
-    response = client.get(
-        f"/api/v1/accounts/{account['id']}/balance", headers=headers
-    )
+    response = client.get(f"/api/v1/accounts/{account['id']}/balance", headers=headers)
     assert response.status_code == 404
 
 
@@ -1242,9 +1169,7 @@ def test_engine_returns_dataclass_with_expected_fields(
 ) -> None:
     """Pinned dataclass shape: a regression here breaks every caller."""
     user = _make_user(fresh_db)
-    account = _make_account(
-        fresh_db, user_id=user.id, opening_balance_cents=10_000
-    )
+    account = _make_account(fresh_db, user_id=user.id, opening_balance_cents=10_000)
 
     balance = calculate_account_balance(
         fresh_db, user_id=user.id, account_id=account.id, as_of=date.today()
@@ -1254,3 +1179,313 @@ def test_engine_returns_dataclass_with_expected_fields(
     # Frozen dataclass — assignment must raise.
     with pytest.raises((AttributeError, Exception)):
         balance.balance_cents = 0  # type: ignore[misc]
+
+
+# ---------------------------------------------------------------------------
+# sub-0005-02 carry-over: saldo engine excludes soft-deleted transactions
+# ---------------------------------------------------------------------------
+
+
+def test_soft_deleted_transactions_excluded_from_saldo(fresh_db: Session) -> None:
+    """QA defect carried from sub-0005-02 regression.
+
+    Pre-defect the saldo engine walked every transaction on the account
+    regardless of ``deleted_at``, which left a soft-deleted expense in
+    the running balance. The fix adds ``Transaction.deleted_at.is_(None)``
+    to the JOIN predicate so the engine matches the list / search /
+    summary endpoints' AC (b) exclusion. This test pins both sides of
+    the row: the engine excludes soft-deleted rows but the audit row
+    still lives in the table for ``un-delete`` parity.
+    """
+    user = _make_user(fresh_db)
+    account = _make_account(fresh_db, user_id=user.id, opening_balance_cents=0)
+
+    income = _add_tx(
+        fresh_db,
+        user_id=user.id,
+        account_id=account.id,
+        type_=TransactionType.INCOME,
+        amount_cents=120,
+    )
+    expense = _add_tx(
+        fresh_db,
+        user_id=user.id,
+        account_id=account.id,
+        type_=TransactionType.EXPENSE,
+        amount_cents=50,
+    )
+
+    # Sanity: before any soft-delete, balance is 120 - 50 = 70.
+    balance_before = calculate_account_balance(
+        fresh_db, user_id=user.id, account_id=account.id, as_of=date.today()
+    )
+    assert balance_before is not None
+    assert balance_before.balance_cents == 70
+
+    # Soft-delete the expense (mirrors DELETE /transactions/{id}).
+    expense.deleted_at = datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
+    fresh_db.commit()
+
+    # After soft-delete: balance should rebound to 120 (the income
+    # only). The deleted expense must NOT count as a debit.
+    balance_after = calculate_account_balance(
+        fresh_db, user_id=user.id, account_id=account.id, as_of=date.today()
+    )
+    assert balance_after is not None
+    assert balance_after.balance_cents == 120
+
+    # The audit row is still in the table — soft-delete never drops data.
+    audit_rows = fresh_db.query(Transaction).filter(Transaction.account_id == account.id).all()
+    assert len(audit_rows) == 2
+    assert any(r.id == income.id and r.deleted_at is None for r in audit_rows)
+    assert any(r.id == expense.id and r.deleted_at is not None for r in audit_rows)
+
+
+def test_soft_deleted_income_excluded_from_saldo(fresh_db: Session) -> None:
+    """The ``deleted_at IS NULL`` filter is symmetric: deleting an
+    income (the legitimate undo path) must also reverse the +delta."""
+    user = _make_user(fresh_db)
+    account = _make_account(fresh_db, user_id=user.id, opening_balance_cents=0)
+    income_a = _add_tx(
+        fresh_db,
+        user_id=user.id,
+        account_id=account.id,
+        type_=TransactionType.INCOME,
+        amount_cents=300,
+    )
+    _add_tx(
+        fresh_db,
+        user_id=user.id,
+        account_id=account.id,
+        type_=TransactionType.INCOME,
+        amount_cents=200,
+    )
+
+    # Both incomes count: balance = 500.
+    before = calculate_account_balance(
+        fresh_db, user_id=user.id, account_id=account.id, as_of=date.today()
+    )
+    assert before is not None
+    assert before.balance_cents == 500
+
+    # Soft-delete income_a — balance drops to 200 (income_b only).
+    income_a.deleted_at = datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
+    fresh_db.commit()
+
+    after = calculate_account_balance(
+        fresh_db, user_id=user.id, account_id=account.id, as_of=date.today()
+    )
+    assert after is not None
+    assert after.balance_cents == 200
+
+
+# ---------------------------------------------------------------------------
+# sub-0005-06 / QA DEFECT-1: live saldo uses local calendar date (not UTC)
+# ---------------------------------------------------------------------------
+
+
+def test_as_of_filter_includes_today_local_date(
+    fresh_db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """QA DEFECT-1 repro: a transaction logged on the caller's local
+    calendar date must be reflected in the live saldo, regardless of
+    the UTC date being behind (UTC+ timezones during the rollover
+    window).
+
+    Pre-fix the default ``as_of`` was ``datetime.now(UTC).date()``,
+    which can be 1 day behind ``date.today()`` for users in UTC+
+    during their local morning. The fix switches the default to
+    ``date.today()`` so today's transactions are visible immediately.
+
+    This test pins the engine-level behaviour: with an explicit
+    ``as_of=date.today()`` the txn is included even when the UTC
+    date is 1 day behind. The companion test
+    ``test_default_as_of_uses_local_date_not_utc`` covers the
+    default-arg path in :func:`app.services.goal_engine.
+    _linked_account_balance_cents`.
+    """
+    user = _make_user(fresh_db)
+    account = _make_account(fresh_db, user_id=user.id, opening_balance_cents=0)
+
+    # Pretend local today is 2026-08-03 (Monday) while UTC is still on
+    # 2026-08-02 (Sunday). This mirrors Asia/Shanghai at 00:30 local.
+    local_today = date(2026, 8, 3)
+    utc_today = date(2026, 8, 2)
+    assert local_today > utc_today
+
+    _add_tx(
+        fresh_db,
+        user_id=user.id,
+        account_id=account.id,
+        type_=TransactionType.INCOME,
+        amount_cents=250_000,
+        occurred_on=local_today,
+    )
+
+    # With UTC as_of, the txn is excluded (the old broken behaviour).
+    utc_only = calculate_account_balance(
+        fresh_db, user_id=user.id, account_id=account.id, as_of=utc_today
+    )
+    assert utc_only is not None
+    assert utc_only.balance_cents == 0, "with UTC as_of the local-today txn is hidden"
+
+    # With local as_of, the txn is included (the new fixed behaviour).
+    local_view = calculate_account_balance(
+        fresh_db, user_id=user.id, account_id=account.id, as_of=local_today
+    )
+    assert local_view is not None
+    assert local_view.balance_cents == 250_000
+
+
+def test_default_as_of_uses_local_date_not_utc(
+    fresh_db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Calling :func:`compute_goal_progress` without an explicit ``as_of``
+    must use the caller's local calendar date, not UTC.
+
+    Repro: a user in UTC+ posts a goal creation + linked account, then
+    attaches an income dated ``date.today()`` (local). The progress
+    endpoint must surface the income immediately, not wait for UTC
+    to roll over.
+
+    The fix is in :func:`app.services.goal_engine._linked_account_balance_cents`
+    which used to default ``as_of`` to ``datetime.now(UTC).date()`` --
+    now ``date.today()``. We patch the engine module's ``date`` alias
+    and ``datetime.now(UTC)`` so the test simulates the UTC+ rollover
+    window deterministically without needing to flip the system TZ.
+    """
+    from app.db.models.enums import GoalKind
+    from app.db.models.goal import Goal
+    from app.services.goal_engine import compute_goal_progress
+
+    user = _make_user(fresh_db)
+    account = _make_account(fresh_db, user_id=user.id, opening_balance_cents=0)
+
+    local_today = date(2026, 8, 3)
+    utc_today = date(2026, 8, 2)
+
+    # Insert a transaction dated local_today. The default-arg
+    # ``compute_goal_progress`` must read ``date.today()`` for as_of, so
+    # the income is included.
+    _add_tx(
+        fresh_db,
+        user_id=user.id,
+        account_id=account.id,
+        type_=TransactionType.INCOME,
+        amount_cents=750_000,
+        occurred_on=local_today,
+    )
+
+    goal = Goal(
+        user_id=user.id,
+        kind=GoalKind.SAVING,
+        name="tz-test",
+        target_amount_cents=2_000_000,
+        current_amount_cents=None,
+        linked_account_id=account.id,
+        start_date=local_today,
+        archived_at=None,
+        achieved_at=None,
+    )
+    fresh_db.add(goal)
+    fresh_db.commit()
+    fresh_db.refresh(goal)
+
+    # Patch the engine module so that ``date.today()`` returns local_today
+    # while ``datetime.now(UTC).date()`` returns utc_today. After the fix
+    # the default path uses ``date.today()`` so the txn is included.
+    import datetime as _dt
+
+    import app.services.goal_engine as goal_engine_module
+
+    class _LocalDate(date):
+        """Subclass that pins ``today()`` to the patched local date."""
+
+        @classmethod
+        def today(cls) -> date:  # type: ignore[override]
+            return local_today
+
+    class _FrozenDatetime(_dt.datetime):
+        @classmethod
+        def now(cls, tz=None):  # type: ignore[override]
+            if tz is None or tz is _dt.UTC:
+                return _dt.datetime.combine(utc_today, _dt.time(0, 0, 0), tzinfo=_dt.UTC)
+            return _dt.datetime.combine(local_today, _dt.time(0, 0, 0), tzinfo=tz)
+
+    monkeypatch.setattr(goal_engine_module, "_date", _LocalDate)
+    monkeypatch.setattr(goal_engine_module, "datetime", _FrozenDatetime)
+
+    progress = compute_goal_progress(fresh_db, goal=goal)
+    assert progress.current_amount_cents == 750_000, (
+        "default-arg compute_goal_progress must use local date.today() "
+        "so today's tx is visible in UTC+ timezones"
+    )
+
+
+def test_default_as_of_uses_local_date_not_utc_for_api_balance_endpoint(
+    client: TestClient, fresh_db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """End-to-end regression: ``GET /accounts/{id}/balance`` and
+    ``GET /accounts/balances`` use the caller's local date for the
+    ``as_of`` filter. The pre-fix code used ``datetime.now(UTC).date()``
+    which lagged 1 day behind local in UTC+ environments.
+
+    Pins the same fix in :mod:`app.api.v1.accounts` (the routers
+    route the default ``as_of`` through ``date.today()`` after the
+    sub-0005-06 fix).
+    """
+    local_today = date(2026, 8, 3)
+    utc_today = date(2026, 8, 2)
+
+    body = _register(client, "tz-balance@example.com")
+    headers = _auth_headers(body["access_token"])
+    account = _create_account_api(client, headers, opening_balance_cents=100_000)
+
+    # Insert a transaction dated local_today -- the pre-fix code would
+    # hide it because as_of was UTC (utc_today).
+    user_id = uuid.UUID(account["user_id"])
+    account_id = uuid.UUID(account["id"])
+    fresh_db.add(
+        Transaction(
+            user_id=user_id,
+            account_id=account_id,
+            category_id=None,
+            type=TransactionType.INCOME,
+            amount_cents=42_000,
+            currency="IDR",
+            occurred_on=local_today,
+            note=None,
+            transfer_pair_id=None,
+            recurring_rule_id=None,
+        )
+    )
+    fresh_db.commit()
+
+    # Patch the accounts router module so the API behaves as if it's
+    # still Sunday in UTC (utc_today) but local Monday (local_today).
+    import datetime as _dt
+
+    import app.api.v1.accounts as accounts_module
+
+    class _LocalDate(date):
+        @classmethod
+        def today(cls) -> date:  # type: ignore[override]
+            return local_today
+
+    class _FrozenDatetime(_dt.datetime):
+        @classmethod
+        def now(cls, tz=None):  # type: ignore[override]
+            return _dt.datetime.combine(utc_today, _dt.time(23, 0, 0), tzinfo=tz)
+
+    monkeypatch.setattr(accounts_module, "date", _LocalDate)
+    monkeypatch.setattr(accounts_module, "datetime", _FrozenDatetime)
+
+    response = client.get(f"/api/v1/accounts/{account['id']}/balance", headers=headers)
+    assert response.status_code == 200, response.text
+    assert response.json()["balance_cents"] == 142_000, (
+        "after the fix /accounts/{id}/balance uses local date.today() so "
+        "today's income is included even when UTC is still on yesterday"
+    )
+
+    summary = client.get("/api/v1/accounts/balances", headers=headers).json()
+    assert summary["accounts"][0]["balance_cents"] == 142_000

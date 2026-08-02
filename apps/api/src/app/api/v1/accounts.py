@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
@@ -136,8 +136,14 @@ def list_account_balances(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> AccountBalancesPublic:
+    # ``as_of`` defaults to the caller's local calendar date so the
+    # JOIN predicate ``Transaction.occurred_on <= as_of`` includes the
+    # user's transactions logged "today" in UTC+ (sub-0005-06 / QA
+    # DEFECT-1). ``as_of`` returned to the client still carries the
+    # UTC timestamp for unambiguous audit trail.
     as_of = datetime.now(UTC)
-    balances = calculate_user_balances(db, user_id=current_user.id, as_of=as_of.date())
+    as_of_date = date.today()
+    balances = calculate_user_balances(db, user_id=current_user.id, as_of=as_of_date)
     return AccountBalancesPublic(
         accounts=[
             AccountBalancePublic(
@@ -166,12 +172,18 @@ def get_account_balance(
             detail="account not found",
         )
 
+    # ``as_of`` defaults to the caller's local calendar date so the
+    # JOIN predicate ``Transaction.occurred_on <= as_of`` includes the
+    # user's transactions logged "today" in UTC+ (sub-0005-06 / QA
+    # DEFECT-1). ``as_of`` returned to the client still carries the
+    # UTC timestamp for unambiguous audit trail.
     as_of = datetime.now(UTC)
+    as_of_date = date.today()
     balance = calculate_account_balance(
         db,
         user_id=current_user.id,
         account_id=account_id,
-        as_of=as_of.date(),
+        as_of=as_of_date,
     )
     if balance is None:
         raise HTTPException(

@@ -7,12 +7,20 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
+from decimal import Decimal
 from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 from app.db.models.account import Account
-from app.db.models.enums import AccountType, CategoryKind, GoalKind, TransactionType
+from app.db.models.enums import (
+    AccountType,
+    CategoryKind,
+    DebtKind,
+    DebtStatus,
+    GoalKind,
+    TransactionType,
+)
 
 if TYPE_CHECKING:
     from app.db.models.user_preference import UserPreference
@@ -949,3 +957,66 @@ class GoalProgressPublic(BaseModel):
     achieved_at: datetime | None
     tabungan_bulanan_cents: int | None
     lama_mengumpulkan_bulan: int | None
+
+
+class DebtCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=120)
+    kind: DebtKind
+    principal_cents: int = Field(gt=0)
+    bunga_pct: Decimal = Field(ge=0, max_digits=7, decimal_places=4)
+    tenor_months: int | None = Field(default=None, gt=0)
+    start_date: date
+    note: str | None = Field(default=None, max_length=2000)
+    status: DebtStatus = DebtStatus.ACTIVE
+
+
+class DebtUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    kind: DebtKind | None = None
+    principal_cents: int | None = Field(default=None, gt=0)
+    bunga_pct: Decimal | None = Field(
+        default=None,
+        ge=0,
+        max_digits=7,
+        decimal_places=4,
+    )
+    tenor_months: int | None = Field(default=None, gt=0)
+    start_date: date | None = None
+    note: str | None = Field(default=None, max_length=2000)
+    status: DebtStatus | None = None
+
+    @model_validator(mode="after")
+    def _reject_null_required_fields(self) -> DebtUpdate:
+        for field in (
+            "name",
+            "kind",
+            "principal_cents",
+            "bunga_pct",
+            "start_date",
+            "status",
+        ):
+            if field in self.model_fields_set and getattr(self, field) is None:
+                raise ValueError(f"{field} may not be null")
+        return self
+
+
+class DebtPublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    user_id: uuid.UUID
+    name: str
+    kind: DebtKind
+    principal_cents: int
+    bunga_pct: float
+    tenor_months: int | None
+    start_date: date
+    monthly_payment_cents: int | None
+    note: str | None
+    status: DebtStatus
+    created_at: datetime
+    updated_at: datetime

@@ -38,7 +38,10 @@ class GoalKind(StrEnum):
 class DebtKind(StrEnum):
     LOAN = "loan"
     CREDIT_CARD = "credit_card"
-    MORTGAGE = "mortgage"
+    PAYLATER = "paylater"
+    KTA = "KTA"
+    KKB = "KKB"
+    KPR = "KPR"
     OTHER = "other"
 
 

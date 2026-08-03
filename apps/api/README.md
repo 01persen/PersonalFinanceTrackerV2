@@ -41,6 +41,27 @@ JWT-based, signed dengan `JWT_SECRET` (HS256). Access token dikirim via
 Logout MVP-nya stateless — client discard token, server return 204. Token
 revocation / blacklist masuk post-MVP.
 
+## Debt endpoints
+
+Semua endpoint debt membutuhkan Bearer token dan hanya mengakses data milik
+user aktif. `start_date` memakai format ISO `YYYY-MM-DD`.
+
+| Method | Path | Body / Response |
+|--------|------|-----------------|
+| POST | `/api/v1/debts` | `DebtCreate` → `DebtPublic` (201) |
+| GET | `/api/v1/debts` | — → `DebtPublic[]` |
+| GET | `/api/v1/debts/{id}` | — → `DebtPublic` |
+| PATCH | `/api/v1/debts/{id}` | `DebtUpdate` → `DebtPublic` |
+| DELETE | `/api/v1/debts/{id}` | — → 204 No Content |
+
+`kind` menerima `loan`, `credit_card`, `paylater`, `KTA`, `KKB`, `KPR`, atau
+`other`. `principal_cents` wajib positif, `bunga_pct` minimal 0, dan
+`tenor_months` wajib positif atau `null`. `monthly_payment_cents` dihitung
+server-side memakai bunga flat tahunan: total bunga =
+`principal_cents × bunga_pct / 100 × tenor_months / 12`, lalu cicilan bulanan
+adalah `(principal_cents + total bunga) / tenor_months` yang dipotong ke integer
+cents. Nilainya `null` bila tenor `null`.
+
 ## Schema & migrations
 
 ORM models ada di `src/app/db/models/`. Initial migration: `cd96a512ab4a_initial_schema`

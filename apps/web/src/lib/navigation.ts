@@ -62,7 +62,13 @@ export const navigationItems: readonly NavigationItem[] = [
     href: "/debts",
     description: "Pantau saldo dan pembayaran utang.",
     icon: "debts",
-    available: false,
+    // sub-0006-04 ships the read-only list (status + kind filter
+    // chips + summary tiles + loading/error/empty states). The
+    // create / edit form + per-row history land in sub-0006-05 and
+    // sub-0006-06 (Stage 4), but the sidebar entry is flipped
+    // available from this commit forward so users can navigate to
+    // /debts. Same rollout cadence as sub-0005-03 for /goals.
+    available: true,
   },
   {
     label: "Laporan",

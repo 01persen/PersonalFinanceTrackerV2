@@ -486,3 +486,83 @@ def test_backfill_migration_actually_applies_rules(sqlite_db: Path) -> None:
         assert audit_rows[0][3] is not None and len(audit_rows[0][3]) == 64
     finally:
         conn.close()
+
+
+def test_debts_migration_preserves_data_and_backfills_monthly_payment(
+    sqlite_db: Path,
+) -> None:
+    before = _run_alembic(sqlite_db, "upgrade", "c5a7b9c1d3e4")
+    assert before.returncode == 0, before.stderr or before.stdout
+
+    conn = sqlite3.connect(sqlite_db)
+    try:
+        conn.executescript(
+            """
+            INSERT INTO users (id, email, password_hash, created_at, updated_at)
+            VALUES ('11111111-1111-1111-1111-111111111111',
+                    'debt-migration@example.com', 'fakehash',
+                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+            INSERT INTO debts (id, user_id, name, kind, principal_cents,
+                               interest_rate, tenor_months, start_date, note,
+                               status, created_at, updated_at)
+            VALUES ('22222222-2222-2222-2222-222222222222',
+                    '11111111-1111-1111-1111-111111111111',
+                    'Legacy mortgage', 'MORTGAGE', 12000000, 10, 12,
+                    '2026-01-01', NULL, 'ACTIVE',
+                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+                   ('33333333-3333-3333-3333-333333333333',
+                    '11111111-1111-1111-1111-111111111111',
+                    'Open loan', 'LOAN', 5000000, 0, NULL,
+                    '2026-02-01', NULL, 'ACTIVE',
+                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+            """
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    upgrade = _run_alembic(sqlite_db, "upgrade", "d6e8f0a1b2c3")
+    assert upgrade.returncode == 0, upgrade.stderr or upgrade.stdout
+
+    conn = sqlite3.connect(sqlite_db)
+    try:
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(debts)")}
+        assert "bunga_pct" in columns
+        assert "monthly_payment_cents" in columns
+        assert "interest_rate" not in columns
+        rows = conn.execute(
+            "SELECT id, kind, bunga_pct, tenor_months, monthly_payment_cents FROM debts ORDER BY id"
+        ).fetchall()
+        assert rows[0] == (
+            "22222222-2222-2222-2222-222222222222",
+            "KPR",
+            10,
+            12,
+            1_100_000,
+        )
+        assert rows[1] == (
+            "33333333-3333-3333-3333-333333333333",
+            "LOAN",
+            0,
+            None,
+            None,
+        )
+    finally:
+        conn.close()
+
+    downgrade = _run_alembic(sqlite_db, "downgrade", "c5a7b9c1d3e4")
+    assert downgrade.returncode == 0, downgrade.stderr or downgrade.stdout
+
+    conn = sqlite3.connect(sqlite_db)
+    try:
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(debts)")}
+        assert "interest_rate" in columns
+        assert "bunga_pct" not in columns
+        assert "monthly_payment_cents" not in columns
+        legacy = conn.execute(
+            "SELECT kind, interest_rate FROM debts "
+            "WHERE id = '22222222-2222-2222-2222-222222222222'"
+        ).fetchone()
+        assert legacy == ("MORTGAGE", 10)
+    finally:
+        conn.close()

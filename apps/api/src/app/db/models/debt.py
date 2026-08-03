@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from sqlalchemy import BigInteger, Date, Enum, ForeignKey, Integer, Numeric, String, Text
@@ -25,9 +26,10 @@ class Debt(Base, UUIDPKMixin, UserFKMixin, TimestampMixin):
         nullable=False,
     )
     principal_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    interest_rate: Mapped[float] = mapped_column(Numeric(7, 4), nullable=False, default=0)
+    bunga_pct: Mapped[Decimal] = mapped_column(Numeric(7, 4), nullable=False, default=Decimal("0"))
     tenor_months: Mapped[int | None] = mapped_column(Integer, nullable=True)
     start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    monthly_payment_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[DebtStatus] = mapped_column(
         Enum(DebtStatus, name="debt_status", native_enum=False, length=16),

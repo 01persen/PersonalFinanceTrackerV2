@@ -256,17 +256,28 @@ export function adaptDebtSummary(raw: unknown): DebtSummary | null {
 }
 
 /* -------------------------------------------------------------------------- *
- * sub-0006-06 — Payment row + paginated list (sub-0006-02 BE)                 *
+ * sub-0006-05 + sub-0006-06 — Payment row + paginated list (sub-0006-02 BE)   *
  * -------------------------------------------------------------------------- *
  *
  * Mirrors `DebtPaymentPublic` + `DebtPaymentListPublic` in
- * `apps/api/src/app/api/schemas.py` (sub-0006-02). The detail page
- * (this sub-task) reads the list envelope directly so the history
- * table can render pagination controls without a follow-up GET.
+ * `apps/api/src/app/api/schemas.py` (sub-0006-02).
+ *
+ *   - `DebtPayment` + `adaptDebtPayment` are used by sub-0006-05
+ *     (the FE cicilan form on `/debts/{id}/pay`) to render the
+ *     freshly created row without a follow-up GET.
+ *   - `DebtPaymentPage` + `adaptDebtPaymentList` are used by
+ *     sub-0006-06 (the FE history detail page on `/debts/{id}`) so
+ *     the history table can render pagination controls without a
+ *     follow-up GET.
+ *
+ * Both sub-tasks are sourced from the same BE contract, so the
+ * adapter pair stays in this file rather than splitting per sub-task
+ * (mirrors the `adaptDebts` + `adaptDebt` convention used by the
+ * list page from sub-0006-04).
  *
  * The BE sort chain is `occurred_on DESC, created_at DESC, id ASC` —
  * the FE never re-sorts; it only filters malformed rows out via the
- * adapter (mirrors the `adaptDebts` list adapter convention).
+ * adapter.
  *
  * `sourceAccountId` is `null` when the payment was made in cash (no
  * linked account). `occurredOn` is an ISO `YYYY-MM-DD` string — kept

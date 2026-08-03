@@ -28,7 +28,10 @@ import {
   formatDebtIsoDate,
   parseIsoDate,
 } from "@/lib/api/debt-client";
-import { sortDebtsForDisplay } from "@/components/debts/debt-list";
+import {
+  resolveDebtRowState,
+  sortDebtsForDisplay,
+} from "@/components/debts/debt-list";
 import type { Debt, DebtSummary } from "@/lib/api/debt-client";
 
 interface TestCase {
@@ -408,6 +411,81 @@ const testCases: TestCase[] = [
       assert.equal(totals.totalRemainingCents, 0);
       assert.equal(totals.totalInterestPaidCents, 0);
       assert.equal(totals.totalMonthlyPaymentCents, 110_000_000);
+    },
+  },
+  // ------------------------------------------------------------------
+  // Per-row state resolution (DEF-1 fix). The list page passes three
+  // tracking slots down to the row component; the helper centralises
+  // the classification so the row never has to interpret three
+  // overlapping booleans.
+  // ------------------------------------------------------------------
+  {
+    name: "resolveDebtRowState — summary present wins over pending + failed",
+    run(): void {
+      const state = resolveDebtRowState(
+        "row-1",
+        new Map([["row-1", IDR_SUMMARY]]),
+        new Set(["row-1"]),
+        new Set(["row-1"]),
+      );
+      assert.equal(state, "ready");
+    },
+  },
+  {
+    name: "resolveDebtRowState — pending fetch returns loading",
+    run(): void {
+      const state = resolveDebtRowState(
+        "row-1",
+        new Map(),
+        new Set(["row-1"]),
+        new Set(),
+      );
+      assert.equal(state, "loading");
+    },
+  },
+  {
+    name: "resolveDebtRowState — failed fetch returns failed",
+    run(): void {
+      const state = resolveDebtRowState(
+        "row-1",
+        new Map(),
+        new Set(),
+        new Set(["row-1"]),
+      );
+      assert.equal(state, "failed");
+    },
+  },
+  {
+    name: "resolveDebtRowState — failed wins over pending (defensive)",
+    run(): void {
+      // If both slots happen to contain the id (shouldn't occur in
+      // production but the helper is total-ordered regardless), the
+      // failure takes precedence so the row renders the skeleton
+      // rather than a "Memuat ringkasan…" placeholder that's about to
+      // be re-rendered as a failure anyway.
+      const state = resolveDebtRowState(
+        "row-1",
+        new Map(),
+        new Set(["row-1"]),
+        new Set(["row-1"]),
+      );
+      assert.equal(state, "failed");
+    },
+  },
+  {
+    name: "resolveDebtRowState — fallback when row is in none of the slots",
+    run(): void {
+      // Defensive: shouldn't happen in production (the row was either
+      // just removed by a filter change or the slots haven't been
+      // seeded yet). Returning "ready" prevents the skeleton from
+      // rendering forever.
+      const state = resolveDebtRowState(
+        "row-1",
+        new Map(),
+        new Set(),
+        new Set(),
+      );
+      assert.equal(state, "ready");
     },
   },
 ];

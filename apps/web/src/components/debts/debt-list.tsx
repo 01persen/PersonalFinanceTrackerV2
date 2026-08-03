@@ -80,6 +80,53 @@ export function sortDebtsForDisplay(debts: Debt[]): Debt[] {
   });
 }
 
+interface DebtListProps {
+  debts: Debt[];
+  /**
+   * Per-debt summary lookup so the row can show the live
+   * `remaining_principal_cents` (the persisted `principal_cents` is
+   * the *original* loan amount, not the outstanding balance). Missing
+   * entries render as a small "Memuat…" line under the row so the
+   * list isn't blocked by a slow summary fetch.
+   */
+  summaries: Map<string, DebtSummary>;
+  /** `true` while at least one per-row summary fetch is still pending or failed. */
+  summariesLoading: boolean;
+  /** IDs whose `/summary` fetch is still in flight. */
+  pendingIds: ReadonlySet<string>;
+  /**
+   * IDs whose `/summary` fetch settled with a non-404 error. Rows in
+   * this set render an explicit failure state (skeleton, not "Rp 0")
+   * so the dashboard never flashes misleading zeros (DEF-1).
+   */
+  failedIds: ReadonlySet<string>;
+}
+
+/**
+ * Pure helper exported for the unit test (sub-0006-04 AC). Resolves
+ * the per-row state from the three summary tracking slots. Centralised
+ * here so the page-level wrapper, the row, and the test share one
+ * source of truth for the row classification.
+ *
+ *   - `"ready"`   — summary fetched successfully.
+ *   - `"loading"` — fetch is still in flight.
+ *   - `"failed"`  — fetch settled with a non-404 error.
+ *   - `"ready"`   — fallback for a row that wasn't in the fan-out
+ *     (shouldn't happen in practice; returned as `ready` so the row
+ *     degrades gracefully instead of rendering skeleton forever).
+ */
+export function resolveDebtRowState(
+  debtId: string,
+  summaries: ReadonlyMap<string, DebtSummary>,
+  pendingIds: ReadonlySet<string>,
+  failedIds: ReadonlySet<string>,
+): "ready" | "loading" | "failed" {
+  if (summaries.has(debtId)) return "ready";
+  if (failedIds.has(debtId)) return "failed";
+  if (pendingIds.has(debtId)) return "loading";
+  return "ready";
+}
+
 /**
  * Read-only debt list — the page-level wrapper for the debt row
  * stack. Mirrors `GoalList` (sub-0005-03) so the layout is identical
@@ -90,7 +137,13 @@ export function sortDebtsForDisplay(debts: Debt[]): Debt[] {
  * (load + filter + URL sync + per-row summary fan-out) while the
  * layout + sort + zero-state copy live here.
  */
-export function DebtList({ debts, summaries, summariesLoading }: DebtListProps) {
+export function DebtList({
+  debts,
+  summaries,
+  summariesLoading,
+  pendingIds,
+  failedIds,
+}: DebtListProps) {
   const ordered = sortDebtsForDisplay(debts);
 
   return (
@@ -114,15 +167,19 @@ export function DebtList({ debts, summaries, summariesLoading }: DebtListProps) 
       ) : null}
       <ul className="mt-4 grid list-none grid-cols-1 gap-3 p-0 sm:gap-4">
         {ordered.map((debt) => {
+          const state = resolveDebtRowState(
+            debt.id,
+            summaries,
+            pendingIds,
+            failedIds,
+          );
           const summary = summaries.get(debt.id) ?? null;
           return (
             <li key={debt.id} className="list-none">
               <DebtRow
                 debt={debt}
                 summary={summary}
-                summaryLoading={
-                  summariesLoading && summaries.get(debt.id) === undefined
-                }
+                rowState={state}
               />
             </li>
           );
@@ -135,10 +192,15 @@ export function DebtList({ debts, summaries, summariesLoading }: DebtListProps) 
 interface DebtRowProps {
   debt: Debt;
   summary: DebtSummary | null;
-  summaryLoading: boolean;
+  /**
+   * Resolved row state (see `resolveDebtRowState`). Centralised here
+   * so the cell rendering uses one set of branches instead of three
+   * overlapping boolean flags.
+   */
+  rowState: "ready" | "loading" | "failed";
 }
 
-function DebtRow({ debt, summary, summaryLoading }: DebtRowProps) {
+function DebtRow({ debt, summary, rowState }: DebtRowProps) {
   const kindBadge = KIND_BADGE_STYLES[debt.kind];
   const statusBadge = STATUS_BADGE_STYLES[debt.status];
   const monthly = debt.monthlyPaymentCents;
@@ -151,12 +213,19 @@ function DebtRow({ debt, summary, summaryLoading }: DebtRowProps) {
       ? summary.totalInterestPaidCents
       : null;
   const isPaidOff = debt.status === "paid_off";
+  const summaryLoading = rowState === "loading";
+  const summaryFailed = rowState === "failed";
+  // `Sisa pokok` must never flash "Rp 0" or "—" — the cell renders
+  // a skeleton for both `loading` and `failed` so the user sees a
+  // consistent "data unavailable" placeholder (DEF-1).
+  const remainingLoading = summaryLoading || summaryFailed;
 
   return (
     <article
       className="card flex flex-col gap-3"
       data-debt-id={debt.id}
       data-status={debt.status}
+      data-summary-state={rowState}
       aria-label={`Utang ${debt.name}`}
     >
       <header className="flex flex-wrap items-start justify-between gap-3">
@@ -196,7 +265,7 @@ function DebtRow({ debt, summary, summaryLoading }: DebtRowProps) {
               ? formatDebtIdrFromCents(remaining)
               : null
           }
-          loading={summaryLoading}
+          loading={remainingLoading}
           testId="debt-row-remaining"
         />
         <DebtDataPoint
@@ -228,6 +297,15 @@ function DebtRow({ debt, summary, summaryLoading }: DebtRowProps) {
         {summaryLoading ? (
           <span data-testid={`debt-row-summary-pending-${debt.id}`}>
             Memuat ringkasan…
+          </span>
+        ) : summaryFailed ? (
+          // DEF-1: explicit failure state. The ringkasan banner above
+          // the list surfaces the upstream error; the row itself
+          // doesn't fabricate a "Bunga terbayar: Rp 0" line that the
+          // user could mistake for a real zero.
+          <span data-testid={`debt-row-summary-failed-${debt.id}`}>
+            Ringkasan tidak dapat dimuat. Buka peringatan di atas
+            untuk mencoba lagi.
           </span>
         ) : isPaidOff ? (
           <>
@@ -261,13 +339,11 @@ function DebtRow({ debt, summary, summaryLoading }: DebtRowProps) {
             ) : null}
           </>
         ) : (
-          <>
-            Bunga terbayar:{" "}
-            <span className="font-semibold tabular-nums text-slate-700">
-              {formatDebtIdrFromCents(interestPaid ?? 0)}
-            </span>
-            .
-          </>
+          // Defensive: rowState === "ready" but the summary map
+          // somehow doesn't have this id (e.g. mid-render after a
+          // filter change). Render an em dash instead of "Rp 0" so
+          // we never mis-label a missing summary as a real zero.
+          <span>Ringkasan tidak tersedia.</span>
         )}
       </p>
 

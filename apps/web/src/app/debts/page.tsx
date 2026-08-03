@@ -65,16 +65,35 @@ import { AuthGuard } from "@/lib/auth/auth-guard";
  *      `AbortController` so a newer load can drop the prior response
  *      mid-flight (mirrors sub-0002-03 Cek 5 + sub-0005-03).
  *
+ * DEF-1 (post-QA, sub-0006-04 defect loop): the per-row summary
+ * fan-out must surface a non-blocking warning banner when one or
+ * more summary fetches fail (5xx / malformed payload). The original
+ * implementation read `current.pendingIds.size === 0` in the
+ * `.finally()` block to flip status to `"ready"`, but the catch
+ * handler had already deleted the failing id from `pendingIds`
+ * (synchronously, via the React state setter), so the snapshot
+ * always resolved to size 0 — status fell to `"ready"` even when
+ * the fetch had thrown, and the `<SummaryWarning>` was gated behind
+ * `status === "error"`. The fix tracks failures distinctly in
+ * `failedIds: Set<string>` and uses the *closure* `firstError`
+ * variable (set synchronously inside catch / success-null branches)
+ * as the source of truth for the final status transition.
+ *
  * UI composition:
  *
  *   - **Header** — page title + CTA stub (form lives in sub-0006-05).
  *   - **Two filter rows** — status chips + kind chips. Both are
  *     mirrored to the URL.
  *   - **Summary tiles** — `DebtSummaryTiles` (sisa saldo, total
- *     pokok, bunga terbayar, cicilan / bulan).
+ *     pokok, bunga terbayar, cicilan / bulan). Skeleton stays visible
+ *     while any summary is pending or has failed.
+ *   - **Warning banner** — amber `debts-summary-warning` appears when
+ *     any per-row summary fetch failed (the list still renders).
  *   - **List** — `DebtList` renders the rows. Each row shows the
- *     summary-backed remaining + interest-paid figures and a small
- *     pending-state skeleton while the summary fetch is in flight.
+ *     summary-backed remaining + interest-paid figures. When the row's
+ *     own summary failed, the cell renders a skeleton (not "—" or
+ *     "Rp 0") and the footer line shows "Ringkasan tidak dapat
+ *     dimuat".
  *   - **Empty / error / skeleton states** — mirror the rest of the
  *     dashboard (sub-0003-05/06, sub-0004-04, sub-0005-03).
  *
@@ -93,7 +112,16 @@ interface ListState {
 interface SummaryState {
   status: LoadStatus;
   rows: Map<string, DebtSummary>;
+  /** IDs whose `/summary` fetch is still in flight. */
   pendingIds: Set<string>;
+  /**
+   * IDs whose `/summary` fetch settled with a non-404 error or a
+   * malformed payload. Kept distinct from `pendingIds` so the page
+   * can render an explicit failure state per row (skeleton instead
+   * of "Rp 0") and keep the ringkasan tiles in skeleton mode while
+   * any failure is unresolved.
+   */
+  failedIds: Set<string>;
   errorMessage: string | null;
 }
 
@@ -112,6 +140,7 @@ const INITIAL_SUMMARY: SummaryState = {
   status: "loading",
   rows: new Map(),
   pendingIds: new Set(),
+  failedIds: new Set(),
   errorMessage: null,
 };
 
@@ -192,6 +221,7 @@ function DebtsContent() {
         status: "ready",
         rows: new Map(),
         pendingIds: new Set(),
+        failedIds: new Set(),
         errorMessage: null,
       });
       return;
@@ -209,9 +239,17 @@ function DebtsContent() {
       status: "loading",
       rows: new Map(),
       pendingIds,
+      failedIds: new Set(),
       errorMessage: null,
     });
 
+    // `firstError` is set synchronously inside the success-null branch
+    // and the catch handler, *before* `.finally()` runs. The closure
+    // variable is the source of truth for the final status transition
+    // (DEF-1: the previous implementation read `current.pendingIds.size`
+    // from the React state setter, which had already deleted the failing
+    // id inside the catch handler — so the snapshot always resolved to
+    // 0 and the warning never rendered).
     let firstError: string | null = null;
     let settled = 0;
 
@@ -220,22 +258,32 @@ function DebtsContent() {
         .then((result) => {
           if (dropStale()) return;
           if (result === null) {
+            // BE returned a payload that the adapter couldn't parse —
+            // treat the same as a thrown error so the warning banner +
+            // per-row skeleton reflect the missing summary.
             firstError =
               firstError ??
               "Respons ringkasan utang tidak dikenali. Coba lagi beberapa saat.";
-          } else {
             setSummary((current) => {
-              const next = new Map(current.rows);
-              next.set(debt.id, result);
               const nextPending = new Set(current.pendingIds);
               nextPending.delete(debt.id);
-              return {
-                ...current,
-                rows: next,
-                pendingIds: nextPending,
-              };
+              const nextFailed = new Set(current.failedIds);
+              nextFailed.add(debt.id);
+              return { ...current, pendingIds: nextPending, failedIds: nextFailed };
             });
+            return;
           }
+          setSummary((current) => {
+            const next = new Map(current.rows);
+            next.set(debt.id, result);
+            const nextPending = new Set(current.pendingIds);
+            nextPending.delete(debt.id);
+            return {
+              ...current,
+              rows: next,
+              pendingIds: nextPending,
+            };
+          });
         })
         .catch((error: unknown) => {
           if (dropStale()) return;
@@ -261,17 +309,25 @@ function DebtsContent() {
           setSummary((current) => {
             const nextPending = new Set(current.pendingIds);
             nextPending.delete(debt.id);
-            return { ...current, pendingIds: nextPending };
+            const nextFailed = new Set(current.failedIds);
+            nextFailed.add(debt.id);
+            return { ...current, pendingIds: nextPending, failedIds: nextFailed };
           });
         })
         .finally(() => {
           settled += 1;
           if (settled >= debts.length && !dropStale()) {
-            setSummary((current) => ({
-              ...current,
-              status: current.pendingIds.size === 0 ? "ready" : "error",
-              errorMessage: firstError,
-            }));
+            setSummary((current) => {
+              // Use `firstError` (closure variable) rather than
+              // `current.pendingIds.size` — see the comment above on
+              // `firstError` for the rationale (DEF-1 root cause).
+              const hasFailures = firstError !== null;
+              return {
+                ...current,
+                status: hasFailures ? "error" : "ready",
+                errorMessage: firstError,
+              };
+            });
           }
         });
     }
@@ -370,8 +426,7 @@ function DebtsContent() {
 
   const summariesLoading =
     list.status === "ready" &&
-    summary.status !== "ready" &&
-    summary.pendingIds.size > 0;
+    (summary.pendingIds.size > 0 || summary.failedIds.size > 0);
 
   const totals = useMemo(
     () => aggregateDebtTotals({ debts: filteredDebts, summaries: filteredSummaries }),
@@ -479,6 +534,8 @@ function DebtsContent() {
               debts={filteredDebts}
               summaries={filteredSummaries}
               summariesLoading={summariesLoading}
+              pendingIds={summary.pendingIds}
+              failedIds={summary.failedIds}
             />
           )}
         </>

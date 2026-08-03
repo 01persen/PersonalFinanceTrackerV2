@@ -1020,3 +1020,43 @@ class DebtPublic(BaseModel):
     status: DebtStatus
     created_at: datetime
     updated_at: datetime
+
+
+class DebtSummaryPublic(BaseModel):
+    """Response shape for ``GET /debts/{id}/summary`` (sub-0006-03).
+
+    Aggregates the flat-loan schedule with the persisted payment
+    ledger so the FE can render the dashboard card without a second
+    round-trip. All amounts are integer cents.
+
+    Fields:
+
+    * ``debt_id`` — echoes the path parameter for clients that batch
+      multiple summary calls and want to dedupe by id without parsing
+      the URL.
+    * ``remaining_principal_cents`` — ``principal_cents`` minus the
+      sum of every payment's ``principal_portion_cents`` (computed
+      at request time; see ``app.services.debt_calculator``).
+    * ``total_interest_paid_cents`` — sum of every payment's
+      ``interest_portion_cents``. ``0`` when no payments recorded yet.
+    * ``next_payment_due_date`` — ``start_date`` advanced by the
+      number of persisted payment rows, one month per row. ``null``
+      when there is no schedule (``tenor_months is None``) **or** the
+      debt is fully paid (no more installments owed). A paid-off debt
+      therefore surfaces both ``remaining_principal_cents == 0`` and
+      ``next_payment_due_date is None`` so the FE can badge the state
+      without a separate status check.
+    * ``months_remaining`` — ``tenor_months - payment_count``,
+      clamped to ``[0, tenor_months]``. ``null`` when ``tenor_months``
+      is ``None`` (no schedule). ``0`` when fully paid.
+
+    The flat-calculator contract is documented in the module
+    docstring of :mod:`app.services.debt_calculator` (rounding
+    convention + drift-avoidance note).
+    """
+
+    debt_id: uuid.UUID
+    remaining_principal_cents: int = Field(ge=0)
+    total_interest_paid_cents: int = Field(ge=0)
+    next_payment_due_date: date | None = None
+    months_remaining: int | None = Field(default=None, ge=0)

@@ -1,18 +1,25 @@
 from __future__ import annotations
 
 import uuid
+from calendar import monthrange
 from collections.abc import Iterator
+from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.schemas import DebtCreate, DebtPublic, DebtUpdate
+from app.api.schemas import DebtCreate, DebtPublic, DebtSummaryPublic, DebtUpdate
 from app.api.v1.auth import get_current_user
 from app.db.models.debt import Debt
 from app.db.models.user import User
 from app.db.session import get_session
-from app.services.debt_calculator import calculate_flat_monthly_payment_cents
+from app.services.debt_calculator import (
+    calculate_flat_monthly_payment_cents,
+    count_debt_payments,
+    remaining_principal_cents,
+    total_interest_paid_cents,
+)
 
 router = APIRouter(prefix="/debts", tags=["debts"])
 
@@ -118,3 +125,75 @@ def delete_debt(
     db.delete(debt)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+def _add_months(start: date, months: int) -> date:
+    """Advance ``start`` by ``months`` calendar months, clamping the day.
+
+    Mirrors the convention used elsewhere in the API so a start date
+    of ``2026-01-31`` plus one month becomes ``2026-02-28`` (or
+    ``2026-02-29`` in a leap year) — never the nonsensical
+    ``2026-02-31`` that :py:meth:`datetime.replace` would silently
+    produce. Clamping matches Python's :func:`calendar.monthrange`
+    behavior: ``min(start.day, last_day_of_target_month)``.
+    """
+    if months <= 0:
+        return start
+    target_month_index = (start.month - 1) + months
+    year = start.year + target_month_index // 12
+    month = target_month_index % 12 + 1
+    last_day = monthrange(year, month)[1]
+    return date(year, month, min(start.day, last_day))
+
+
+@router.get("/{debt_id}/summary", response_model=DebtSummaryPublic)
+def get_debt_summary(
+    debt_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> DebtSummaryPublic:
+    """Return the live aggregate view of a debt for the dashboard.
+
+    Aggregates four numbers in one round-trip so the FE "ringkasan
+    utang" card (sub-0006-04) doesn't have to fan-out into multiple
+    GETs. The four fields:
+
+    * ``remaining_principal_cents`` — current outstanding principal.
+    * ``total_interest_paid_cents`` — sum of all payment interest
+      portions so far.
+    * ``next_payment_due_date`` — ``start_date + paid_count months``;
+      ``null`` when no schedule (``tenor_months is None``) or fully
+      paid.
+    * ``months_remaining`` — ``tenor_months - paid_count``; ``null``
+      when no schedule, ``0`` when fully paid.
+
+    Authorization matches the other item-level routes: 404 for both
+    "no such debt" and "owned by another user" — the same pattern as
+    the CRUD endpoints landed in sub-0006-01, kept consistent within
+    this router rather than diverging to a 403 (see TL handoff note
+    on the issue).
+    """
+    debt = _get_owned_debt(db, debt_id=debt_id, current_user=current_user)
+
+    remaining = remaining_principal_cents(db=db, debt=debt)
+    interest_paid = total_interest_paid_cents(db=db, debt=debt)
+    payment_count = count_debt_payments(db=db, debt=debt)
+
+    tenor = debt.tenor_months
+    if tenor is None:
+        next_due: date | None = None
+        months_remaining: int | None = None
+    elif remaining == 0:
+        next_due = None
+        months_remaining = 0
+    else:
+        next_due = _add_months(debt.start_date, payment_count)
+        months_remaining = max(0, tenor - payment_count)
+
+    return DebtSummaryPublic(
+        debt_id=debt.id,
+        remaining_principal_cents=remaining,
+        total_interest_paid_cents=interest_paid,
+        next_payment_due_date=next_due,
+        months_remaining=months_remaining,
+    )

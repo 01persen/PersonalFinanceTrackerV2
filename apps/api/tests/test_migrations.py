@@ -56,6 +56,9 @@ EXPECTED_INDEXES = {
     ("goals", "ix_goals_user_id_archived_at"),
     ("goals", "ix_goals_linked_account_id"),
     ("debt_payments", "ix_debt_payments_debt_id"),
+    # sub-0006-02 — debt payments source_account_id index added so
+    # per-account payment aggregations are cheap. Migration f0a6.
+    ("debt_payments", "ix_debt_payments_source_account_id"),
     ("rule_audit_log", "ix_rule_audit_log_user_applied_at"),
     ("rule_audit_log", "ix_rule_audit_log_rule_applied_at"),
     ("rule_audit_log", "ix_rule_audit_log_transaction"),
@@ -564,5 +567,74 @@ def test_debts_migration_preserves_data_and_backfills_monthly_payment(
             "WHERE id = '22222222-2222-2222-2222-222222222222'"
         ).fetchone()
         assert legacy == ("MORTGAGE", 10)
+    finally:
+        conn.close()
+
+
+def test_debt_payments_source_account_roundtrip(sqlite_db: Path) -> None:
+    """sub-0006-02 — ``b2c4d6e8f0a6`` migration adds ``source_account_id``
+    (nullable FK to ``accounts.id``) to ``debt_payments``. It must:
+
+    * Apply cleanly on top of the d6e8 state (which already extended
+      the ``debts`` table for sub-0006-01).
+    * Be nullable (no back-fill required — pre-existing rows have
+      ``source_account_id IS NULL``).
+    * Add the ``ix_debt_payments_source_account_id`` index.
+    * Survive a ``downgrade -1`` round-trip (drop the new column +
+      index + FK).
+    """
+    up = _run_alembic(sqlite_db, "upgrade", "b2c4d6e8f0a6")
+    assert up.returncode == 0, up.stderr or up.stdout
+
+    conn = sqlite3.connect(sqlite_db)
+    try:
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(debt_payments)")}
+        assert "source_account_id" in columns
+
+        # Index lands with the matching name (mirrors the FK column
+        # naming convention used by every other index in this DB).
+        indexes = {
+            row[1]
+            for row in conn.execute("PRAGMA index_list(debt_payments)")
+            if not row[1].startswith("sqlite_autoindex_")
+        }
+        assert "ix_debt_payments_source_account_id" in indexes
+
+        # FK is registered — verify via PRAGMA foreign_key_list on
+        # SQLite (the ``op.create_foreign_key`` call inside the
+        # batch_alter_table block translates to a ``REFERENCES``
+        # clause on the new column).
+        fk_columns = [row[3] for row in conn.execute("PRAGMA foreign_key_list(debt_payments)")]
+        assert "source_account_id" in fk_columns
+    finally:
+        conn.close()
+
+    # Downgrade — column, FK, and index must all be gone after one
+    # ``-1``. The base schema (cd96a512ab4a) didn't have this column.
+    down = _run_alembic(sqlite_db, "downgrade", "d6e8f0a1b2c3")
+    assert down.returncode == 0, down.stderr or down.stdout
+
+    conn = sqlite3.connect(sqlite_db)
+    try:
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(debt_payments)")}
+        assert "source_account_id" not in columns
+
+        indexes = {
+            row[1]
+            for row in conn.execute("PRAGMA index_list(debt_payments)")
+            if not row[1].startswith("sqlite_autoindex_")
+        }
+        assert "ix_debt_payments_source_account_id" not in indexes
+    finally:
+        conn.close()
+
+    # Re-apply — the column comes back without issue.
+    re_up = _run_alembic(sqlite_db, "upgrade", "b2c4d6e8f0a6")
+    assert re_up.returncode == 0, re_up.stderr or re_up.stdout
+
+    conn = sqlite3.connect(sqlite_db)
+    try:
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(debt_payments)")}
+        assert "source_account_id" in columns
     finally:
         conn.close()

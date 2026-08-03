@@ -24,16 +24,12 @@ acceptance criteria):
   rounded **down** to the nearest cent. Each installment is therefore
   never over-collected; any sub-cent remainder is absorbed into the
   final payment at write time by sub-0006-02's payment ledger.
-* ``remaining_principal_cents`` and ``total_interest_paid_cents`` are
-  the *current* outstanding principal and the sum of interest portions
-  across all persisted ``debt_payments`` rows. They are computed at
-  request time (no denormalised counter) so the values can never drift
-  from the payment history even if a delete or partial update bypasses
-  the write-side hooks.
-
-These helpers are also imported by :mod:`app.services.debt_payments`
-once sub-0006-02 lands on the release branch — see the integration note
-in the parent epic's stage plan.
+* The remaining-principal / total-interest-paid helpers live in
+  :mod:`app.services.debt_payments` (the write-side module) so the
+  atomic ``status`` transition can reuse them without a cross-module
+  import dance. This module re-exports them so the summary endpoint
+  can stay single-import — see :func:`remaining_principal_cents` and
+  :func:`total_interest_paid_cents` below.
 """
 
 from __future__ import annotations
@@ -44,6 +40,18 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.models.debt import Debt, DebtPayment
+from app.services.debt_payments import (
+    remaining_principal_cents,
+    total_interest_paid_cents,
+)
+
+__all__ = [
+    "calculate_flat_monthly_payment_cents",
+    "calculate_flat_total_interest_cents",
+    "count_debt_payments",
+    "remaining_principal_cents",
+    "total_interest_paid_cents",
+]
 
 
 def calculate_flat_total_interest_cents(
@@ -118,48 +126,6 @@ def calculate_flat_monthly_payment_cents(
     total_interest = principal * bunga_pct * tenor / Decimal(1200)
     monthly_payment = (principal + total_interest) / tenor
     return int(monthly_payment.to_integral_value(rounding=ROUND_DOWN))
-
-
-def remaining_principal_cents(*, db: Session, debt: Debt) -> int:
-    """Return ``debt.principal_cents`` minus the sum of payment principal portions.
-
-    The result is the *current* outstanding principal — the figure
-    ``status == paid_off`` is derived from. Computed at request time
-    so the value is always consistent with the persisted payment rows
-    (no denormalised counter that can drift from a buggy delete /
-    partial update).
-
-    Mirrors :func:`app.services.debt_payments.remaining_principal_cents`
-    (sub-0006-02). When sub-0006-02 lands, one copy is kept (the one
-    in the write-side module, since the auto-paid-off transition
-    imports it directly) and the other is removed; both functions
-    currently share the same SQL so the merge is a pure text delete.
-    """
-    total_paid = int(
-        db.execute(
-            select(func.coalesce(func.sum(DebtPayment.principal_portion_cents), 0)).where(
-                DebtPayment.debt_id == debt.id
-            )
-        ).scalar_one()
-    )
-    remaining = int(debt.principal_cents) - total_paid
-    return remaining if remaining > 0 else 0
-
-
-def total_interest_paid_cents(*, db: Session, debt: Debt) -> int:
-    """Return the sum of ``interest_portion_cents`` across all the debt's payments.
-
-    Mirrors :func:`app.services.debt_payments.total_interest_paid_cents`
-    (sub-0006-02); same merge note as :func:`remaining_principal_cents`.
-    """
-    total = int(
-        db.execute(
-            select(func.coalesce(func.sum(DebtPayment.interest_portion_cents), 0)).where(
-                DebtPayment.debt_id == debt.id
-            )
-        ).scalar_one()
-    )
-    return total
 
 
 def count_debt_payments(*, db: Session, debt: Debt) -> int:

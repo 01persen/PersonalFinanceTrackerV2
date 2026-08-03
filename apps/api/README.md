@@ -53,6 +53,11 @@ user aktif. `start_date` memakai format ISO `YYYY-MM-DD`.
 | GET | `/api/v1/debts/{id}` | — → `DebtPublic` |
 | PATCH | `/api/v1/debts/{id}` | `DebtUpdate` → `DebtPublic` |
 | DELETE | `/api/v1/debts/{id}` | — → 204 No Content |
+| POST | `/api/v1/debts/{id}/payments` | `DebtPaymentCreate` → `DebtPaymentPublic` (201) |
+| GET | `/api/v1/debts/{id}/payments` | — → `DebtPaymentListPublic` (paginated) |
+| GET | `/api/v1/debts/{id}/payments/{payment_id}` | — → `DebtPaymentPublic` |
+| PATCH | `/api/v1/debts/{id}/payments/{payment_id}` | `DebtPaymentUpdate` → `DebtPaymentPublic` |
+| DELETE | `/api/v1/debts/{id}/payments/{payment_id}` | — → 204 No Content |
 
 `kind` menerima `loan`, `credit_card`, `paylater`, `KTA`, `KKB`, `KPR`, atau
 `other`. `principal_cents` wajib positif, `bunga_pct` minimal 0, dan
@@ -61,6 +66,14 @@ server-side memakai bunga flat tahunan: total bunga =
 `principal_cents × bunga_pct / 100 × tenor_months / 12`, lalu cicilan bulanan
 adalah `(principal_cents + total bunga) / tenor_months` yang dipotong ke integer
 cents. Nilainya `null` bila tenor `null`.
+
+`/payments` (sub-0006-02) butuh `amount_cents > 0`,
+`principal_portion_cents >= 0`, `interest_portion_cents >= 0`, dan jumlah kedua
+portion harus sama dengan `amount_cents` (422 kalau tidak). Cicilan yang membuat
+sisa principal persis 0 otomatis mengubah `status` debt menjadi `paid_off`;
+cicilan yang principal portionnya lebih besar dari sisa principal ditolak 422
+(overpayment). `source_account_id` opsional (nullable FK ke `accounts.id`)
+sehingga cicilan tunai tanpa akun tetap valid.
 
 ## Schema & migrations
 

@@ -57,5 +57,17 @@ class DebtPayment(Base, UUIDPKMixin, TimestampMixin):
     principal_portion_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
     interest_portion_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # sub-0006-02 — optional FK to the account that funded the payment.
+    # ``ON DELETE SET NULL`` keeps the payment row in place (audit trail)
+    # if the user archives / hard-deletes the source account; the FK
+    # is nulled out so reporting can still bucket the row under
+    # "uncategorised source". Nullable so a cash-in-hand payment with
+    # no linked account is a first-class case (spec AC).
+    source_account_id: Mapped[str | None] = mapped_column(
+        GUID(),
+        ForeignKey("accounts.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
     debt: Mapped[Debt] = relationship(back_populates="payments")

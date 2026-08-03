@@ -1,6 +1,6 @@
 # Project Tracker — Personal Finance Tracker
 
-> **Status:** v4.9 (2026-08-02) — epic-0001 **DONE** (8/8); epic-0002 **DONE** (7/7 sub-task
+> **Status:** v5.0 (2026-08-03) — epic-0001 **DONE** (8/8); epic-0002 **DONE** (7/7 sub-task
 > + Stage 5 release fixup complete; [PR #18](https://github.com/01persen/PersonalFinanceTrackerV2/pull/18)
 > merged ke `main` pada 2026-07-27 13:06 UTC, CI hijau `api quality` + `web quality`).
 > epic-0003 **DONE** (8/8 sub-task + Stage H squash-merged ke `main`).
@@ -57,7 +57,7 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
 | epic-0005 | Goal Trackers (Saving & Emergency Fund) | P-CORE | **DONE** | 0002, 0003 | Backend + Frontend |
 | epic-0006 | Debt Tracker | P-CORE | **IN_PROGRESS** | 0002 | Backend + Frontend |
 | epic-0007 | Networth, Dashboard & Visualization | P-CORE | NOT_STARTED | 0003, 0005, 0006 | Frontend + Backend |
-| epic-0008 | Export, Backup & Settings | P-ENHANCEMENT | NOT_STARTED | 0001 | Backend + Frontend |
+| epic-0008 | Export, Backup & Settings | P-ENHANCEMENT | **IN_PROGRESS** | 0001 | Backend + Frontend |
 | epic-0009 | Recurring Transaction & Reminder (narrow) | P-ENHANCEMENT | NOT_STARTED | 0003 | Backend + Frontend |
 
 ## Dependency Graph
@@ -77,8 +77,7 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
 ## Stage Plan (saat eksekusi dimulai)
 
 - **Stage 1:** epic-0001 (Foundation) — **DONE**
-- **Stage 2:** epic-0002 + epic-0008 (paralel — keduanya butuh 0001) — ready
-  to start
+- **Stage 2:** epic-0002 + epic-0008 (paralel — keduanya butuh 0001) — epic-0008 **IN_PROGRESS** (sourced 2026-08-03, base `main` @ `622c87d`)
 - **Stage 3:** epic-0003
 - **Stage 4 (paralel):** epic-0004 + epic-0005 + epic-0006
 - **Stage 5:** epic-0007
@@ -223,6 +222,30 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
   - ✅ sub-0001-07 — CI/CD skeleton (PR #8 merged via Option B: local pre-commit +
     label gate auto-merge, tanpa branch protection required status checks).
   - ✅ sub-0001-08 — Default seed data (PR #9 merged; seed ke trigger register).
+- epic **0008** sekarang **IN_PROGRESS** (sourced 2026-08-03, autopilot Stage A).
+  Branch `release/epic-0008` di-re-cut dari `main` @ `622c87d` (post epic-0005
+  squash-merge [PR #48](https://github.com/01persen/PersonalFinanceTrackerV2/pull/48)).
+  Stale `release/epic-0008` lokal dari prior source cycle (HEAD `3b5b06b`)
+  dihapus dulu (`git branch -D release/epic-0008`); force-push ke
+  `origin/release/epic-0008` succeed via `--force-with-lease` (ruleset
+  `release-branch-protection` id `19763743` rule `[deletion]` saja per v1.8
+  SOP — `non_fast_forward` rule tidak di-block lagi, sehingga force-push
+  inherent release branch rebase works). Parent issue:
+  [GRE-68](https://multica/issues/GRE-68) di-flip `in_progress` + metadata
+  dipin (`squad_id`, `release_branch=release/epic-0008`,
+  `base_sha=622c87ddcccf67b3f41c3fe10fdc35d7d35cf924`, `epic_doc_url`,
+  `tracker_url`, `prd_url`, `github_repo_url`, `project_folder`,
+  `tracker_version=v5.0`, `stage=A`). Assignee field belum ter-set (workspace
+  policy sama dengan v1.7/v2.5/v3.0/v4.2 — private leader tidak bisa assign
+  squad, fix via mention chain saat Stage B). Epic-0008 dipilih karena
+  topmost eligible di tabel setelah epic-0005 DONE — hanya butuh
+  `epic-0001` (DONE). epic-0007 tetap blocked (butuh 0005 DONE + 0006
+  IN_PROGRESS). epic-0009 (BLOCKED scope sempit) eligible paralel setelah
+  epic-0008 sourced. Carry-over housekeeping: tidak ada (epic-0008 berdiri
+  sendiri di atas data model 0001, tidak modify `apps/api/tests/test_transactions.py`).
+  Stage B (sub-task breakdown TL + SA) di-trigger di routing berikutnya
+  dengan comment hand-off ke System Analyst. epic-0006 tetap IN_PROGRESS
+  (Stage B belum mulai, di luar scope Stage A ini).
 - epic **0009** NOT_STARTED dengan scope sempit: recurring untuk tagihan tetap
   (CC, langganan, cicilan fixed amount) + reminder. Gaji tetap manual (input
   sendiri setiap bulan, amount variabel).
@@ -670,6 +693,33 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
   (Recurring, BLOCKED scope sempit) eligible paralel. Tracker header
   v4.7 → v4.8 + Catatan entry epic-0005 (sub-task list update: 01–06
   DONE, 07 todo, 08 backlog, status 6/8) + Riwayat entry v4.8.
+- v5.0 (2026-08-03) — Tech Leader (autopilot Stage A): sourced
+  epic-0008 → **IN_PROGRESS**. Branch `release/epic-0008` re-cut dari
+  `main` @ `622c87ddcccf67b3f41c3fe10fdc35d7d35cf924` (post epic-0005
+  squash-merge [PR #48](https://github.com/01persen/PersonalFinanceTrackerV2/pull/48)).
+  Stale local branch (HEAD `3b5b06b` dari prior source cycle) dihapus dulu
+  via `git branch -D release/epic-0008`; force-push ke
+  `origin/release/epic-0008` succeed via `--force-with-lease` (ruleset
+  release-branch-protection id `19763743` rule `[deletion]` saja — bukan
+  blocker). Parent issue [GRE-68](https://multica/issues/GRE-68) dibuat +
+  metadata dipin (`squad_id`, `release_branch=release/epic-0008`,
+  `base_sha=622c87ddcccf67b3f41c3fe10fdc35d7d35cf924`, `epic_doc_url`,
+  `tracker_url`, `prd_url`, `github_repo_url`, `project_folder`,
+  `tracker_version=v5.0`, `stage=A`). Assignee field belum ter-set
+  (workspace policy sama dengan v1.7/v2.5/v3.0/v4.2 — private leader tidak
+  bisa assign squad dengan private leader, fix via mention chain saat
+  Stage B). Tracker header v4.9 → v5.0 + table row epic-0008 status flipped
+  NOT_STARTED → IN_PROGRESS + Stage Plan entry Stage 2 epic-0008 di-update
+  + Catatan entry epic-0008 (Stage A complete) + Catatan entry epic-0009
+  dipindah ke bawah entry epic-0008 (urutan kronologis terbalik) +
+  Riwayat entry v5.0. Epic-0008 dipilih karena topmost eligible di tabel
+  setelah epic-0005 DONE — hanya butuh `epic-0001` (DONE). epic-0007
+  tetap blocked (butuh 0005 DONE + 0006 IN_PROGRESS). epic-0009 (BLOCKED
+  scope sempit) eligible paralel setelah epic-0008 sourced — di-handle
+  batch berikutnya atau setelah klarifikasi stakeholder. epic-0006 tetap
+  IN_PROGRESS (Stage B belum mulai, di luar scope Stage A ini). Stage B
+  (sub-task breakdown TL + SA) akan di-trigger di routing berikutnya
+  dengan comment hand-off ke System Analyst.
 - v4.9 (2026-08-02) — Tech Leader: epic-0005 **Stage H complete (DONE)**.
   Wake dari CI/CD hand-off comment — Stage F + H both complete:
   - **Stage F**: [PR #47](https://github.com/01persen/PersonalFinanceTrackerV2/pull/47)

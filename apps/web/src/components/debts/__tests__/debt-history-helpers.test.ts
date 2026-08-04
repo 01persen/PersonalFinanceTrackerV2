@@ -447,19 +447,19 @@ if (
 ) {
   const result = runDebtHistoryHelperTests();
   if (result.failed > 0) {
-    // eslint-disable-next-line no-console
+
     console.error(
       `[debt-history-helpers.test] ${result.failed} of ${result.failed + result.passed} failed`,
     );
     for (const failure of result.failures) {
-      // eslint-disable-next-line no-console
+
       console.error(`  - ${failure.name}`);
-      // eslint-disable-next-line no-console
+
       console.error(`      ${(failure.error as Error)?.stack ?? failure.error}`);
     }
     process.exitCode = 1;
   } else {
-    // eslint-disable-next-line no-console
+
     console.log(
       `[debt-history-helpers.test] ${result.passed} cases passed`,
     );

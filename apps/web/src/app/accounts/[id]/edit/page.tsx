@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  use,
   useCallback,
   useEffect,
   useMemo,
@@ -23,13 +24,14 @@ import type { Account } from "@/lib/api/accounts";
 import { ApiError } from "@/lib/api/client";
 
 interface PageProps {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 export default function EditAccountPage({ params }: PageProps) {
+  const { id } = use(params);
   return (
     <AuthGuard>
-      <EditAccountContent accountId={params.id} />
+      <EditAccountContent accountId={id} />
     </AuthGuard>
   );
 }

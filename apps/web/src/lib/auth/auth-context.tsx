@@ -130,7 +130,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Endpoint logout bisa gagal (token expired / network), tapi untuk MVP
       // kita tetap bersihkan state lokal karena logout pada dasarnya stateless.
       if (err instanceof ApiError) {
-        // eslint-disable-next-line no-console
+
         console.warn("[auth] logout server-side gagal:", err.status, err.message);
       }
     } finally {

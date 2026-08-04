@@ -1,6 +1,6 @@
 # Project Tracker — Personal Finance Tracker
 
-> **Status:** v5.5 (2026-08-04) — epic-0001 **DONE** (8/8); epic-0002 **DONE** (7/7 sub-task
+> **Status:** v5.7 (2026-08-04) — epic-0001 **DONE** (8/8); epic-0002 **DONE** (7/7 sub-task
 > + Stage 5 release fixup complete; [PR #18](https://github.com/01persen/PersonalFinanceTrackerV2/pull/18)
 > merged ke `main` pada 2026-07-27 13:06 UTC, CI hijau `api quality` + `web quality`).
 > epic-0003 **DONE** (8/8 sub-task + Stage H squash-merged ke `main`).
@@ -41,6 +41,41 @@
 > input nominal `25.000` (titik sebagai desimal) ditolak client-side
 > sesuai lokale IDR (koma = desimal, titik = ribuan) — dokumentasikan
 > ke stakeholder bila ada user yang terbiasa titik desimal.
+> **epic-0006 DONE** (9/9 sub-task + Stage H squash-merged ke `main` via
+> [PR #57](https://github.com/01persen/PersonalFinanceTrackerV2/pull/57)
+> commit `752e034ae9ee655bd69f0365e0039e6cbf7dda5c` @
+> 2026-08-04T08:25:18Z, pipeline `30891881776` `api quality` +
+> `web quality` SUCCESS, main advanced `dc546d0 → 752e034`,
+> `release/epic-0006` HEAD `23aa66b` preserved as protected historical
+> branch per v2.9 SOP). Backend debt tracker (`apps/api/src/app/api/v1/debts.py`
+> 630 LOC + calculator 147 LOC + payments service 173 LOC + 29 e2e test
+> `apps/api/tests/test_sub_0006_07_qa_e2e.py` 886 LOC + 5 migration
+> steps) + FE debt tracker UI (5 route baru + 9 component + debt client
+> lib 859 LOC) + security upgrade `next` 14.2.35 → 16.3.0
+> (clear `GHSA-9g9p-9gw9-jx7f` + 19 sibling Next advisories,
+> `npm audit --omit=dev --audit-level=high` exit 0). Tag `v0.7.0`
+> di-cut dari `main` HEAD `752e034` (Debt Tracker milestone).
+> Epic AC cross-check 4/4 PASS end-to-end post-merge: (a) create debt
+> valid + monthly_payment flat (`test_create_supports_every_kind_with_correct_monthly_payment`
+> PASS); (b) cicilan turunkan remaining + naikkan interest (12 cicilan
+> end-to-end test PASS, overpayment/zero/split-mismatch 422);
+> (c) auto `paid_off` saat `remaining_principal = 0` (transition
+> `active → paid_off` exact-zero tested, delete cicilan terakhir
+> revert ke `active`); (d) summary akurat untuk sample case
+> 12jt @10% flat / 12 bulan → cicilan 1.1jt, total bunga 1.2jt
+> (sample constants `SAMPLE_PRINCIPAL_CENTS=1_200_000_000`,
+> `SAMPLE_MONTHLY_CENTS=110_000_000`, `SAMPLE_TOTAL_INTEREST_CENTS=120_000_000`
+> — semua match). Carry-over non-blocking (di luar scope epic): CI
+> workflow `ci.yml` belum trigger `release/*` push event (DevOps
+> terpisah, tracked di luar epic); Dependabot/code-scanning repo
+> masih disabled (DevOps carry-over, escalate ke manusia);
+> `cryptography 49.0.0` CVE-2026-69247 (moderate, transitive dari
+> `pyjwt[crypto]`, tidak affect HS256 path) — minor bump di luar
+> scope epic. **epic-0007 (Networth Dashboard) sekarang eligible** —
+> dependency `epic-0006 DONE` cleared; topmost eligible epic
+> (dependency `0003 + 0005 + 0006` semua DONE). epic-0008 (Export &
+> Settings) + epic-0009 (Recurring, BLOCKED scope sempit) tetap
+> NOT_STARTED — eligible paralel atas permintaan stakeholder.
 > **Owner:** Tech Leader (Engineering Squad)
 
 Tracker mengikuti urutan dependency graph (bukan urgency bisnis), sesuai SOP.
@@ -55,7 +90,7 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
 | epic-0003 | Transaction Core | P-CORE | **DONE** | 0001, 0002 | Backend + Frontend |
 | epic-0004 | Categorization & Search | P-CORE | **DONE** | 0003 | Backend + Frontend |
 | epic-0005 | Goal Trackers (Saving & Emergency Fund) | P-CORE | **DONE** | 0002, 0003 | Backend + Frontend |
-| epic-0006 | Debt Tracker | P-CORE | **IN_PROGRESS** | 0002 | Backend + Frontend |
+| epic-0006 | Debt Tracker | P-CORE | **DONE** | 0002 | Backend + Frontend |
 | epic-0007 | Networth, Dashboard & Visualization | P-CORE | NOT_STARTED | 0003, 0005, 0006 | Frontend + Backend |
 | epic-0008 | Export, Backup & Settings | P-ENHANCEMENT | NOT_STARTED | 0001 | Backend + Frontend |
 | epic-0009 | Recurring Transaction & Reminder (narrow) | P-ENHANCEMENT | NOT_STARTED | 0003 | Backend + Frontend |
@@ -168,12 +203,15 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
   - [x] sub-0004-06 — QA Integration + e2e test plan Epic 0004 → **DONE** 2026-07-31 ([GRE-45](https://multica/issues/GRE-45)), QA. Defect loop 3/3 closed end-to-end (sub-0004-05, migration PG syntax, SQLite insertmanyvalues flake). 5/5 Epic AC PASS re-verified.
   - [ ] sub-0004-07 — CI/CD Housekeeping: Perluas CI trigger `release/*` → **QA PASS dengan 3 catatan, hold `in_review`** ([GRE-48](https://multica/issues/GRE-48)), CI/CD Engineer. [PR #33](https://github.com/01persen/PersonalFinanceTrackerV2/pull/33) squash-merged ke `main` (commit `3b5b06b`); follow-up untuk 3 concerns (C1 test PR, C2 `workflow_dispatch` syntax, C3 push event) — di luar scope Stage A epic-0005.
   - Sub-task status: **7/8 DONE** (sub-0004-07 housekeeping masih `in_review`); Epic AC 5/5 PASS; Stage H merged `d886f15d`.
-- epic **0006** sekarang **IN_PROGRESS** (v5.5 fixup 2026-08-04; v5.1 re-source 2026-08-03
-  dengan parent issue [GRE-71](https://multica/issues/GRE-71) + branch
-  `release/epic-0006` re-cut dari `main` @ `622c87d`, Stage A complete).
-  Stage B (sub-task breakdown) complete 2026-08-03 dengan 7 sub-task di
-  5 stage (4 BE + 2 FE + 1 QA). Sub-task list status (Stage C-G closed,
-  Stage H in-flight):
+- epic **0006** sekarang **DONE** (v5.7 finalize 2026-08-04; v5.5 Stage H fixup 2026-08-04;
+  v5.1 re-source 2026-08-03 dengan parent issue
+  [GRE-71](https://multica/issues/GRE-71) + branch `release/epic-0006`
+  re-cut dari `main` @ `622c87d`, Stage A complete). Stage B (sub-task
+  breakdown) complete 2026-08-03 dengan 7 sub-task di 5 stage
+  (4 BE + 2 FE + 1 QA). Stage C-G (sub-task eksekusi) closed 2026-08-03..04
+  dengan 7 sub-task DONE. Stage H (finalisasi) closed 2026-08-04 dengan
+  2 sub-task DONE (sub-0006-08 CI/CD + sub-0006-09 TL). Sub-task list
+  status (semua 9/9 closed):
   - [x] sub-0006-01 — Backend CRUD `debts` (model + endpoint + validasi) → **DONE** 2026-08-03 ([GRE-73](https://multica/issues/GRE-73)), BE. [PR #50](https://github.com/01persen/PersonalFinanceTrackerV2/pull/50) squash-merged `release/epic-0006` (`d435314`). 43 unit + API tests pass.
   - [x] sub-0006-02 — Backend CRUD `debt_payments` + auto-paid-off → **DONE** 2026-08-03 ([GRE-72](https://multica/issues/GRE-72)), BE. [PR #51](https://github.com/01persen/PersonalFinanceTrackerV2/pull/51) squash-merged `release/epic-0006` (`bfe36e7`). 49 unit + transaction tests pass.
   - [x] sub-0006-03 — Backend kalkulator bunga flat + summary endpoint → **DONE** 2026-08-03 ([GRE-74](https://multica/issues/GRE-74)), BE. [PR #52](https://github.com/01persen/PersonalFinanceTrackerV2/pull/52) squash-merged `release/epic-0006` (`971f360`). Sample 12jt @10%/12 → cicilan 1.1jt + bunga 1.2jt verified.
@@ -181,7 +219,21 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
   - [x] sub-0006-05 — FE form tambah/edit utang + form tambah cicilan → **DONE** 2026-08-04 ([GRE-76](https://multica/issues/GRE-76)), FE. [PR #55](https://github.com/01persen/PersonalFinanceTrackerV2/pull/55) merged `release/epic-0006` (`78ee542`). QA PASS validasi client-server, disable submit pending, refresh summary post-mutasi.
   - [x] sub-0006-06 — FE detail utang + tabel history cicilan → **DONE** 2026-08-04 ([GRE-77](https://multica/issues/GRE-77)), FE. [PR #54](https://github.com/01persen/PersonalFinanceTrackerV2/pull/54) squash-merged `release/epic-0006` (`7284178`). History terurut + status paid-off jelas + empty/error state.
   - [x] sub-0006-07 — QA Integration + e2e + re-verify Epic AC → **DONE** 2026-08-04 ([GRE-78](https://multica/issues/GRE-78)), QA. 4/4 Epic AC verified end-to-end: (a) create debt valid + monthly_payment flat; (b) cicilan turunkan remaining + naikkan interest; (c) auto paid-off saat remaining=0; (d) summary akurat sample case. 542 BE pytest PASS, 98 FE helper test PASS, lint/typecheck/build clean, integration test baru `apps/api/tests/test_qa_lifecycle_sample.py` PASS.
-  - Stage 1-5 closed (sub-0006-01..07 DONE, 7 sub-task). Stage H in-flight: tracker fixup v5.5 untuk unblock PR `release/epic-0006 → main` (HEAD `bfe36e7`). Sub-task status: **7/7 DONE**. Epic AC 4/4 verified. Stage H pending CI/CD cherry-pick + final merge (sub-0006-08) + TL cross-check + flip parent (sub-0006-09).
+  - [x] sub-0006-08 — Stage H.1 CI/CD: cherry-pick QA test + tracker v5.5/v5.6 + PR release → main → **DONE** 2026-08-04 ([GRE-80](https://multica/issues/GRE-80)), CI/CD Engineer. 29 e2e test (`apps/api/tests/test_sub_0006_07_qa_e2e.py` 886 LOC) di-cherry-pick ke `release/epic-0006` @ `8a27d7d`; tracker v5.5 fixup landed `14005a5`; v5.6 Riwayat reorder + merge conflict resolve landed `f5e229c`; PR [#57](https://github.com/01persen/PersonalFinanceTrackerV2/pull/57) `release/epic-0006 → main` squash-merged `752e034ae9ee655bd69f0365e0039e6cbf7dda5c` @ 2026-08-04T08:25:18Z; pipeline `30891881776` SUCCESS (`api quality` + `web quality` green). `main` HEAD advance `dc546d0 → 752e034`. Security upgrade `next` 14.2.35 → 16.3.0 (FE engineer mandiri, PR #58 merged `23aa66b`).
+  - [x] sub-0006-09 — Stage H.2 TL: cross-check Epic AC post-merge + flip parent `done` → **DONE** 2026-08-04 ([GRE-81](https://multica/issues/GRE-81)), TL. 4/4 Epic AC cross-check PASS end-to-end (test `test_full_scale_sample_case_create_response` + `test_full_scale_sample_case_reconciliation_after_payments` + `test_status_flips_to_paid_off_exactly_at_zero` + `test_create_supports_every_kind_with_correct_monthly_payment` + `test_paid_off_blocks_further_payments_with_422` + 542 BE pytest + 98 FE helper test PASS). Parent [GRE-71](https://multica/issues/GRE-71) flipped `done` dengan metadata final dipin: `merge_commit=752e034ae9ee655bd69f0365e0039e6cbf7dda5c`, `pr_url=https://github.com/01persen/PersonalFinanceTrackerV2/pull/57`, `pr_number=57`, `pipeline_status=passed`, `tracker_version=v5.7`, `qa_release_sha=23aa66bf6d3d3316c9435693f9b18ff3304b8a96`. Sub-task status: **9/9 DONE**. Epic AC 4/4 PASS. Stage H squash-merged `752e034`. epic-0006 fully shipped.
+  - **Epic AC cross-check 4/4 PASS** end-to-end post-merge `main` HEAD `752e034`: (a) create debt valid + monthly_payment flat — confirmed via `apps/api/tests/test_debts.py` (43 tests) + calculator half-up interest + round-down monthly; (b) cicilan turunkan remaining + naikkan interest — confirmed via `apps/api/tests/test_sub_0006_07_qa_e2e.py` 12 cicilan end-to-end PASS + 49 payment tests; (c) auto `paid_off` saat `remaining_principal = 0` — confirmed via `test_status_flips_to_paid_off_exactly_at_zero` + `test_paid_off_blocks_further_payments_with_422` + delete cicilan revert; (d) summary akurat sample case 12jt @10% flat / 12 bulan → cicilan 1.1jt, total bunga 1.2jt — confirmed via `test_full_scale_sample_case_create_response` + `test_full_scale_sample_case_reconciliation_after_payments` (sample constants match spec exactly: `SAMPLE_PRINCIPAL_CENTS=1_200_000_000`, `SAMPLE_MONTHLY_CENTS=110_000_000`, `SAMPLE_TOTAL_INTEREST_CENTS=120_000_000`).
+  - **Carry-over untuk epic-0007**: blocker epic-0007 (`epic-0006 DONE`) **cleared** — eligible. epic-0008 (Export & Settings, dep `0001 DONE`) + epic-0009 (Recurring, BLOCKED scope sempit) eligible paralel — topmost NOT_STARTED dengan dependency DONE. epic-0008 dep cuma `0001 DONE` — eligible duluan.
+  - **Catatan non-blocking** (carry-over ke epic berikutnya, tracked terpisah):
+    workflow `ci.yml` belum trigger pada push `release/*` sejak
+    2026-07-28T06:36:12Z — tiket DevOps terpisah, escalate terpisah
+    (carry-over dari epic-0003). Dependabot/code-scanning repo masih
+    disabled (DevOps carry-over, escalate ke manusia). `cryptography
+    49.0.0` CVE-2026-69247 (moderate, transitive dari `pyjwt[crypto]`,
+    tidak affect HS256 path) — minor bump di luar scope epic.
+  Tracker header v5.5 → v5.7 + epic-0006 row flipped **IN_PROGRESS →
+  DONE** + Catatan entry epic-0006 (sub-task list update: 01–09 DONE,
+  status 9/9 + 4/4 AC verified + Stage H squash-merged `752e034`) +
+  Riwayat entry v5.7. epic-0006 fully shipped.
 - epic **0003** sekarang **IN_PROGRESS**. Sub-task list (Stage B complete 2026-07-28, Stage 1 done 2026-07-28):
   - [x] sub-0003-01 — Backend POST + GET list + validasi → **DONE** 2026-07-28, [PR #22](https://github.com/01persen/PersonalFinanceTrackerV2/pull/22) merged ke `release/epic-0003` (squash `6737744a`). CDC clean, QA pass.
   - [x] sub-0003-02 — Backend PATCH + DELETE soft → **DONE** 2026-07-28, [PR #23](https://github.com/01persen/PersonalFinanceTrackerV2/pull/23) merged ke `release/epic-0003` (squash `793ef73`, +753/−17, migration reversible). QA PASS semua 3 AC + 6 area risiko (extra=forbid, DELETE idempotency 204, list/total pagination, audit trail server-side timestamp). Baseline failure `test_get_sort_is_stable_for_same_day` terisolasi pre-existing flaky → tiket housekeeping terpisah (risk: low). Carry-over ke sub-0003-04: aggregator `balance.py` harus filter `deleted_at IS NULL` agar konsisten dengan list exclusion.
@@ -807,3 +859,29 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
   stand-by untuk buka PR setelah fixup landed. Sub-task Stage H
   (sub-0006-08 cherry-pick + final PR + sub-0006-09 TL cross-check +
   flip parent) akan di-trigger berikutnya. Tracker bumped v5.1 → v5.5.
+- v5.7 (2026-08-04) — Tech Leader: **Stage H.2 finalize tracker fixup** post
+  squash-merge [PR #57](https://github.com/01persen/PersonalFinanceTrackerV2/pull/57)
+  commit `752e034ae9ee655bd69f0365e0039e6cbf7dda5c` @ 2026-08-04T08:25:18Z
+  (epic-0006 Stage H.1 done). Catatan: pada saat squash-merge, file
+  `docs/multica/epics.md` di `release/epic-0006` masih di v5.5 (TL push
+  `14005a5` v5.1 → v5.5 fixup landed; Riwayat reorder + merge conflict
+  resolve landed `f5e229c` dengan header masih v5.5 — file `8b46d20` v5.6
+  tidak ikut ter-squash karena ada di luar scope konflik resolve).
+  Squash-merge PR #57 mempertahankan state v5.5 di `main`. Fixup
+  kali ini (commit ini) menyelaraskan tracker ke v5.7 dengan update:
+  (i) header status v5.5 → v5.7 + epic-0006 DONE summary block
+  ditambahkan (PR #57, merge_commit `752e034`, Tag `v0.7.0` Debt
+  Tracker milestone, security upgrade Next 16.3.0, Epic AC cross-check
+  4/4 PASS, carry-over notes); (ii) tabel row epic-0006 flipped
+  **IN_PROGRESS → DONE**; (iii) Catatan entry epic-0006 diperluas
+  dengan sub-task 08 + 09 DONE (status 9/9) + Epic AC cross-check
+  4/4 PASS evidence + Stage H squash-merged `752e034` + carry-over
+  notes; (iv) Riwayat entry v5.7 (entry ini). Tindakan cross-check:
+  TL verifikasi 4/4 Epic AC end-to-end via test file
+  `apps/api/tests/test_sub_0006_07_qa_e2e.py` (yang sudah di-cherry-pick
+  ke `release/epic-0006` @ `8a27d7d` lalu ter-squash ke `main` HEAD
+  `752e034`) + cross-check BE pytest + FE helper test + post-merge
+  CI run `30891881776` SUCCESS. Parent issue
+  [GRE-71](https://multica/issues/GRE-71) flipped `done` dengan
+  metadata final dipin. epic-0006 fully shipped. epic-0007 (Networth
+  Dashboard) sekarang eligible — dependency `0006 DONE` cleared.

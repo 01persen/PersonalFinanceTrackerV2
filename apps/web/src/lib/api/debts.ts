@@ -254,3 +254,147 @@ export function adaptDebtSummary(raw: unknown): DebtSummary | null {
     monthsRemaining: toNullableInt(payload.months_remaining),
   };
 }
+
+/* -------------------------------------------------------------------------- *
+ * sub-0006-06 — Payment row + paginated list (sub-0006-02 BE)                 *
+ * -------------------------------------------------------------------------- *
+ *
+ * Mirrors `DebtPaymentPublic` + `DebtPaymentListPublic` in
+ * `apps/api/src/app/api/schemas.py` (sub-0006-02). The detail page
+ * (this sub-task) reads the list envelope directly so the history
+ * table can render pagination controls without a follow-up GET.
+ *
+ * The BE sort chain is `occurred_on DESC, created_at DESC, id ASC` —
+ * the FE never re-sorts; it only filters malformed rows out via the
+ * adapter (mirrors the `adaptDebts` list adapter convention).
+ *
+ * `sourceAccountId` is `null` when the payment was made in cash (no
+ * linked account). `occurredOn` is an ISO `YYYY-MM-DD` string — kept
+ * as a string to avoid the timezone round-trip the calendar would
+ * otherwise need to defend against (mirrors the `startDate` /
+ * `nextPaymentDueDate` convention).
+ *
+ * `principalPortionCents` + `interestPortionCents` always equals
+ * `amountCents` — the BE enforces this in a Pydantic ``model_validator``
+ * so the FE can rely on the invariant.
+ */
+export interface DebtPayment {
+  id: string;
+  debtId: string;
+  occurredOn: string;
+  amountCents: number;
+  principalPortionCents: number;
+  interestPortionCents: number;
+  sourceAccountId: string | null;
+  note: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface RawDebtPaymentPayload {
+  id?: unknown;
+  debt_id?: unknown;
+  occurred_on?: unknown;
+  amount_cents?: unknown;
+  principal_portion_cents?: unknown;
+  interest_portion_cents?: unknown;
+  source_account_id?: unknown;
+  note?: unknown;
+  created_at?: unknown;
+  updated_at?: unknown;
+}
+
+/**
+ * Adapt the wire payload for a single `debt_payments` row into the FE
+ * camelCase `DebtPayment`. Returns `null` when the payload is missing
+ * or missing the expected `id` + `debt_id` pair — callers treat that
+ * as "endpoint returned nothing useful" and surface the error/retry
+ * path.
+ */
+export function adaptDebtPayment(raw: unknown): DebtPayment | null {
+  if (!raw || typeof raw !== "object") return null;
+  const payload = raw as RawDebtPaymentPayload;
+  if (typeof payload.id !== "string" || typeof payload.debt_id !== "string") {
+    return null;
+  }
+  return {
+    id: payload.id,
+    debtId: payload.debt_id,
+    occurredOn: toIsoString(payload.occurred_on, ""),
+    amountCents: toFiniteInt(payload.amount_cents),
+    principalPortionCents: toFiniteInt(payload.principal_portion_cents),
+    interestPortionCents: toFiniteInt(payload.interest_portion_cents),
+    sourceAccountId: toNullableString(payload.source_account_id),
+    note: toNullableString(payload.note),
+    createdAt: toIsoString(payload.created_at, ""),
+    updatedAt: toIsoString(payload.updated_at, ""),
+  };
+}
+
+/**
+ * Paginated list envelope returned by `GET /debts/{id}/payments`
+ * (sub-0006-02). The detail page reads this directly so the history
+ * table can render pagination controls without a follow-up GET.
+ *
+ * `total` is the unfiltered-by-page row count for the debt so the
+ * FE can compute the page count without a second request. `limit`
+ * and `offset` echo the query params verbatim; the FE uses them to
+ * detect "empty page past the end" (so a stale `offset > total`
+ * link doesn't render a phantom empty list — see the page-level
+ * state machine in `apps/web/src/app/debts/[id]/page.tsx`).
+ */
+export interface DebtPaymentPage {
+  items: DebtPayment[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+interface RawDebtPaymentPagePayload {
+  items?: unknown;
+  total?: unknown;
+  limit?: unknown;
+  offset?: unknown;
+}
+
+/**
+ * Adapt the wire payload for `GET /debts/{id}/payments` into the FE
+ * camelCase `DebtPaymentPage`. Returns `null` when the payload is
+ * missing or missing the expected `items` array + numeric
+ * `total` / `limit` / `offset` triple — callers treat that as
+ * "endpoint returned nothing useful" and render the error/retry
+ * path. The inner payment rows go through `adaptDebtPayment` so a
+ * malformed row in the middle of the page is silently dropped (the
+ * BE's contract is "all rows on the page are well-formed" but the
+ * adapter stays defensive).
+ *
+ * `total` is clamped to `>= items.length` so a malformed total
+ * (e.g. `null` or `0` on a non-empty page) doesn't push the FE
+ * pagination into a phantom-empty state. The clamp is a no-op for
+ * well-formed BE responses (the BE always reports the full row
+ * count, not the page-only count).
+ */
+export function adaptDebtPaymentList(raw: unknown): DebtPaymentPage | null {
+  if (!raw || typeof raw !== "object") return null;
+  const payload = raw as RawDebtPaymentPagePayload;
+  if (!Array.isArray(payload.items)) return null;
+
+  const items: DebtPayment[] = [];
+  for (const item of payload.items) {
+    if (item && typeof item === "object") {
+      const adapted = adaptDebtPayment(item);
+      if (adapted) items.push(adapted);
+    }
+  }
+
+  const total = toFiniteInt(payload.total);
+  const limit = toFiniteInt(payload.limit);
+  const offset = toFiniteInt(payload.offset);
+
+  return {
+    items,
+    total: Math.max(total, items.length),
+    limit: limit > 0 ? limit : Math.max(items.length, 1),
+    offset: offset >= 0 ? offset : 0,
+  };
+}

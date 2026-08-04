@@ -1,5 +1,7 @@
 import { ApiError, apiRequest } from "@/lib/api/client";
 import {
+  adaptDebt,
+  adaptDebtPaymentList,
   adaptDebtSummary,
   adaptDebts,
   DEBT_KIND_LABEL,
@@ -8,6 +10,8 @@ import {
   DEBT_STATUS_VALUES,
   type Debt,
   type DebtKind,
+  type DebtPayment,
+  type DebtPaymentPage,
   type DebtStatus,
   type DebtSummary,
 } from "@/lib/api/debts";
@@ -19,6 +23,8 @@ export {
   DEBT_STATUS_VALUES,
   type Debt,
   type DebtKind,
+  type DebtPayment,
+  type DebtPaymentPage,
   type DebtStatus,
   type DebtSummary,
 };
@@ -169,6 +175,153 @@ export async function fetchDebtSummary(
     { signal: options.signal },
   );
   return adaptDebtSummary(raw);
+}
+
+/* -------------------------------------------------------------------------- *
+ * sub-0006-06 — Detail page (debt by id + payment history)                   *
+ * -------------------------------------------------------------------------- *
+ *
+ * The detail page (`apps/web/src/app/debts/[id]/page.tsx`) reads:
+ *
+ *   - `GET /debts/{id}` to render the debt header + meta (name, kind,
+ *     principal, bunga, tenor, start_date, status badge, note).
+ *   - `GET /debts/{id}/summary` for the live `remaining_principal_cents`
+ *     + `total_interest_paid_cents` + `next_payment_due_date` row.
+ *   - `GET /debts/{id}/payments?limit=50&offset=...` for the
+ *     paginated history table (sub-0006-06 AC).
+ *
+ * All three are routed through this file so the page can import a
+ * flat surface — the same convention used by sub-0006-04 (list
+ * + per-row summary fan-out) and sub-0006-05 (form payload + per-row
+ * create).
+ */
+
+/**
+ * Fetch a single debt by id from `GET /debts/{id}` (sub-0006-01).
+ * Returns `null` when the payload is missing/malformed or the row
+ * doesn't belong to the caller (the endpoint returns 404 for both
+ * cases so the FE can't tell them apart — same convention as
+ * `fetchGoalById` from sub-0005-03). The page surfaces the
+ * `null` return as a "Utang tidak ditemukan" panel.
+ *
+ * Accepts an `AbortSignal` so the caller can drop in-flight requests
+ * when a newer load starts (race condition guard, sub-0002-03 Cek 5).
+ */
+export async function fetchDebtById(
+  id: string,
+  options: { signal?: AbortSignal } = {},
+): Promise<Debt | null> {
+  const raw = await apiRequest<unknown>(`/debts/${encodeURIComponent(id)}`, {
+    signal: options.signal,
+  });
+  return adaptDebt(raw);
+}
+
+/**
+ * Default page size for the history table. Matches the BE default
+ * (`limit=50` in `apps/api/src/app/api/v1/debts.py`) and the
+ * transactions list convention so the table renders a familiar
+ * density on first paint.
+ */
+export const DEBT_HISTORY_DEFAULT_PAGE_SIZE = 50;
+
+/**
+ * Maximum page size the FE will request. Matches the BE ceiling
+ * (`le=200` on the `limit` query param) so a stale `?size=` query
+ * param in the URL can never trigger a 422.
+ */
+export const DEBT_HISTORY_MAX_PAGE_SIZE = 200;
+
+/**
+ * Options for `fetchDebtPayments`. Mirrors the `list_debt_payments`
+ * query params on the BE (sub-0006-02) so the FE can drive the
+ * paginated history table without a follow-up GET.
+ */
+export interface FetchDebtPaymentsOptions {
+  /**
+   * 1-based page index (the BE uses 0-based `offset`; the FE works
+   * in pages to keep the URL + pagination control human-readable).
+   * Defaults to `0` (first page).
+   */
+  page?: number;
+  /**
+   * Page size. Defaults to `DEBT_HISTORY_DEFAULT_PAGE_SIZE` (50) and
+   * is clamped to `[1, DEBT_HISTORY_MAX_PAGE_SIZE]` so a stale
+   * `?size=` URL param can never request a 422.
+   */
+  pageSize?: number;
+  /** Optional abort signal — race defense (sub-0002-03 Cek 5). */
+  signal?: AbortSignal;
+}
+
+/**
+ * Fetch the paginated cicilan list for a debt from
+ * `GET /debts/{id}/payments?limit=...&offset=...` (sub-0006-02).
+ *
+ * Returns `null` when the payload is missing/malformed or the debt
+ * id doesn't belong to the caller (the BE returns 404 for both, and
+ * the FE maps both to the "Utang tidak ditemukan" panel — same
+ * convention as `fetchDebtById`).
+ *
+ * Page-size clamping prevents a stale `?size=` URL from triggering a
+ * 422; the BE cap is `200` and the FE mirrors that ceiling.
+ */
+export async function fetchDebtPayments(
+  debtId: string,
+  options: FetchDebtPaymentsOptions = {},
+): Promise<DebtPaymentPage | null> {
+  const page = options.page !== undefined && options.page > 0 ? Math.floor(options.page) : 0;
+  const requestedSize =
+    options.pageSize !== undefined && options.pageSize > 0
+      ? Math.floor(options.pageSize)
+      : DEBT_HISTORY_DEFAULT_PAGE_SIZE;
+  const pageSize = Math.min(
+    Math.max(requestedSize, 1),
+    DEBT_HISTORY_MAX_PAGE_SIZE,
+  );
+  const offset = page * pageSize;
+
+  const query: string[] = [];
+  query.push(`limit=${pageSize}`);
+  query.push(`offset=${offset}`);
+
+  const raw = await apiRequest<unknown>(
+    `/debts/${encodeURIComponent(debtId)}/payments?${query.join("&")}`,
+    { signal: options.signal },
+  );
+  return adaptDebtPaymentList(raw);
+}
+
+/**
+ * Defensive client-side sort of a payment list. The BE already sorts
+ * `occurred_on DESC, created_at DESC, id ASC` (sub-0006-02), so this
+ * helper is a no-op for well-formed responses. It's exported because:
+ *
+ *   1. The unit test pins the ordering contract without hitting the
+ *      BE (mirrors the `sortDebtsForDisplay` pattern from
+ *      sub-0006-04).
+ *   2. A future schema migration (e.g. moving the sort server-side
+ *      via cursor pagination) would let the FE keep rendering the
+ *      same order without a regression hunt.
+ */
+export function sortPaymentsByDateDesc(payments: DebtPayment[]): DebtPayment[] {
+  return [...payments].sort((left, right) => {
+    const leftTime = Date.parse(left.occurredOn);
+    const rightTime = Date.parse(right.occurredOn);
+    const leftTs = Number.isFinite(leftTime) ? leftTime : 0;
+    const rightTs = Number.isFinite(rightTime) ? rightTime : 0;
+    if (leftTs !== rightTs) return rightTs - leftTs;
+
+    const leftCreated = Date.parse(left.createdAt);
+    const rightCreated = Date.parse(right.createdAt);
+    const leftCreatedTs = Number.isFinite(leftCreated) ? leftCreated : 0;
+    const rightCreatedTs = Number.isFinite(rightCreated) ? rightCreated : 0;
+    if (leftCreatedTs !== rightCreatedTs) {
+      return rightCreatedTs - leftCreatedTs;
+    }
+
+    return left.id.localeCompare(right.id);
+  });
 }
 
 /**

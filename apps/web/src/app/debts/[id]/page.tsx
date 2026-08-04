@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
+  use,
   useCallback,
   useEffect,
   useMemo,
@@ -36,7 +37,7 @@ import { useAuth } from "@/lib/auth/auth-context";
 import { AuthGuard } from "@/lib/auth/auth-guard";
 
 interface PageProps {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 type PrefetchState =
@@ -113,9 +114,10 @@ type PaymentsState =
  * (sub-0006-05).
  */
 export default function DebtDetailPage({ params }: PageProps) {
+  const { id } = use(params);
   return (
     <AuthGuard>
-      <DebtDetailContent debtId={params.id} />
+      <DebtDetailContent debtId={id} />
     </AuthGuard>
   );
 }
@@ -164,7 +166,7 @@ function DebtDetailContent({ debtId }: { debtId: string }) {
     setPage((current) => (current === fromUrl ? current : fromUrl));
     // `searchParams` is the only authoritative source here; the page
     // state is the rendered mirror.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [searchParams]);
 
   const loadPrefetch = useCallback(async () => {

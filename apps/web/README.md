@@ -8,10 +8,10 @@ dilanjutkan pada `sub-0001-05`.
 
 ## Stack
 
-- **Next.js 14** (App Router, React 18).
+- **Next.js 16** (App Router, React 19).
 - **TypeScript** (strict mode).
 - **Tailwind CSS** untuk styling.
-- **ESLint** + `next lint` + `tsc --noEmit` untuk quality gate.
+- **ESLint 9** (flat config) + `tsc --noEmit` untuk quality gate.
 
 ## Setup
 
@@ -47,7 +47,7 @@ siap dijalankan via npm/pnpm/yarn.
 | `pnpm dev`      | Next.js dev server (port 3000).       |
 | `pnpm build`    | Production build.                     |
 | `pnpm start`    | Jalankan hasil build.                 |
-| `pnpm lint`     | `next lint` (ESLint).                 |
+| `pnpm lint`     | `eslint .` (ESLint 9 flat config).    |
 | `pnpm typecheck`| `tsc --noEmit` untuk type-check.      |
 
 ## Struktur

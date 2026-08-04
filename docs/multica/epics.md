@@ -687,33 +687,7 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
   (Recurring, BLOCKED scope sempit) eligible paralel. Tracker header
   v4.7 → v4.8 + Catatan entry epic-0005 (sub-task list update: 01–06
   DONE, 07 todo, 08 backlog, status 6/8) + Riwayat entry v4.8.
-- v5.0 (2026-08-03) — Tech Leader (autopilot Stage A): sourced
-  epic-0008 → **IN_PROGRESS**. Branch `release/epic-0008` re-cut dari
-  `main` @ `622c87ddcccf67b3f41c3fe10fdc35d7d35cf924` (post epic-0005
-  squash-merge [PR #48](https://github.com/01persen/PersonalFinanceTrackerV2/pull/48)).
-  Stale local branch (HEAD `3b5b06b` dari prior source cycle) dihapus dulu
-  via `git branch -D release/epic-0008`; force-push ke
-  `origin/release/epic-0008` succeed via `--force-with-lease` (ruleset
-  release-branch-protection id `19763743` rule `[deletion]` saja — bukan
-  blocker). Parent issue [GRE-68](https://multica/issues/GRE-68) dibuat +
-  metadata dipin (`squad_id`, `release_branch=release/epic-0008`,
-  `base_sha=622c87ddcccf67b3f41c3fe10fdc35d7d35cf924`, `epic_doc_url`,
-  `tracker_url`, `prd_url`, `github_repo_url`, `project_folder`,
-  `tracker_version=v5.0`, `stage=A`). Assignee field belum ter-set
-  (workspace policy sama dengan v1.7/v2.5/v3.0/v4.2 — private leader tidak
-  bisa assign squad dengan private leader, fix via mention chain saat
-  Stage B). Tracker header v4.9 → v5.0 + table row epic-0008 status flipped
-  NOT_STARTED → IN_PROGRESS + Stage Plan entry Stage 2 epic-0008 di-update
-  + Catatan entry epic-0008 (Stage A complete) + Catatan entry epic-0009
-  dipindah ke bawah entry epic-0008 (urutan kronologis terbalik) +
-  Riwayat entry v5.0. Epic-0008 dipilih karena topmost eligible di tabel
-  setelah epic-0005 DONE — hanya butuh `epic-0001` (DONE). epic-0007
-  tetap blocked (butuh 0005 DONE + 0006 IN_PROGRESS). epic-0009 (BLOCKED
-  scope sempit) eligible paralel setelah epic-0008 sourced — di-handle
-  batch berikutnya atau setelah klarifikasi stakeholder. epic-0006 tetap
-  IN_PROGRESS (Stage B belum mulai, di luar scope Stage A ini). Stage B
-  (sub-task breakdown TL + SA) akan di-trigger di routing berikutnya
-  dengan comment hand-off ke System Analyst.
+
 - v4.9 (2026-08-02) — Tech Leader: epic-0005 **Stage H complete (DONE)**.
   Wake dari CI/CD hand-off comment — Stage F + H both complete:
   - **Stage F**: [PR #47](https://github.com/01persen/PersonalFinanceTrackerV2/pull/47)
@@ -770,6 +744,33 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
   Catatan entry epic-0005 (sub-task list update: 01–08 DONE, status
   8/8 + DEFECT-1 closed + 4/4 AC verified) + Riwayat entry v4.9.
   epic-0005 fully shipped.
+- v5.0 (2026-08-03) — Tech Leader (autopilot Stage A): sourced
+  epic-0008 → **IN_PROGRESS**. Branch `release/epic-0008` re-cut dari
+  `main` @ `622c87ddcccf67b3f41c3fe10fdc35d7d35cf924` (post epic-0005
+  squash-merge [PR #48](https://github.com/01persen/PersonalFinanceTrackerV2/pull/48)).
+  Stale local branch (HEAD `3b5b06b` dari prior source cycle) dihapus dulu
+  via `git branch -D release/epic-0008`; force-push ke
+  `origin/release/epic-0008` succeed via `--force-with-lease` (ruleset
+  release-branch-protection id `19763743` rule `[deletion]` saja — bukan
+  blocker). Parent issue [GRE-68](https://multica/issues/GRE-68) dibuat +
+  metadata dipin (`squad_id`, `release_branch=release/epic-0008`,
+  `base_sha=622c87ddcccf67b3f41c3fe10fdc35d7d35cf924`, `epic_doc_url`,
+  `tracker_url`, `prd_url`, `github_repo_url`, `project_folder`,
+  `tracker_version=v5.0`, `stage=A`). Assignee field belum ter-set
+  (workspace policy sama dengan v1.7/v2.5/v3.0/v4.2 — private leader tidak
+  bisa assign squad dengan private leader, fix via mention chain saat
+  Stage B). Tracker header v4.9 → v5.0 + table row epic-0008 status flipped
+  NOT_STARTED → IN_PROGRESS + Stage Plan entry Stage 2 epic-0008 di-update
+  + Catatan entry epic-0008 (Stage A complete) + Catatan entry epic-0009
+  dipindah ke bawah entry epic-0008 (urutan kronologis terbalik) +
+  Riwayat entry v5.0. Epic-0008 dipilih karena topmost eligible di tabel
+  setelah epic-0005 DONE — hanya butuh `epic-0001` (DONE). epic-0007
+  tetap blocked (butuh 0005 DONE + 0006 IN_PROGRESS). epic-0009 (BLOCKED
+  scope sempit) eligible paralel setelah epic-0008 sourced — di-handle
+  batch berikutnya atau setelah klarifikasi stakeholder. epic-0006 tetap
+  IN_PROGRESS (Stage B belum mulai, di luar scope Stage A ini). Stage B
+  (sub-task breakdown TL + SA) akan di-trigger di routing berikutnya
+  dengan comment hand-off ke System Analyst.
 - v5.1 (2026-08-03) — Tech Leader: **stakeholder prioritization override**
   per permintaan user (Greenendra) di issue GRE-2 thread autopilot
   sourcing question. **epic-0006, epic-0008, epic-0009 di-revert ke

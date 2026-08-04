@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import {
   DEBT_KIND_LABEL,
   DEBT_STATUS_LABEL,
@@ -25,6 +27,20 @@ interface DebtListProps {
   summaries: Map<string, DebtSummary>;
   /** `true` while the per-row summary fetches are still pending. */
   summariesLoading: boolean;
+  /** IDs whose `/summary` fetch is still in flight. */
+  pendingIds: ReadonlySet<string>;
+  /**
+   * IDs whose `/summary` fetch settled with a non-404 error. Rows in
+   * this set render an explicit failure state (skeleton, not "Rp 0")
+   * so the dashboard never flashes misleading zeros (DEF-1).
+   */
+  failedIds: ReadonlySet<string>;
+  /**
+   * Hide the "Catat cicilan" CTA. Used by the debts page when the
+   * payment form is intentionally unavailable (e.g. while sub-0006-02
+   * is still in-flight on FE). Defaults to `false` (CTA visible).
+   */
+  hidePaymentCta?: boolean;
 }
 
 interface KindBadgeStyles {
@@ -143,6 +159,7 @@ export function DebtList({
   summariesLoading,
   pendingIds,
   failedIds,
+  hidePaymentCta = false,
 }: DebtListProps) {
   const ordered = sortDebtsForDisplay(debts);
 
@@ -180,6 +197,7 @@ export function DebtList({
                 debt={debt}
                 summary={summary}
                 rowState={state}
+                hidePaymentCta={hidePaymentCta}
               />
             </li>
           );
@@ -198,9 +216,20 @@ interface DebtRowProps {
    * overlapping boolean flags.
    */
   rowState: "ready" | "loading" | "failed";
+  /**
+   * Hide the "Catat cicilan" CTA on the row. Used by the debts
+   * page when the payment form is intentionally unavailable.
+   * Defaults to `false` (CTA visible).
+   */
+  hidePaymentCta?: boolean;
 }
 
-function DebtRow({ debt, summary, rowState }: DebtRowProps) {
+function DebtRow({
+  debt,
+  summary,
+  rowState,
+  hidePaymentCta = false,
+}: DebtRowProps) {
   const kindBadge = KIND_BADGE_STYLES[debt.kind];
   const statusBadge = STATUS_BADGE_STYLES[debt.status];
   const monthly = debt.monthlyPaymentCents;
@@ -352,7 +381,65 @@ function DebtRow({ debt, summary, rowState }: DebtRowProps) {
           {debt.note}
         </p>
       ) : null}
+
+      <DebtRowActions
+        debtId={debt.id}
+        debtStatus={debt.status}
+        hidePaymentCta={hidePaymentCta}
+      />
     </article>
+  );
+}
+
+interface DebtRowActionsProps {
+  debtId: string;
+  debtStatus: DebtStatus;
+  hidePaymentCta: boolean;
+}
+
+/**
+ * Per-row action footer. Mirrors the layout used by the transactions
+ * / goals list rows so the same affordances surface everywhere:
+ *
+ *   - "Catat cicilan" (primary): only for `active` debts so the user
+ *     can't POST a payment on a closed debt (the BE rejects with 422
+ *     anyway, but the UI guard is friendlier).
+ *   - "Edit" (secondary): always available.
+ *
+ * Hidden when `hidePaymentCta` is set — the page uses this flag when
+ * the payment form is intentionally unavailable (e.g. while the BE
+ * branch is still in-flight on FE).
+ */
+function DebtRowActions({
+  debtId,
+  debtStatus,
+  hidePaymentCta,
+}: DebtRowActionsProps) {
+  const isPaidOff = debtStatus === "paid_off";
+  return (
+    <div
+      className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3"
+      data-testid={`debt-row-actions-${debtId}`}
+    >
+      {!hidePaymentCta && !isPaidOff ? (
+        <Link
+          href={`/debts/${encodeURIComponent(debtId)}/pay`}
+          className="btn-primary !w-auto px-3 py-1.5 text-xs"
+          aria-label="Catat cicilan"
+          data-testid={`debt-row-pay-${debtId}`}
+        >
+          + Catat cicilan
+        </Link>
+      ) : null}
+      <Link
+        href={`/debts/${encodeURIComponent(debtId)}/edit`}
+        className="btn-secondary !w-auto px-3 py-1.5 text-xs"
+        aria-label="Edit utang"
+        data-testid={`debt-row-edit-${debtId}`}
+      >
+        Edit
+      </Link>
+    </div>
   );
 }
 

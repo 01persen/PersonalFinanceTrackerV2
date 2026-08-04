@@ -7,12 +7,20 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
+from decimal import Decimal
 from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 from app.db.models.account import Account
-from app.db.models.enums import AccountType, CategoryKind, GoalKind, TransactionType
+from app.db.models.enums import (
+    AccountType,
+    CategoryKind,
+    DebtKind,
+    DebtStatus,
+    GoalKind,
+    TransactionType,
+)
 
 if TYPE_CHECKING:
     from app.db.models.user_preference import UserPreference
@@ -949,3 +957,288 @@ class GoalProgressPublic(BaseModel):
     achieved_at: datetime | None
     tabungan_bulanan_cents: int | None
     lama_mengumpulkan_bulan: int | None
+
+
+class DebtCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=120)
+    kind: DebtKind
+    principal_cents: int = Field(gt=0)
+    bunga_pct: Decimal = Field(ge=0, max_digits=7, decimal_places=4)
+    tenor_months: int | None = Field(default=None, gt=0)
+    start_date: date
+    note: str | None = Field(default=None, max_length=2000)
+    status: DebtStatus = DebtStatus.ACTIVE
+
+
+class DebtUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    kind: DebtKind | None = None
+    principal_cents: int | None = Field(default=None, gt=0)
+    bunga_pct: Decimal | None = Field(
+        default=None,
+        ge=0,
+        max_digits=7,
+        decimal_places=4,
+    )
+    tenor_months: int | None = Field(default=None, gt=0)
+    start_date: date | None = None
+    note: str | None = Field(default=None, max_length=2000)
+    status: DebtStatus | None = None
+
+    @model_validator(mode="after")
+    def _reject_null_required_fields(self) -> DebtUpdate:
+        for field in (
+            "name",
+            "kind",
+            "principal_cents",
+            "bunga_pct",
+            "start_date",
+            "status",
+        ):
+            if field in self.model_fields_set and getattr(self, field) is None:
+                raise ValueError(f"{field} may not be null")
+        return self
+
+
+class DebtPublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    user_id: uuid.UUID
+    name: str
+    kind: DebtKind
+    principal_cents: int
+    bunga_pct: float
+    tenor_months: int | None
+    start_date: date
+    monthly_payment_cents: int | None
+    note: str | None
+    status: DebtStatus
+    created_at: datetime
+    updated_at: datetime
+
+
+class DebtSummaryPublic(BaseModel):
+    """Response shape for ``GET /debts/{id}/summary`` (sub-0006-03).
+
+    Aggregates the flat-loan schedule with the persisted payment
+    ledger so the FE can render the dashboard card without a second
+    round-trip. All amounts are integer cents.
+
+    Fields:
+
+    * ``debt_id`` — echoes the path parameter for clients that batch
+      multiple summary calls and want to dedupe by id without parsing
+      the URL.
+    * ``remaining_principal_cents`` — ``principal_cents`` minus the
+      sum of every payment's ``principal_portion_cents`` (computed
+      at request time; see ``app.services.debt_calculator``).
+    * ``total_interest_paid_cents`` — sum of every payment's
+      ``interest_portion_cents``. ``0`` when no payments recorded yet.
+    * ``next_payment_due_date`` — ``start_date`` advanced by the
+      number of persisted payment rows, one month per row. ``null``
+      when there is no schedule (``tenor_months is None``) **or** the
+      debt is fully paid (no more installments owed). A paid-off debt
+      therefore surfaces both ``remaining_principal_cents == 0`` and
+      ``next_payment_due_date is None`` so the FE can badge the state
+      without a separate status check.
+    * ``months_remaining`` — ``tenor_months - payment_count``,
+      clamped to ``[0, tenor_months]``. ``null`` when ``tenor_months``
+      is ``None`` (no schedule). ``0`` when fully paid.
+
+    The flat-calculator contract is documented in the module
+    docstring of :mod:`app.services.debt_calculator` (rounding
+    convention + drift-avoidance note).
+    """
+
+    debt_id: uuid.UUID
+    remaining_principal_cents: int = Field(ge=0)
+    total_interest_paid_cents: int = Field(ge=0)
+    next_payment_due_date: date | None = None
+    months_remaining: int | None = Field(default=None, ge=0)
+
+
+# --- Debt payments (epic-0006, sub-0006-02) ----------------------------------
+
+
+class DebtPaymentCreate(BaseModel):
+    """Body for ``POST /debts/{debt_id}/payments``.
+
+    Each row is one cicilan — the user records when the payment happened,
+    the total amount, and how it splits between principal repayment and
+    interest. ``source_account_id`` is optional so a cash-in-hand payment
+    (no linked account) is a first-class case (spec AC).
+
+    Validation rules (per sub-0006-02 AC):
+
+    * ``occurred_on`` is a valid date — implicit via the ``date`` type.
+    * ``amount_cents`` must be ``> 0`` (Pydantic ``gt=0`` → 422).
+    * ``principal_portion_cents`` and ``interest_portion_cents`` must each
+      be ``>= 0`` (Pydantic ``ge=0`` → 422). The cross-field check that
+      the two portions sum to ``amount_cents`` runs in a model validator
+      so a 422 with a clear Pydantic error surfaces before the route.
+    * ``source_account_id`` (when set) must belong to the caller —
+      enforced in the route against the persisted ``accounts`` row (404
+      when missing or owned by another user, same pattern as the
+      transactions / goals routers).
+    * The route enforces that ``amount_cents`` does not exceed the
+      debt's remaining principal after summing the new payment with
+      any existing payment rows — overpayment is rejected with 422.
+    * The debt must be ``active`` — payments on a ``paid_off`` debt are
+      rejected with 422 (the spec calls out that the status moves to
+      ``paid_off`` exactly when remaining_principal = 0).
+
+    ``extra="forbid"`` so a client attempting to set server-controlled
+    fields (``id``, ``debt_id``, ``created_at``, ``updated_at``) gets a
+    422 with a clear Pydantic error before the route runs.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    occurred_on: date
+    amount_cents: int = Field(
+        gt=0,
+        description="Total cicilan amount in cents (positive integer). Zero or negative values are rejected.",
+    )
+    principal_portion_cents: int = Field(
+        ge=0,
+        description="Portion of the payment that reduces the remaining principal (cents, >= 0).",
+    )
+    interest_portion_cents: int = Field(
+        ge=0,
+        description="Portion of the payment counted as interest (cents, >= 0).",
+    )
+    source_account_id: uuid.UUID | None = Field(
+        default=None,
+        description="Optional FK to the account that funded the cicilan. Nullable so cash-in-hand payments are allowed.",
+    )
+    note: str | None = Field(default=None, max_length=2000)
+
+    @model_validator(mode="after")
+    def _check_portions_sum_to_amount(self) -> DebtPaymentCreate:
+        if self.principal_portion_cents + self.interest_portion_cents != self.amount_cents:
+            raise ValueError(
+                "principal_portion_cents + interest_portion_cents must equal amount_cents "
+                f"(got {self.principal_portion_cents} + {self.interest_portion_cents} = "
+                f"{self.principal_portion_cents + self.interest_portion_cents}, expected "
+                f"{self.amount_cents})"
+            )
+        return self
+
+
+class DebtPaymentUpdate(BaseModel):
+    """Body for ``PATCH /debts/{debt_id}/payments/{payment_id}`` — every field is optional.
+
+    Cross-field validation:
+
+    * When ``amount_cents`` AND any of the portion fields are provided,
+      the two portions must still sum to ``amount_cents`` (Pydantic
+      ``model_validator`` → 422).
+    * When only one portion is provided, the OTHER portion is left at
+      its persisted value — but the route enforces the final sum equals
+      ``amount_cents`` after the merge (422 when the new split doesn't
+      add up). The partial-portion case where the caller sends
+      ``amount_cents`` alone is also rejected (422) because we can't
+      silently rebalance the split.
+
+    ``source_account_id`` can be cleared by sending ``null``.
+    ``occurred_on`` is editable so a payment booked on the wrong day can
+    be corrected.
+
+    ``extra="forbid"`` rejects unknown / server-controlled fields
+    (``id``, ``debt_id``, ``created_at``, ``updated_at``).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    occurred_on: date | None = None
+    amount_cents: int | None = Field(
+        default=None,
+        gt=0,
+        description="Total cicilan amount in cents (positive integer). Zero or negative values are rejected.",
+    )
+    principal_portion_cents: int | None = Field(
+        default=None,
+        ge=0,
+        description="Portion that reduces the remaining principal (cents, >= 0).",
+    )
+    interest_portion_cents: int | None = Field(
+        default=None,
+        ge=0,
+        description="Portion counted as interest (cents, >= 0).",
+    )
+    source_account_id: uuid.UUID | None = Field(
+        default=None,
+        description="Optional FK to the funding account. Send null to clear the link.",
+    )
+    note: str | None = Field(default=None, max_length=2000)
+
+    @model_validator(mode="after")
+    def _check_portions_sum_when_all_provided(self) -> DebtPaymentUpdate:
+        # Only enforce the split rule when ALL THREE amount + portion
+        # fields are explicitly supplied by the caller. Partial edits
+        # (e.g. only ``note`` or only ``principal_portion_cents``) are
+        # merged with the persisted values inside the route, where the
+        # final ``amount_cents == principal + interest`` invariant is
+        # re-checked against the merged effective values (422 when the
+        # caller-supplied split can't reconcile with the existing
+        # ``amount_cents``).
+        if (
+            self.amount_cents is not None
+            and self.principal_portion_cents is not None
+            and self.interest_portion_cents is not None
+            and self.principal_portion_cents + self.interest_portion_cents != self.amount_cents
+        ):
+            raise ValueError(
+                "principal_portion_cents + interest_portion_cents must equal amount_cents "
+                f"(got {self.principal_portion_cents} + {self.interest_portion_cents} = "
+                f"{self.principal_portion_cents + self.interest_portion_cents}, expected "
+                f"{self.amount_cents})"
+            )
+        return self
+
+
+class DebtPaymentPublic(BaseModel):
+    """Output shape for a single ``debt_payments`` row.
+
+    Mirrors the columns on :class:`app.db.models.debt.DebtPayment`
+    directly via ``from_attributes=True``. ``source_account_id`` is
+    nullable — a row without a linked account surfaces ``null`` so the
+    FE can render a "Cash" badge instead of crashing on a missing FK.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    debt_id: uuid.UUID
+    occurred_on: date
+    amount_cents: int
+    principal_portion_cents: int
+    interest_portion_cents: int
+    source_account_id: uuid.UUID | None
+    note: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class DebtPaymentListPublic(BaseModel):
+    """Response envelope for ``GET /debts/{debt_id}/payments``.
+
+    Sorted with the most recent ``occurred_on`` first (descending) —
+    the FE "History Cicilan" view (sub-0006-06) expects that order —
+    followed by a deterministic tie-breaker chain on ``created_at``
+    desc and ``id`` asc. ``total`` is the unfiltered-by-page row count
+    for the caller so the FE can render pagination controls without a
+    second request. Default page size is 50 (matches the transactions
+    list endpoint — same client-side pagination primitive).
+    """
+
+    items: list[DebtPaymentPublic]
+    total: int
+    limit: int
+    offset: int
+

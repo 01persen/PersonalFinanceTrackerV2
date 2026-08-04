@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  use,
   useCallback,
   useEffect,
   useMemo,
@@ -43,13 +44,14 @@ import { AuthGuard } from "@/lib/auth/auth-guard";
 const DIRTY_LEAVE_MESSAGE = "Perubahan belum disimpan. Yakin ingin keluar?";
 
 interface PageProps {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 export default function EditTransactionPage({ params }: PageProps) {
+  const { id } = use(params);
   return (
     <AuthGuard>
-      <EditTransactionContent transactionId={params.id} />
+      <EditTransactionContent transactionId={id} />
     </AuthGuard>
   );
 }

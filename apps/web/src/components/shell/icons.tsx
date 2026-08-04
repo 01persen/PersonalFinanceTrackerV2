@@ -103,6 +103,22 @@ const actionPaths = {
       <path d="M10 5H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h5M14 8l4 4-4 4M18 12H8" />
     </>
   ),
+  /**
+   * Pagination chevrons used by the cicilan history pagination
+   * (sub-0006-06). Added here so the action-icon surface stays
+   * flat — pages import `ActionIcon` only, no separate chevron
+   * component, no extra dependency on an icon library.
+   */
+  "chevron-left": (
+    <>
+      <path d="M14 6 8 12l6 6" />
+    </>
+  ),
+  "chevron-right": (
+    <>
+      <path d="m10 6 6 6-6 6" />
+    </>
+  ),
 } satisfies Record<string, ReactNode>;
 
 export function ActionIcon({

@@ -130,9 +130,9 @@ def test_full_graph_roundtrip(session: Session) -> None:
     debt = Debt(
         user_id=user.id,
         name="KPR",
-        kind=DebtKind.MORTGAGE,
+        kind=DebtKind.KPR,
         principal_cents=120_000_000_00,
-        interest_rate=0.0875,
+        bunga_pct=8.75,
         tenor_months=240,
         start_date=__import__("datetime").date(2024, 1, 1),
         status=DebtStatus.ACTIVE,

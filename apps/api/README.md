@@ -75,6 +75,28 @@ cicilan yang principal portionnya lebih besar dari sisa principal ditolak 422
 (overpayment). `source_account_id` opsional (nullable FK ke `accounts.id`)
 sehingga cicilan tunai tanpa akun tetap valid.
 
+## Export endpoints
+
+sub-0008-01 — CSV export untuk transaksi user. Endpoint ini menghasilkan
+file yang siap dibuka di spreadsheet (LibreOffice / Excel / pandas)
+tanpa perlu transformasi tambahan.
+
+| Method | Path | Auth   | Response                                  |
+|--------|------|--------|-------------------------------------------|
+| GET    | `/api/v1/export/transactions.csv` | Bearer | `text/csv; charset=utf-8`, attachment `transactions-YYYY-MM-DD.csv` |
+
+Header kolom (urutan *locked*): `id,occurred_on,type,amount_idr,account,category,note`.
+
+* `amount_idr` adalah integer IDR (bukan cents — `amount_cents // 100`),
+  supaya match langsung dengan spreadsheet `uangplanner.com`.
+* `occurred_on` format ISO `YYYY-MM-DD`. `type` lowercase enum (`income`,
+  `expense`, `transfer`). `account` / `category` adalah nama (bukan UUID).
+* Line terminator `\r\n` (RFC 4180), encoding UTF-8 (tanpa BOM — supaya
+  `pandas.read_csv` tidak salah baca header jadi `\ufeffid`).
+* Soft-deleted rows (`deleted_at IS NOT NULL`) di-exclude — baris yang
+  sudah dihapus di UI tidak muncul lagi di export.
+* Empty result tetap mengirim header row supaya parser tidak crash.
+
 ## Schema & migrations
 
 ORM models ada di `src/app/db/models/`. Initial migration: `cd96a512ab4a_initial_schema`

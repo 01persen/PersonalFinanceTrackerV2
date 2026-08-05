@@ -48,6 +48,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterator
+from typing import NoReturn
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
 from sqlalchemy import select
@@ -172,7 +173,7 @@ def _load_preference_for_update(db: Session, *, user_id: str) -> UserPreference 
     ).scalar_one_or_none()
 
 
-def _raise_412_precondition_failed(*, current_version: int) -> None:
+def _raise_412_precondition_failed(*, current_version: int) -> NoReturn:
     """Raise a 412 with the *current* ETag header so the FE can re-fetch + retry.
 
     Centralised so both the pre-commit If-Match check and the
@@ -180,6 +181,14 @@ def _raise_412_precondition_failed(*, current_version: int) -> None:
     response shape (same status, same header, same body key) --
     callers can't accidentally drift the wire contract between the
     two surface points.
+
+    Annotated ``-> NoReturn`` so mypy strict narrows ``T | None``
+    arguments to ``T`` in the caller's code path (the function
+    provably never returns, so the post-call branch is the only
+    remaining live branch). This was the regression in PR #62 --
+    without the ``NoReturn`` annotation, mypy couldn't tell that the
+    helper always raises and so couldn't narrow ``current: UserPreference
+    | None`` to ``UserPreference`` for the next call.
     """
     raise HTTPException(
         status_code=status.HTTP_412_PRECONDITION_FAILED,

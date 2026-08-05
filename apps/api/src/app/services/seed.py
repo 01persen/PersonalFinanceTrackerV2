@@ -25,6 +25,12 @@ DEFAULT_CURRENCY = "IDR"
 DEFAULT_EMERGENCY_FUND_MULTIPLIER = 3
 DEFAULT_DEPENDENTS_COUNT = 1
 DEFAULT_THEME = "system"
+# ``week_start`` enum-locked on the API layer; default matches PRD §14
+# ("senin"). The DB column stays a free string so a future locale-specific
+# day name can be added without a migration.
+DEFAULT_WEEK_START = "senin"
+DEFAULT_DISPLAY_NAME: str | None = None
+DEFAULT_PREFERENCES_VERSION = 1
 
 # Top-level (parent) expense category names that group the leaf categories
 # under them. Anything not listed here is treated as a root category.
@@ -173,6 +179,9 @@ def _seed_default_preferences(db: Session, *, user_id: uuid.UUID) -> UserPrefere
         emergency_fund_multiplier=DEFAULT_EMERGENCY_FUND_MULTIPLIER,
         dependents_count=DEFAULT_DEPENDENTS_COUNT,
         theme=DEFAULT_THEME,
+        week_start=DEFAULT_WEEK_START,
+        display_name=DEFAULT_DISPLAY_NAME,
+        version=DEFAULT_PREFERENCES_VERSION,
     )
     db.add(pref)
     db.flush()

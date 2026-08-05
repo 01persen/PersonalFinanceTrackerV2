@@ -171,3 +171,48 @@ Restore manual dilakukan dengan mengekstrak ZIP, memverifikasi CRC/SHA manifest,
 memuat `transactions.json` berurutan: user, accounts, categories, transactions, goals,
 debts, dan nested debt payments. Pertahankan ID dan timestamp agar checksum snapshot
 hasil restore identik.
+
+## Settings endpoint (sub-0008-03)
+
+Primary settings surface untuk FE settings page — bundled profile (`email`,
+`display_name`) + preferensi (`currency`, `locale`, `week_start`,
+`ef_multiplier`, plus `dependents_count` / `theme` legacy) dalam satu response.
+
+| Method | Path | Auth | Body / Response |
+|--------|------|------|-----------------|
+| GET    | `/api/v1/settings`        | Bearer | — → `SettingsPublic` + `ETag: "<version>"` |
+| PATCH  | `/api/v1/settings`        | Bearer + `If-Match: "<version>"` | `SettingsUpdate` → `SettingsPublic` (200) |
+
+* GET auto-create row jika user legacy tidak punya `user_preferences` row
+  (AC (a), seed defaults: `currency=IDR`, `locale=id-ID`, `week_start="senin"`,
+  `ef_multiplier=3`, `dependents_count=1`, `theme="system"`).
+* Response selalu berisi field `version: int` di body dan header
+  `ETag: "<version>"` (AC (c)). FE harus round-trip version di header
+  `If-Match` pada PATCH berikutnya.
+* PATCH dengan `If-Match` stale → `412 Precondition Failed` dengan `ETag`
+  header berisi version terkini (AC (e)). FE refresh + retry.
+
+### Validation matrix (AC (b), 422 per field)
+
+| Field | Whitelist / constraint |
+|-------|------------------------|
+| `currency` | `"IDR"` (MVP single-currency, hard-reject selainnya) |
+| `locale` | `"id-ID"` (locked) |
+| `week_start` | `"senin"`, `"selasa"`, `"rabu"`, `"kamis"`, `"jumat"`, `"sabtu"`, `"minggu"` |
+| `ef_multiplier` | integer, `>= 1` (PRD §14, default 3) |
+| `display_name` | string ≤ 100 chars, atau `null` untuk clear |
+
+Field tidak dikenal → 422 via `extra="forbid"`. Snapshot semantics:
+`ef_multiplier` dibaca hanya saat EF goal *creation*
+(`compute_ef_target_snapshot_cents` di `app.services.goal_engine`); edit
+settings tidak re-derive EF goal yang sudah ada — mirror sub-0005-02.
+
+### If-Match parsing
+
+* `If-Match: "3"` (RFC-quoted strong validator, recommended) →
+  matches version=3.
+* `If-Match: 3` (unquoted) → ditoleransi (sama dengan quoted).
+* `If-Match: *` → wildcard, matches versi manapun (RFC 9110).
+* `If-Match: <other>` → 400 (parse failure).
+* `If-Match` tidak dikirim → diperlakukan sebagai match versi terkini
+  (back-compat dengan client yang belum round-trip ETag).

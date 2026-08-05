@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     jwt_access_token_expire_minutes: int = 60
     jwt_refresh_token_expire_days: int = 14
 
+    export_hash_salt: str = ""
+
     cors_origins: str = "http://localhost:3000"
 
     @property

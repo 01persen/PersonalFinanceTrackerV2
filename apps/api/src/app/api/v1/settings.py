@@ -48,10 +48,12 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterator
+from typing import NoReturn
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.exc import StaleDataError
 
 from app.api.schemas import SettingsPublic, SettingsUpdate
 from app.api.v1.auth import get_current_user
@@ -171,6 +173,30 @@ def _load_preference_for_update(db: Session, *, user_id: str) -> UserPreference 
     ).scalar_one_or_none()
 
 
+def _raise_412_precondition_failed(*, current_version: int) -> NoReturn:
+    """Raise a 412 with the *current* ETag header so the FE can re-fetch + retry.
+
+    Centralised so both the pre-commit If-Match check and the
+    post-commit ``StaleDataError`` recovery path raise the exact same
+    response shape (same status, same header, same body key) --
+    callers can't accidentally drift the wire contract between the
+    two surface points.
+
+    Annotated ``-> NoReturn`` so mypy strict narrows ``T | None``
+    arguments to ``T`` in the caller's code path (the function
+    provably never returns, so the post-call branch is the only
+    remaining live branch). This was the regression in PR #62 --
+    without the ``NoReturn`` annotation, mypy couldn't tell that the
+    helper always raises and so couldn't narrow ``current: UserPreference
+    | None`` to ``UserPreference`` for the next call.
+    """
+    raise HTTPException(
+        status_code=status.HTTP_412_PRECONDITION_FAILED,
+        detail=(f"If-Match version is stale; current settings version is {current_version}"),
+        headers={"ETag": f'"{current_version}"'},
+    )
+
+
 def _attach_etag(response: Response, *, version: int) -> None:
     """Stamp the strong ``ETag`` header onto the response.
 
@@ -267,14 +293,11 @@ def update_my_settings(
         # the *stale* case.)
         requested_version = pref.version
     if requested_version != pref.version:
-        raise HTTPException(
-            status_code=status.HTTP_412_PRECONDITION_FAILED,
-            detail=(
-                "If-Match version is stale; current settings version is "
-                f"{pref.version}, got {requested_version}"
-            ),
-            headers={"ETag": f'"{pref.version}"'},
-        )
+        # Pre-commit If-Match miss: the row is still pointing at the
+        # version we loaded under the row lock, so we know the FE's
+        # view is stale. Surface 412 with that exact version so the
+        # FE can refresh and retry without a wasted round-trip.
+        _raise_412_precondition_failed(current_version=pref.version)
 
     data = payload.model_dump(exclude_unset=True)
     if "ef_multiplier" in data:
@@ -288,7 +311,31 @@ def update_my_settings(
     # ``updated_at`` write from ``TimestampMixin`` so clients holding a
     # cached GET see both signals on the next read.
     pref.version = pref.version + 1
-    db.commit()
+    try:
+        db.commit()
+    except StaleDataError:
+        # Concurrent writer beat us to the row between the row-lock
+        # read and the commit. PostgreSQL's ``SELECT ... FOR UPDATE``
+        # blocks contending writers so this branch only fires under
+        # connection-isolated test engines (SQLite StaticPool) or
+        # pathological Postgres setups that don't enforce the lock;
+        # in either case the *observable* contract is the same: a
+        # 412 with the bumped ``ETag`` so the FE can refresh and
+        # retry -- never a leaked 500.
+        db.rollback()
+        # Re-read the row in a fresh transaction so the caller sees
+        # the *post-race* version, not the row we held in the
+        # rolled-back session.
+        current = db.execute(
+            select(UserPreference).where(UserPreference.user_id == current_user.id)
+        ).scalar_one_or_none()
+        if current is None:
+            # Defensive: row vanished mid-PATCH. Surface 412 with
+            # the seed-default version so the FE refetches and
+            # picks up whatever the seed module produces next.
+            _raise_412_precondition_failed(current_version=DEFAULT_PREFERENCES_VERSION)
+        _raise_412_precondition_failed(current_version=current.version)
+
     db.refresh(pref)
 
     body = SettingsPublic.from_user_and_preference(current_user, pref)

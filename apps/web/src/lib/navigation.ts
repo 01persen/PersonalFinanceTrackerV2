@@ -82,7 +82,12 @@ export const navigationItems: readonly NavigationItem[] = [
     href: "/settings",
     description: "Kelola preferensi, ekspor, dan backup data.",
     icon: "settings",
-    available: false,
+    // sub-0008-04 ships the settings page (profile + preferensi form,
+    // optimistic + rollback pattern, ETag-driven re-fetch). Export +
+    // backup actions land in sub-0008-05 (Stage 4 parallel) but the
+    // sidebar entry is flipped available from this commit forward so
+    // users can navigate to /settings.
+    available: true,
   },
   {
     label: "Tagihan berulang",

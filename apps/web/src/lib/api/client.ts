@@ -106,9 +106,30 @@ export interface RequestOptions {
   body?: unknown;
   accessToken?: string | null;
   signal?: AbortSignal;
+  /**
+   * Extra request headers merged into the default set. Used by the
+   * settings client to forward the optimistic-concurrency
+   * `If-Match` header on PATCH /settings (sub-0008-04).
+   */
+  headers?: Record<string, string>;
+}
+
+export interface ApiResponse<T> {
+  data: T;
+  headers: Headers;
 }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  // Maintain backward compatibility — `apiRequestWithHeaders` is the
+  // response-aware variant used by sub-0008-04 (settings ETag).
+  const result = await apiRequestWithHeaders<T>(path, options);
+  return result.data;
+}
+
+export async function apiRequestWithHeaders<T>(
+  path: string,
+  options: RequestOptions = {},
+): Promise<ApiResponse<T>> {
   const headers: Record<string, string> = {
     Accept: "application/json",
   };
@@ -120,6 +141,12 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   const accessToken = options.accessToken ?? tokenStore.getAccessToken();
   if (accessToken) {
     headers.Authorization = `Bearer ${accessToken}`;
+  }
+
+  if (options.headers) {
+    for (const [key, value] of Object.entries(options.headers)) {
+      headers[key] = value;
+    }
   }
 
   const response = await fetch(buildUrl(path), {
@@ -135,10 +162,11 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   }
 
   if (response.status === 204) {
-    return undefined as T;
+    return { data: undefined as T, headers: response.headers };
   }
 
-  return (await response.json()) as T;
+  const data = (await response.json()) as T;
+  return { data, headers: response.headers };
 }
 
 export async function registerRequest(payload: { email: string; password: string }): Promise<TokenPair> {

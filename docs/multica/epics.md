@@ -1,6 +1,6 @@
 # Project Tracker — Personal Finance Tracker
 
-> **Status:** v5.8 (2026-08-05) — epic-0001 **DONE** (8/8); epic-0002 **DONE** (7/7 sub-task
+> **Status:** v5.9 (2026-08-05) — epic-0001 **DONE** (8/8); epic-0002 **DONE** (7/7 sub-task
 > + Stage 5 release fixup complete; [PR #18](https://github.com/01persen/PersonalFinanceTrackerV2/pull/18)
 > merged ke `main` pada 2026-07-27 13:06 UTC, CI hijau `api quality` + `web quality`).
 > epic-0003 **DONE** (8/8 sub-task + Stage H squash-merged ke `main`).
@@ -92,6 +92,18 @@
 > `stage=A`) + Catatan + Riwayat entry + force-push.
 > Stage B (SA breakdown Epic Detail Doc → sub-task list) akan di-trigger
 > berikutnya dengan mention ke System Analyst.
+> **epic-0008 Stage B complete** (v5.9 — Tech Leader 2026-08-05,
+> post Stage A): System Analyst reply breakdown → 6 sub-task di 5 stage
+> aktif (Stage 1 BE export paralel → Stage 2 BE settings → Stage 3 FE
+> settings → Stage 4 FE export/backup buttons → Stage 5 QA integration).
+> TL create 6 sub-issue: sub-0008-01 (GRE-85, BE, Stage 1 `todo`),
+> sub-0008-02 (GRE-86, BE, Stage 1 `todo`), sub-0008-03 (GRE-87, BE,
+> Stage 2 `backlog`), sub-0008-04 (GRE-88, FE, Stage 3 `backlog`),
+> sub-0008-05 (GRE-89, FE, Stage 4 `backlog`), sub-0008-06 (GRE-90,
+> QA, Stage 5 `backlog`). Backend Engineer triggered paralel untuk
+> Stage 1 kickoff (sub-0008-01 + sub-0008-02). Stage 2-5 promoted
+> bertahap per Stage G auto-progress. Stage H sub-task (CI/CD merge +
+> TL finalization) akan di-create saat Stage 5 close.
 > **Owner:** Tech Leader (Engineering Squad)
 
 Tracker mengikuti urutan dependency graph (bukan urgency bisnis), sesuai SOP.
@@ -128,7 +140,7 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
 ## Stage Plan (saat eksekusi dimulai)
 
 - **Stage 1:** epic-0001 (Foundation) — **DONE**
-- **Stage 2:** epic-0002 + epic-0008 (paralel — keduanya butuh 0001) — epic-0008 **IN_PROGRESS** (v5.8 Stage A complete 2026-08-05)
+- **Stage 2:** epic-0002 + epic-0008 (paralel — keduanya butuh 0001) — epic-0008 **IN_PROGRESS** (v5.8 Stage A + v5.9 Stage B complete 2026-08-05; 6 sub-task created, Stage 1 in-flight paralel)
 - **Stage 3:** epic-0003
 - **Stage 4 (paralel):** epic-0004 + epic-0005 + epic-0006
 - **Stage 5:** epic-0007
@@ -299,10 +311,10 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
     label gate auto-merge, tanpa branch protection required status checks).
   - ✅ sub-0001-08 — Default seed data (PR #9 merged; seed ke trigger register).
 - epic **0008** sekarang **IN_PROGRESS** (v5.8 Tech Leader Stage A
-  complete 2026-08-05, post epic-0006 DONE — histori v5.1 stakeholder
-  revert 2026-08-03 + v5.0 autopilot Stage A 2026-08-03 reverted).
-  Re-source cycle v5.8:
-  - **Stage A — Tech Leader** (turn ini): branch `release/epic-0008`
+  + v5.9 Tech Leader Stage B complete 2026-08-05, post epic-0006 DONE
+  — histori v5.1 stakeholder revert 2026-08-03 + v5.0 autopilot Stage A
+  2026-08-03 reverted). Re-source cycle v5.8:
+  - **Stage A — Tech Leader** (v5.8): branch `release/epic-0008`
     di-re-cut dari `main` HEAD `5a97bab` (post epic-0006 Stage H.2 fixup
     tracker v5.7 + PR #57 squash-merge `752e034`). Local stale branch
     dari v5.0 cycle (HEAD `dc546d0`) sudah dihapus oleh autopilot
@@ -315,22 +327,33 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
     `release_branch=release/epic-0008`, `base_sha=5a97bab`,
     `epic_doc_url`, `tracker_url`, `prd_url`, `github_repo_url`,
     `project_folder`, `tracker_version=v5.8`, `stage=A`) + flip parent
-    status `todo → in_progress` di turn ini.
-  - **Stage B** (next): Tech Leader mention System Analyst untuk
-    breakdown Epic Detail Doc `docs/product/epics/epic-0008-export-backup-and-settings.md`
-    → sub-task list. Ringkasan Epic Detail Doc: BE 3 endpoint
-    (export CSV, export JSON, backup zip) + BE GET/PATCH `/settings`
-    + FE halaman settings + FE tombol Export CSV/JSON + Download Backup.
-    Estimasi: 5 sub-task di 3-4 stage aktif (Stage 1 BE export, Stage 2
-    BE settings, Stage 3 FE settings + export/backup buttons, Stage 4 QA
-    integration).
+    status `todo → in_progress` di v5.8 turn.
+  - **Stage B — System Analyst + Tech Leader** (v5.9, this turn): SA
+    breakdown Epic Detail Doc
+    `docs/product/epics/epic-0008-export-backup-and-settings.md`
+    → **6 sub-task di 5 stage aktif** (per SA rekomendasi, tambahkan
+    sub-0008-06 QA integration untuk konsistensi pattern SOP
+    epic-0004/0005/0006). TL create 6 sub-issue:
+    - [ ] **sub-0008-01** — BE: `GET /export/transactions.csv` → Stage 1 (paralel), Backend Engineer, `todo`, [GRE-85](https://multica/issues/GRE-85), risk **high**. Branch base `release/epic-0008` HEAD `24e57d5`, cut `feat/sub-0008-01-export-csv`. AC: (a) Content-Type CSV + filename `transactions-YYYY-MM-DD.csv`; (b) spreadsheet-readable + pandas `read_csv` clean; (c) soft-delete excluded; (d) empty result tetap header row; (e) 401 tanpa JWT. `amount_idr` integer (lock per SA).
+    - [ ] **sub-0008-02** — BE: `GET /export/transactions.json` + `GET /export/backup.zip` → Stage 1 (paralel), Backend Engineer, `todo`, [GRE-86](https://multica/issues/GRE-86), risk **high**. Branch base `release/epic-0008` HEAD `24e57d5`, cut `feat/sub-0008-02-export-json-zip`. AC: (a) JSON full snapshot soft-delete-aware; (b) ZIP CRC32 verifiable; (c) restore round-trip; (d) auth required; (e) manifest deterministic SHA-256.
+    - [ ] **sub-0008-03** — BE: `GET/PATCH /settings` → Stage 2, Backend Engineer, `backlog`, [GRE-87](https://multica/issues/GRE-87), risk **high**. AC: (a) GET first-time return default PRD §14; (b) PATCH invalid → 422 per field; (c) PATCH success return new ETag/version; (d) GET reflect tanpa restart; (e) race PATCH stale ETag → 412 + GET during PATCH no partial state.
+    - [ ] **sub-0008-04** — FE: UI Settings (profil + preferensi) → Stage 3, Frontend Engineer, `backlog`, [GRE-88](https://multica/issues/GRE-88), risk med. Hard-dep sub-0008-03. AC: (a) form populated + skeleton loading; (b) save disabled saat invalid; (c) success toast; (d) error rollback; (e) settings ter-apply session berikutnya; (f) double-submit guard.
+    - [ ] **sub-0008-05** — FE: Tombol Export CSV / Export JSON / Download Backup → Stage 4, Frontend Engineer, `backlog`, [GRE-89](https://multica/issues/GRE-89), risk med. Hard-dep sub-0008-01 + sub-0008-02. AC: (a) filename sesuai BE contract; (b) loading spinner per tombol; (c) success save; (d) 401 redirect `/login`; (e) 5xx/network retry; (f) double-click guard.
+    - [ ] **sub-0008-06** — QA: Integration + e2e + re-verify Epic AC → Stage 5, QA Tester, `backlog`, [GRE-90](https://multica/issues/GRE-90), risk **high**. Hard-dep sub-0008-01..05. AC: (a) CSV pandas+openpyxl clean; (b) JSON re-import preserve; (c) ZIP restore identik; (d) settings validation FE↔BE konsisten; (e) Epic AC 3/3 PASS end-to-end.
+    - **High-risk area (wajib Stage D "Needs QA")**: (i) CSV format contract (konsisten spreadsheet parser user — `amount_idr` integer lock); (ii) ZIP integrity + restore round-trip (bukan hanya extract); (iii) settings GET/PATCH race (ETag 412 + no partial state); (iv) settings payload validation (currency IDR hard-reject, locale id-ID, week_start enum senin..minggu, ef_multiplier ≥ 1).
+    - **Filename contract (lock)**: `transactions-YYYY-MM-DD.csv`, `transactions-YYYY-MM-DD.json`, `backup-YYYY-MM-DD.zip`.
+    - **Paralelisme**: Stage 1 (sub-01+sub-02 BE paralel); Stage 3+4 FE paralel setelah BE contract siap; Stage 5 setelah semua impl DONE.
+    - **Out-of-scope tetap**: backup terjadwal otomatis, sync cloud, restore wizard (cukup dokumentasi manual restore MVP).
   - **Stage C–F**: Backend Engineer + Frontend Engineer + QA Tester
-    + CI/CD Engineer eksekusi.
-  - **Stage G**: TL auto-progress per sub-task completion.
-  - **Stage H**: CI/CD merge `release/epic-0008 → main` + TL cross-check
-    Epic AC + close parent. Tag `v0.8.0` di-cut dari `main` HEAD
-    (Export, Backup & Settings milestone).
-  - Sub-task status: **0/5 backlog** (akan di-breakdown Stage B).
+    + CI/CD Engineer eksekusi (Stage 1 sudah triggered paralel).
+  - **Stage G**: TL auto-progress per sub-task completion (promote
+    Stage 2 setelah Stage 1 close, dst.).
+  - **Stage H** (post Stage 5): sub-0008-07 CI/CD merge + sub-0008-08
+    TL finalization + cross-check Epic AC 3/3 + close parent. Tag
+    `v0.8.0` di-cut dari `main` HEAD (Export, Backup & Settings
+    milestone).
+  - Sub-task status: **0/6 DONE**, **2/6 in-flight** (Stage 1 paralel
+    Backend Engineer), **4/6 backlog** (Stage 2-5 promoted bertahap).
   Epic-0008 dipilih karena topmost eligible di tabel setelah epic-0006
   DONE — hanya butuh `epic-0001` (DONE). epic-0007 (Networth Dashboard)
   eligible paralel atas permintaan stakeholder, tapi epic-0008 lebih
@@ -980,4 +1003,29 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
   (Export & Settings, sekarang IN_PROGRESS) eligible paralel; epic-0008
   diprioritaskan karena lebih sederhana (BE data export + FE read-only,
   tidak butuh visualisasi dashboard kompleks) — epic-0007 menyusul
+  setelah epic-0008 Stage H.
+- v5.9 (2026-08-05) — Tech Leader: **epic-0008 Stage B complete
+  (6 sub-task created, Stage 1 in-flight paralel)**, post Stage A
+  (v5.8) + System Analyst breakdown reply. SA breakdown Epic Detail
+  Doc `docs/product/epics/epic-0008-export-backup-and-settings.md`
+  jadi **6 sub-task di 5 stage aktif** (per SA rekomendasi — tambahkan
+  sub-0008-06 QA integration untuk konsistensi SOP pattern epic-0004/0005/0006):
+  - **Stage 1 paralel** (BE export, high-risk, Backend Engineer triggered):
+    - sub-0008-01 [GRE-85](https://multica/issues/GRE-85) `GET /export/transactions.csv` — `todo`.
+    - sub-0008-02 [GRE-86](https://multica/issues/GRE-86) `GET /export/transactions.json` + `/export/backup.zip` — `todo`.
+  - **Stage 2** (BE settings, high-risk, `backlog`): sub-0008-03 [GRE-87](https://multica/issues/GRE-87) `GET/PATCH /settings`.
+  - **Stage 3** (FE settings, med-risk, `backlog`): sub-0008-04 [GRE-88](https://multica/issues/GRE-88) UI Settings — hard-dep sub-03.
+  - **Stage 4** (FE export buttons, med-risk, `backlog`): sub-0008-05 [GRE-89](https://multica/issues/GRE-89) Tombol Export CSV/JSON/Backup — hard-dep sub-01+02.
+  - **Stage 5** (QA integration, high-risk, `backlog`): sub-0008-06 [GRE-90](https://multica/issues/GRE-90) QA integration + e2e + re-verify Epic AC.
+  - **High-risk area (lock di sub-task description)**: (i) CSV format contract `amount_idr` integer + UTF-8 + date ISO; (ii) ZIP integrity CRC32 + restore round-trip; (iii) settings GET/PATCH race ETag 412 + no partial state; (iv) settings payload validation enum whitelist.
+  - **Filename contract (lock)**: `transactions-YYYY-MM-DD.csv`, `transactions-YYYY-MM-DD.json`, `backup-YYYY-MM-DD.zip`.
+  - **Paralelisme**: Stage 1 BE paralel sub-01+02 (Backend Engineer triggered); Stage 3+4 FE paralel setelah BE contract siap; Stage 5 promoted setelah Stage 4 close.
+  - **Stage H sub-task** (sub-0008-07 CI/CD merge + sub-0008-08 TL finalization) akan di-create saat Stage 5 close, mirror pattern epic-0005 (sub-0005-07 + sub-0005-08).
+  - **Tracker updates**: header `v5.8 → v5.9` + epic-0008 IN_PROGRESS summary block + Stage Plan line 131 di-update (Stage B complete note) + Catatan entry epic-0008 expanded dengan 6 sub-task checklist (sub-0008-01..06) + high-risk area + filename contract + Riwayat entry v5.9 (entry ini).
+  - **Stage 1 kickoff**: Backend Engineer triggered paralel via Stage B hand-off comment di parent [GRE-84](https://multica/issues/GRE-84) — sub-0008-01 + sub-0008-02 akan di-PROMOTE ke `in_progress` oleh BE kickoff (status auto-flip saat assignee trigger). Stage 2 (sub-0008-03) bisa paralel jika BE bandwidth cukup (tidak dependent ke sub-01/02); default serial setelah Stage 1.
+  - **Stage G plan**: TL auto-progress per sub-task completion — promote Stage 2 setelah Stage 1 close, Stage 3+4 setelah BE contract siap, Stage 5 setelah Stage 4 close.
+  - **Sub-task status snapshot**: 0/6 DONE, 2/6 in-flight (Stage 1 paralel), 4/6 backlog (Stage 2-5 promoted bertahap).
+  Tracker bumped `v5.8 → v5.9`. epic-0008 Stage C–F eksekusi
+  in-flight (Backend Engineer triggered untuk Stage 1); Stage G auto-progress
+  aktif; Stage H akan di-trigger setelah Stage 5 close.
   setelah epic-0008 Stage H.

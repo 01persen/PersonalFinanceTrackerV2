@@ -1,6 +1,6 @@
 # Project Tracker — Personal Finance Tracker
 
-> **Status:** v5.7 (2026-08-04) — epic-0001 **DONE** (8/8); epic-0002 **DONE** (7/7 sub-task
+> **Status:** v5.8 (2026-08-05) — epic-0001 **DONE** (8/8); epic-0002 **DONE** (7/7 sub-task
 > + Stage 5 release fixup complete; [PR #18](https://github.com/01persen/PersonalFinanceTrackerV2/pull/18)
 > merged ke `main` pada 2026-07-27 13:06 UTC, CI hijau `api quality` + `web quality`).
 > epic-0003 **DONE** (8/8 sub-task + Stage H squash-merged ke `main`).
@@ -76,6 +76,22 @@
 > (dependency `0003 + 0005 + 0006` semua DONE). epic-0008 (Export &
 > Settings) + epic-0009 (Recurring, BLOCKED scope sempit) tetap
 > NOT_STARTED — eligible paralel atas permintaan stakeholder.
+> **epic-0008 sekarang IN_PROGRESS** (v5.8 — Tech Leader Stage A
+> complete 2026-08-05, post epic-0006 DONE): branch `release/epic-0008`
+> re-cut dari `main` HEAD `5a97bab` (post epic-0006 Stage H.2 fixup
+> tracker v5.7), stale remote branch `origin/release/epic-0008` (v5.0
+> cycle, HEAD `dc546d0`) di-replace via `--force-with-lease` (ruleset
+> `release-branch-protection` id `19763743` rule `[deletion]` saja —
+> bukan blocker). Parent issue [GRE-84](https://multica/issues/GRE-84)
+> dibuat oleh autopilot GRE-83 (Stage A minimal — create parent +
+> update tracker table), TL complete Stage A dengan metadata pin
+> (`squad_id`, `release_branch=release/epic-0008`,
+> `base_sha=5a97bab`, `epic_doc_url`,
+> `tracker_url=docs/multica/epics.md`, `prd_url=docs/prd.md`,
+> `github_repo_url`, `project_folder`, `tracker_version=v5.8`,
+> `stage=A`) + Catatan + Riwayat entry + force-push.
+> Stage B (SA breakdown Epic Detail Doc → sub-task list) akan di-trigger
+> berikutnya dengan mention ke System Analyst.
 > **Owner:** Tech Leader (Engineering Squad)
 
 Tracker mengikuti urutan dependency graph (bukan urgency bisnis), sesuai SOP.
@@ -92,7 +108,7 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
 | epic-0005 | Goal Trackers (Saving & Emergency Fund) | P-CORE | **DONE** | 0002, 0003 | Backend + Frontend |
 | epic-0006 | Debt Tracker | P-CORE | **DONE** | 0002 | Backend + Frontend |
 | epic-0007 | Networth, Dashboard & Visualization | P-CORE | NOT_STARTED | 0003, 0005, 0006 | Frontend + Backend |
-| epic-0008 | Export, Backup & Settings | P-ENHANCEMENT | NOT_STARTED | 0001 | Backend + Frontend |
+| epic-0008 | Export, Backup & Settings | P-ENHANCEMENT | **IN_PROGRESS** | 0001 | Backend + Frontend |
 | epic-0009 | Recurring Transaction & Reminder (narrow) | P-ENHANCEMENT | NOT_STARTED | 0003 | Backend + Frontend |
 
 ## Dependency Graph
@@ -112,7 +128,7 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
 ## Stage Plan (saat eksekusi dimulai)
 
 - **Stage 1:** epic-0001 (Foundation) — **DONE**
-- **Stage 2:** epic-0002 + epic-0008 (paralel — keduanya butuh 0001) — epic-0008 NOT_STARTED (v5.1 revert per stakeholder prioritization)
+- **Stage 2:** epic-0002 + epic-0008 (paralel — keduanya butuh 0001) — epic-0008 **IN_PROGRESS** (v5.8 Stage A complete 2026-08-05)
 - **Stage 3:** epic-0003
 - **Stage 4 (paralel):** epic-0004 + epic-0005 + epic-0006
 - **Stage 5:** epic-0007
@@ -282,13 +298,49 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
   - ✅ sub-0001-07 — CI/CD skeleton (PR #8 merged via Option B: local pre-commit +
     label gate auto-merge, tanpa branch protection required status checks).
   - ✅ sub-0001-08 — Default seed data (PR #9 merged; seed ke trigger register).
-- epic **0008** sekarang **NOT_STARTED** (v5.1 stakeholder revert 2026-08-03;
-  histori v5.0 sebelumnya sourced 2026-08-03 autopilot Stage A dengan
-  parent issue [GRE-68](https://multica/issues/GRE-68) + branch
-  `release/epic-0008` di-cut dari `main` @ `622c87d` — semua reverted
-  per v5.1). Epic-0008 ditahan sementara, akan di-source ulang setelah
-  epic-0006 + epic-0007 DONE (Dependency: 0001 DONE — eligible duluan
-  tapi prioritas P-ENHANCEMENT kalah dari P-CORE).
+- epic **0008** sekarang **IN_PROGRESS** (v5.8 Tech Leader Stage A
+  complete 2026-08-05, post epic-0006 DONE — histori v5.1 stakeholder
+  revert 2026-08-03 + v5.0 autopilot Stage A 2026-08-03 reverted).
+  Re-source cycle v5.8:
+  - **Stage A — Tech Leader** (turn ini): branch `release/epic-0008`
+    di-re-cut dari `main` HEAD `5a97bab` (post epic-0006 Stage H.2 fixup
+    tracker v5.7 + PR #57 squash-merge `752e034`). Local stale branch
+    dari v5.0 cycle (HEAD `dc546d0`) sudah dihapus oleh autopilot
+    turn sebelumnya. Stale remote branch `origin/release/epic-0008`
+    (HEAD `dc546d0`) di-replace via `--force-with-lease` (ruleset
+    `release-branch-protection` id `19763743` rule `[deletion]` saja —
+    bukan blocker, sama dengan pola v5.0 epic-0008 re-source).
+    Parent issue [GRE-84](https://multica/issues/GRE-84) sudah ada
+    (dibuat autopilot GRE-83). TL pin metadata (`squad_id`,
+    `release_branch=release/epic-0008`, `base_sha=5a97bab`,
+    `epic_doc_url`, `tracker_url`, `prd_url`, `github_repo_url`,
+    `project_folder`, `tracker_version=v5.8`, `stage=A`) + flip parent
+    status `todo → in_progress` di turn ini.
+  - **Stage B** (next): Tech Leader mention System Analyst untuk
+    breakdown Epic Detail Doc `docs/product/epics/epic-0008-export-backup-and-settings.md`
+    → sub-task list. Ringkasan Epic Detail Doc: BE 3 endpoint
+    (export CSV, export JSON, backup zip) + BE GET/PATCH `/settings`
+    + FE halaman settings + FE tombol Export CSV/JSON + Download Backup.
+    Estimasi: 5 sub-task di 3-4 stage aktif (Stage 1 BE export, Stage 2
+    BE settings, Stage 3 FE settings + export/backup buttons, Stage 4 QA
+    integration).
+  - **Stage C–F**: Backend Engineer + Frontend Engineer + QA Tester
+    + CI/CD Engineer eksekusi.
+  - **Stage G**: TL auto-progress per sub-task completion.
+  - **Stage H**: CI/CD merge `release/epic-0008 → main` + TL cross-check
+    Epic AC + close parent. Tag `v0.8.0` di-cut dari `main` HEAD
+    (Export, Backup & Settings milestone).
+  - Sub-task status: **0/5 backlog** (akan di-breakdown Stage B).
+  Epic-0008 dipilih karena topmost eligible di tabel setelah epic-0006
+  DONE — hanya butuh `epic-0001` (DONE). epic-0007 (Networth Dashboard)
+  eligible paralel atas permintaan stakeholder, tapi epic-0008 lebih
+  sederhana (BE-only data export + FE read-only, tidak butuh visualisasi
+  dashboard kompleks) — eksekusi dulu epic-0008, epic-0007 menyusul.
+  epic-0009 (Recurring, BLOCKED scope sempit) tetap NOT_STARTED —
+  menunggu klarifikasi stakeholder.
+  Catatan CI follow-up: workflow `ci.yml` belum trigger pada push
+  `release/*` sejak 2026-07-28T06:36:12Z — tiket DevOps terpisah (di
+  luar scope epic ini, carry-over dari epic-0003).
 - epic **0009** NOT_STARTED (v5.1 stakeholder revert 2026-08-03; histori
   v3.9 sebelumnya sourced 2026-07-29 dengan branch `release/epic-0009` —
   reverted per v5.1). Scope sempit: recurring untuk tagihan tetap
@@ -885,3 +937,47 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
   [GRE-71](https://multica/issues/GRE-71) flipped `done` dengan
   metadata final dipin. epic-0006 fully shipped. epic-0007 (Networth
   Dashboard) sekarang eligible — dependency `0006 DONE` cleared.
+- v5.8 (2026-08-05) — Tech Leader: **epic-0008 Stage A complete
+  (sourced → IN_PROGRESS)**, post epic-0006 Stage H.2 finalize (v5.7)
+  + parent issue [GRE-71](https://multica/issues/GRE-71) flipped
+  `done`. Re-source cycle post v5.1 stakeholder revert (2026-08-03):
+  - **Stage A — Tech Leader**: branch `release/epic-0008` di-re-cut
+    dari `main` HEAD `5a97bab` (tracker v5.7 fixup). Worktree
+    `.worktrees/release-epic-0008-stage-a` di-create dari local main
+    + `git reset --hard origin/main` (local main stale di `622c87d`,
+    perlu fast-forward ke `5a97bab` via `git fetch origin main` +
+    reset). Push ke `origin/release/epic-0008` via `--force-with-lease`
+    succeed (ruleset `release-branch-protection` id `19763743` rule
+    `[deletion]` saja, sama dengan pola v5.0 epic-0008 re-source +
+    epic-0006 cycle). Stale remote branch HEAD `dc546d0` di-replace
+    dengan HEAD baru yang sama dengan `origin/main` (`5a97bab`).
+  - **Parent issue [GRE-84](https://multica/issues/GRE-84) created by
+    autopilot GRE-83 (Stage A minimal)** — TL complete Stage A di turn
+    ini dengan metadata pin (`squad_id=engineering-squad`,
+    `release_branch=release/epic-0008`, `base_sha=5a97bab`,
+    `epic_doc_url=docs/product/epics/epic-0008-export-backup-and-settings.md`,
+    `tracker_url=docs/multica/epics.md`, `prd_url=docs/prd.md`,
+    `github_repo_url=https://github.com/01persen/PersonalFinanceTrackerV2`,
+    `project_folder=personal-finance-tracker/`,
+    `tracker_version=v5.8`, `stage=A`) + flip status `todo → in_progress`.
+  - **Tracker updates**: header status `v5.7 → v5.8` + epic-0008 IN_PROGRESS
+    summary block (post epic-0006 summary, pre Owner) + tabel row
+    epic-0008 `NOT_STARTED → IN_PROGRESS` + Stage Plan line 115
+    updated (epic-0008 NOT_STARTED → IN_PROGRESS) + Catatan entry
+    epic-0008 (replaced NOT_STARTED note dengan IN_PROGRESS Stage A
+    detail + Stage B next step + estimasi 5 sub-task di 3-4 stage) +
+    Riwayat entry v5.8 (entry ini).
+  - **Stage B hand-off** (next): Tech Leader akan mention System
+    Analyst di issue [GRE-84](https://multica/issues/GRE-84) dengan
+    request breakdown Epic Detail Doc → sub-task list. SA reply
+    dengan tabel sub-task + assignee per sub-task. TL create sub-issue
+    dengan assignee sesuai SA + update Project Tracker dengan sub-task
+    list + mention engineer pertama untuk kickoff Stage 1.
+  - **Catatan CI follow-up tetap berlaku**: workflow `ci.yml` belum
+    trigger pada push `release/*` sejak 2026-07-28T06:36:12Z — tiket
+    DevOps terpisah (di luar scope epic ini).
+  Tracker bumped `v5.7 → v5.8`. epic-0007 (Networth Dashboard) + epic-0008
+  (Export & Settings, sekarang IN_PROGRESS) eligible paralel; epic-0008
+  diprioritaskan karena lebih sederhana (BE data export + FE read-only,
+  tidak butuh visualisasi dashboard kompleks) — epic-0007 menyusul
+  setelah epic-0008 Stage H.

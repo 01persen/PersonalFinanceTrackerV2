@@ -147,3 +147,27 @@ alembic/                   # Alembic migrations + env.py
 ```
 
 Sub-issue `sub-0001-08` nambahin default seed saat register.
+
+## JSON export and backup endpoints
+
+Kedua endpoint membutuhkan Bearer token dan hanya memuat data milik user aktif.
+
+| Method | Path | Response |
+|--------|------|----------|
+| GET | `/api/v1/export/transactions.json` | Snapshot JSON `transactions-YYYY-MM-DD.json` |
+| GET | `/api/v1/export/backup.zip` | Arsip ZIP `backup-YYYY-MM-DD.zip` |
+
+Snapshot memakai `schema_version: 1`, encoding JSON canonical UTF-8, key terurut,
+dan record setiap entity terurut berdasarkan `id`. Isinya mencakup profil user tanpa
+password hash, accounts, categories, transaksi aktif, goals, debts, dan payment history
+pada masing-masing debt. Transaksi dengan `deleted_at` non-null tidak diekspor.
+
+Backup berisi `transactions.json` dan `manifest.json`. Manifest menyimpan
+`schema_version`, `created_at`, salted `user_id_hash`, serta `path`, unsigned `crc32`,
+`size`, dan `sha256` untuk snapshot. Set `EXPORT_HASH_SALT` berbeda di setiap
+environment; bila kosong, API memakai `JWT_SECRET` sebagai fallback per-environment.
+
+Restore manual dilakukan dengan mengekstrak ZIP, memverifikasi CRC/SHA manifest, lalu
+memuat `transactions.json` berurutan: user, accounts, categories, transactions, goals,
+debts, dan nested debt payments. Pertahankan ID dan timestamp agar checksum snapshot
+hasil restore identik.

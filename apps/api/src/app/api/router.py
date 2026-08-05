@@ -13,6 +13,7 @@ from app.api.v1 import export as export_v1
 from app.api.v1 import export_json as export_json_v1
 from app.api.v1 import goals as goals_v1
 from app.api.v1 import preferences as preferences_v1
+from app.api.v1 import settings as settings_v1
 from app.api.v1 import transactions as transactions_v1
 from app.api.v1 import user_settings as user_settings_v1
 
@@ -30,6 +31,7 @@ api_v1_router.include_router(debts_v1.router)
 api_v1_router.include_router(export_json_v1.router)
 api_v1_router.include_router(user_settings_v1.router)
 api_v1_router.include_router(export_v1.router)
+api_v1_router.include_router(settings_v1.router)
 
 
 @api_v1_router.get("/ping", tags=["meta"])

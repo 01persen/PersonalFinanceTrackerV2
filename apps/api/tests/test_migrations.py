@@ -147,6 +147,53 @@ def test_upgrade_is_replayable(sqlite_db: Path) -> None:
     assert _run_alembic(sqlite_db, "upgrade", "head").returncode == 0
 
 
+def test_user_preferences_settings_columns_roundtrip(sqlite_db: Path) -> None:
+    """sub-0008-03 — the ``7d8e9f0a1b2c`` migration adds ``week_start``,
+    ``display_name``, and ``version`` columns to ``user_preferences``. The
+    test pins the contract:
+
+    * Apply cleanly on top of the b2c4d6e8f0a6 state.
+    * Survive a ``downgrade -1`` round-trip (drop the three new columns).
+    * Stay server-defaulted so a brand-new DB (or a populated one from a
+      pre-sub-0008-03 dump) sees the right values without manual
+      backfill scripts.
+    """
+    up = _run_alembic(sqlite_db, "upgrade", "7d8e9f0a1b2c")
+    assert up.returncode == 0, up.stderr or up.stdout
+
+    conn = sqlite3.connect(sqlite_db)
+    try:
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(user_preferences)")}
+        assert {"week_start", "display_name", "version"} <= cols
+    finally:
+        conn.close()
+
+    # Downgrade — the three new columns must be gone after ``-1``.
+    down = _run_alembic(sqlite_db, "downgrade", "b2c4d6e8f0a6")
+    assert down.returncode == 0, down.stderr or up.stdout
+
+    conn = sqlite3.connect(sqlite_db)
+    try:
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(user_preferences)")}
+        assert "week_start" not in cols
+        assert "display_name" not in cols
+        assert "version" not in cols
+    finally:
+        conn.close()
+
+    # Re-apply — the columns come back without breaking any other
+    # user_preferences invariant.
+    re_up = _run_alembic(sqlite_db, "upgrade", "7d8e9f0a1b2c")
+    assert re_up.returncode == 0, re_up.stderr or re_up.stdout
+
+    conn = sqlite3.connect(sqlite_db)
+    try:
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(user_preferences)")}
+        assert {"week_start", "display_name", "version"} <= cols
+    finally:
+        conn.close()
+
+
 def test_goals_achieved_at_column_roundtrip(sqlite_db: Path) -> None:
     """sub-0005-02 — the ``c5a7b9c1d3e4`` migration adds a nullable
     ``achieved_at`` column to ``goals``. It must:

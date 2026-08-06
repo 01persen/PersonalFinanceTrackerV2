@@ -75,6 +75,28 @@ cicilan yang principal portionnya lebih besar dari sisa principal ditolak 422
 (overpayment). `source_account_id` opsional (nullable FK ke `accounts.id`)
 sehingga cicilan tunai tanpa akun tetap valid.
 
+## Export endpoints
+
+sub-0008-01 — CSV export untuk transaksi user. Endpoint ini menghasilkan
+file yang siap dibuka di spreadsheet (LibreOffice / Excel / pandas)
+tanpa perlu transformasi tambahan.
+
+| Method | Path | Auth   | Response                                  |
+|--------|------|--------|-------------------------------------------|
+| GET    | `/api/v1/export/transactions.csv` | Bearer | `text/csv; charset=utf-8`, attachment `transactions-YYYY-MM-DD.csv` |
+
+Header kolom (urutan *locked*): `id,occurred_on,type,amount_idr,account,category,note`.
+
+* `amount_idr` adalah integer IDR (bukan cents — `amount_cents // 100`),
+  supaya match langsung dengan spreadsheet `uangplanner.com`.
+* `occurred_on` format ISO `YYYY-MM-DD`. `type` lowercase enum (`income`,
+  `expense`, `transfer`). `account` / `category` adalah nama (bukan UUID).
+* Line terminator `\r\n` (RFC 4180), encoding UTF-8 (tanpa BOM — supaya
+  `pandas.read_csv` tidak salah baca header jadi `\ufeffid`).
+* Soft-deleted rows (`deleted_at IS NOT NULL`) di-exclude — baris yang
+  sudah dihapus di UI tidak muncul lagi di export.
+* Empty result tetap mengirim header row supaya parser tidak crash.
+
 ## Schema & migrations
 
 ORM models ada di `src/app/db/models/`. Initial migration: `cd96a512ab4a_initial_schema`
@@ -125,3 +147,72 @@ alembic/                   # Alembic migrations + env.py
 ```
 
 Sub-issue `sub-0001-08` nambahin default seed saat register.
+
+## JSON export and backup endpoints
+
+Kedua endpoint membutuhkan Bearer token dan hanya memuat data milik user aktif.
+
+| Method | Path | Response |
+|--------|------|----------|
+| GET | `/api/v1/export/transactions.json` | Snapshot JSON `transactions-YYYY-MM-DD.json` |
+| GET | `/api/v1/export/backup.zip` | Arsip ZIP `backup-YYYY-MM-DD.zip` |
+
+Snapshot memakai `schema_version: 1`, encoding JSON canonical UTF-8, key terurut,
+dan record setiap entity terurut berdasarkan `id`. Isinya mencakup profil user tanpa
+password hash, accounts, categories, transaksi aktif, goals, debts, dan payment history
+pada masing-masing debt. Transaksi dengan `deleted_at` non-null tidak diekspor.
+
+Backup berisi `transactions.json` dan `manifest.json`. Manifest menyimpan
+`schema_version`, `created_at`, salted `user_id_hash`, serta `path`, unsigned `crc32`,
+`size`, dan `sha256` untuk snapshot. Set `EXPORT_HASH_SALT` berbeda di setiap
+environment; bila kosong, API memakai `JWT_SECRET` sebagai fallback per-environment.
+
+Restore manual dilakukan dengan mengekstrak ZIP, memverifikasi CRC/SHA manifest, lalu
+memuat `transactions.json` berurutan: user, accounts, categories, transactions, goals,
+debts, dan nested debt payments. Pertahankan ID dan timestamp agar checksum snapshot
+hasil restore identik.
+
+## Settings endpoint (sub-0008-03)
+
+Primary settings surface untuk FE settings page — bundled profile (`email`,
+`display_name`) + preferensi (`currency`, `locale`, `week_start`,
+`ef_multiplier`, plus `dependents_count` / `theme` legacy) dalam satu response.
+
+| Method | Path | Auth | Body / Response |
+|--------|------|------|-----------------|
+| GET    | `/api/v1/settings`        | Bearer | — → `SettingsPublic` + `ETag: "<version>"` |
+| PATCH  | `/api/v1/settings`        | Bearer + `If-Match: "<version>"` | `SettingsUpdate` → `SettingsPublic` (200) |
+
+* GET auto-create row jika user legacy tidak punya `user_preferences` row
+  (AC (a), seed defaults: `currency=IDR`, `locale=id-ID`, `week_start="senin"`,
+  `ef_multiplier=3`, `dependents_count=1`, `theme="system"`).
+* Response selalu berisi field `version: int` di body dan header
+  `ETag: "<version>"` (AC (c)). FE harus round-trip version di header
+  `If-Match` pada PATCH berikutnya.
+* PATCH dengan `If-Match` stale → `412 Precondition Failed` dengan `ETag`
+  header berisi version terkini (AC (e)). FE refresh + retry.
+
+### Validation matrix (AC (b), 422 per field)
+
+| Field | Whitelist / constraint |
+|-------|------------------------|
+| `currency` | `"IDR"` (MVP single-currency, hard-reject selainnya) |
+| `locale` | `"id-ID"` (locked) |
+| `week_start` | `"senin"`, `"selasa"`, `"rabu"`, `"kamis"`, `"jumat"`, `"sabtu"`, `"minggu"` |
+| `ef_multiplier` | integer, `>= 1` (PRD §14, default 3) |
+| `display_name` | string ≤ 100 chars, atau `null` untuk clear |
+
+Field tidak dikenal → 422 via `extra="forbid"`. Snapshot semantics:
+`ef_multiplier` dibaca hanya saat EF goal *creation*
+(`compute_ef_target_snapshot_cents` di `app.services.goal_engine`); edit
+settings tidak re-derive EF goal yang sudah ada — mirror sub-0005-02.
+
+### If-Match parsing
+
+* `If-Match: "3"` (RFC-quoted strong validator, recommended) →
+  matches version=3.
+* `If-Match: 3` (unquoted) → ditoleransi (sama dengan quoted).
+* `If-Match: *` → wildcard, matches versi manapun (RFC 9110).
+* `If-Match: <other>` → 400 (parse failure).
+* `If-Match` tidak dikirim → diperlakukan sebagai match versi terkini
+  (back-compat dengan client yang belum round-trip ETag).

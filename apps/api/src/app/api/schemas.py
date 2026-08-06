@@ -229,6 +229,144 @@ class UserSettingsPublic(BaseModel):
         )
 
 
+# --- Settings (epic-0008, sub-0008-03) ----------------------------------------
+
+# TL decision (epic-0008, sub-0008-03): the ``/settings`` endpoint is
+# the *primary* settings surface going forward — ``/preferences`` and
+# ``/users/me/settings`` remain as legacy aliases (sub-0001-08,
+# sub-0005-02) but new clients should call ``/settings``. The response
+# bundles profile + preferences so the FE doesn't have to issue a
+# second ``GET /auth/me`` round-trip to render the page.
+
+
+# PRD §14 default seed for the settings row's ``week_start`` column.
+# The Pydantic enum-literal below enforces the exact whitelist at the
+# API surface; the DB column stays a free string for forward-compat
+# (PRD §3 explicitly carves out future locale-specific week-start
+# values).
+WEEK_START_VALUES = ("senin", "selasa", "rabu", "kamis", "jumat", "sabtu", "minggu")
+DEFAULT_WEEK_START = "senin"
+
+
+class SettingsPublic(BaseModel):
+    """Response shape for ``GET /settings`` and ``PATCH /settings``.
+
+    Bundles profile (``email``, ``display_name``) + preferences
+    (``currency``, ``locale``, ``week_start``, ``ef_multiplier``,
+    plus the legacy ``dependents_count`` / ``theme`` kept for
+    back-compat). ``version`` is the optimistic-concurrency token
+    echoed in the response body *and* the ``ETag`` response header
+    (sub-0008-03 AC (c)). Clients must round-trip the value in the
+    ``If-Match`` request header on PATCH — a stale value triggers
+    ``412 Precondition Failed`` (sub-0008-03 AC (e)).
+
+    The shape is built by :meth:`from_user_and_preference` from a
+    caller-loaded pair so the router doesn't have to do the
+    cross-table join inline. ``email`` comes from the ``User`` row
+    so the FE settings page can render it without a second
+    ``GET /auth/me`` round-trip.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    email: EmailStr
+    display_name: str | None = None
+    currency: str
+    locale: str
+    week_start: str
+    ef_multiplier: int
+    dependents_count: int
+    theme: str
+    version: int
+    updated_at: datetime
+
+    @classmethod
+    def from_user_and_preference(
+        cls,
+        user: object,
+        pref: UserPreference,
+    ) -> SettingsPublic:
+        """Build the public view from a ``(User, UserPreference)`` pair.
+
+        Renames ``emergency_fund_multiplier`` -> ``ef_multiplier``
+        to match the FE-facing wire name pinned in the sub-0005-02
+        spec; ``UserPreference`` is a ``TYPE_CHECKING`` import so mypy
+        reads it but the module avoids a circular import at runtime.
+        """
+        return cls.model_validate(
+            {
+                "email": getattr(user, "email", None),
+                "display_name": pref.display_name,
+                "currency": pref.currency,
+                "locale": pref.locale,
+                "week_start": pref.week_start,
+                "ef_multiplier": pref.emergency_fund_multiplier,
+                "dependents_count": pref.dependents_count,
+                "theme": pref.theme,
+                "version": pref.version,
+                "updated_at": pref.updated_at,
+            }
+        )
+
+
+class SettingsUpdate(BaseModel):
+    """Body for ``PATCH /settings``.
+
+    Every field is optional — only the fields present in the request
+    body are touched. ``extra="forbid"`` rejects unknown / server-
+    controlled fields with 422 before the route runs.
+
+    Validation matrix (PRD §3 + §14, sub-0008-03 AC (b)):
+
+    * ``currency`` must equal ``"IDR"`` — model validator → 422. MVP
+      is single-currency so any other code is hard-rejected (the FE
+      has no UI for currency switching yet).
+    * ``locale`` must equal ``"id-ID"`` — model validator → 422.
+      Free locales are kept as a forward-compat pattern in the
+      legacy ``/preferences`` schema but locked down on the
+      primary ``/settings`` surface.
+    * ``week_start`` must be one of :data:`WEEK_START_VALUES`
+      — Pydantic ``Literal`` → 422.
+    * ``ef_multiplier`` must be ``>= 1`` — Pydantic ``Field(ge=1)``
+      → 422.
+    * ``display_name`` may be ``None`` (clears the profile nickname)
+      or a string with length ``<= 100`` — Pydantic
+      ``max_length=100``.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    currency: Literal["IDR"] | None = Field(
+        default=None,
+        description="MVP is single-currency; only 'IDR' is accepted.",
+    )
+    locale: Literal["id-ID"] | None = Field(
+        default=None,
+        description="Locked to 'id-ID' for the MVP.",
+    )
+    week_start: Literal["senin", "selasa", "rabu", "kamis", "jumat", "sabtu", "minggu"] | None = (
+        Field(default=None)
+    )
+    ef_multiplier: int | None = Field(default=None, ge=1)
+    display_name: str | None = Field(default=None, max_length=100)
+
+    @model_validator(mode="after")
+    def _check_currency_when_set(self) -> SettingsUpdate:
+        if self.currency is not None and self.currency != "IDR":
+            raise ValueError(
+                f"currency must be 'IDR' (MVP is single-currency); got {self.currency!r}"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _check_locale_when_set(self) -> SettingsUpdate:
+        if self.locale is not None and self.locale != "id-ID":
+            raise ValueError(
+                f"locale must be 'id-ID' (MVP is Indonesian-only); got {self.locale!r}"
+            )
+        return self
+
+
 class UserSettingsUpdate(BaseModel):
     """Body for ``PATCH /users/me/settings``.
 
@@ -1241,4 +1379,3 @@ class DebtPaymentListPublic(BaseModel):
     total: int
     limit: int
     offset: int
-

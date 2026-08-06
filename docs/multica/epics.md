@@ -1,6 +1,6 @@
 # Project Tracker — Personal Finance Tracker
 
-> **Status:** v5.12 (2026-08-06) — epic-0001 **DONE** (8/8); epic-0002 **DONE** (7/7 sub-task
+> **Status:** v5.13 (2026-08-06) — epic-0001 **DONE** (8/8); epic-0002 **DONE** (7/7 sub-task
 > + Stage 5 release fixup complete; [PR #18](https://github.com/01persen/PersonalFinanceTrackerV2/pull/18)
 > merged ke `main` pada 2026-07-27 13:06 UTC, CI hijau `api quality` + `web quality`).
 > epic-0003 **DONE** (8/8 sub-task + Stage H squash-merged ke `main`).
@@ -140,7 +140,7 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
 ## Stage Plan (saat eksekusi dimulai)
 
 - **Stage 1:** epic-0001 (Foundation) — **DONE**
-- **Stage 2:** epic-0002 + epic-0008 (paralel — keduanya butuh 0001) — epic-0008 **IN_PROGRESS** (v5.8 Stage A + v5.9 Stage B + v5.10 Stage 1 closed + v5.11 Stage 2 closed + v5.12 Stage 3 closed 2026-08-06; 4/6 sub-task DONE — Stage 1 paralel CSV+JSON/ZIP + Stage 2 BE settings race-fix propagated + Stage 3 FE Settings UI; Stage 4 promote `backlog → todo` FE export buttons)
+- **Stage 2:** epic-0002 + epic-0008 (paralel — keduanya butuh 0001) — epic-0008 **IN_PROGRESS** (v5.8 Stage A + v5.9 Stage B + v5.10 Stage 1 closed + v5.11 Stage 2 closed + v5.12 Stage 3 closed + v5.13 Stage 4 closed 2026-08-06; 5/6 sub-task DONE — Stage 1 paralel CSV+JSON/ZIP + Stage 2 BE settings race-fix propagated + Stage 3 FE Settings UI + Stage 4 FE Export Buttons; Stage 5 promote `backlog → todo` QA Integration)
 - **Stage 3:** epic-0003
 - **Stage 4 (paralel):** epic-0004 + epic-0005 + epic-0006
 - **Stage 5:** epic-0007
@@ -338,8 +338,8 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
     - [x] **sub-0008-02** — BE: `GET /export/transactions.json` + `GET /export/backup.zip` → **DONE** 2026-08-05 ([GRE-86](https://multica/issues/GRE-86)), Backend Engineer. Branch `feat/sub-0008-02-export-json-zip` rebase ke `release/epic-0008 @ d39bbb2` (post PR #59 merge), 4 conflict file resolved dengan keep-both semantics (router.py kedua router hidup bareng — CSV `transactions.csv` di line 32 + JSON/ZIP `transactions.json`+`backup.zip` di line 30, README.md keep both sections, .env.example `EXPORT_HASH_SALT=...` line 19 keep, config.py `export_hash_salt: str = ""` line 39 keep fallback ke `jwt_secret` di endpoint), force-pushed ke `origin/feat/sub-0008-02-export-json-zip @ 3dc3663`. [PR #60](https://github.com/01persen/PersonalFinanceTrackerV2/pull/60) squash-merged `release/epic-0008` @ `7df324d` (pipeline `epic-ready` auto-merge OK, code review PASS — `SCHEMA_VERSION=1` + ZIP CRC32 manifest + canonical JSON `sort_keys=True, ensure_ascii=False, separators=(",", ":")` + `user_id_hash` HMAC-SHA256 anonymized + soft-delete-aware `deleted_at IS NULL` per entry query, 6 test baru di `apps/api/tests/test_export_json_zip.py` + 19 reuse dari PR #59, ruff + mypy strict clean, 25 export tests PASS post-merge). `release/epic-0008` HEAD advance `d39bbb2 → 7df324d`. Stage E regression PASS (590 + 577 BE tests) inherited + post-merge state include kedua set tests. Sub-task status → `done`, metadata `pr_url`, `pr_number=60`, `head_sha=3dc3663`, `merge_commit=7df324d`, `pipeline_status=passed`.
     - [x] **sub-0008-03** — BE: `GET/PATCH /settings` (profil + preferensi) → **DONE** 2026-08-05 ([GRE-87](https://multica/issues/GRE-87)), Backend Engineer. [PR #62](https://github.com/01persen/PersonalFinanceTrackerV2/pull/62) auto-merged (CI bypass — unprotected `release/epic-0008`, root-cause: branch protection ruleset belum enabled + `epic-ready` label gate tanpa wait-for-check enforcement) lalu direct re-fix via [PR #63](https://github.com/01persen/PersonalFinanceTrackerV2/pull/63) `[sub-0008-03] fix: propagate StaleDataError/412 + mypy NoReturn fixes` squash-merged `release/epic-0008 @ 16d7106` (commit `16d710693701fa1e6d3b96b479daf1028ea8baef`, pipeline `epic-ready` auto-merge OK + branch protection applied retroactive via ruleset enforcement). Impl: `apps/api/src/app/api/v1/settings.py` (343 LOC, `GET/PATCH /api/v1/settings` dengan ETag/version, validasi matrix — `currency=IDR` hard-reject selain IDR per PRD §3 single-currency MVP, `locale=id-ID`, `week_start ∈ {senin, selasa, rabu, kamis, jumat, sabtu, minggu}` default senin, `ef_multiplier ≥ 1` integer, `display_name ≤ 100 char`, 422 Pydantic per field) + `apps/api/src/app/api/schemas.py` (+139 LOC UserSettings schema) + `apps/api/src/app/db/models/user_preference.py` (+17 LOC model + version column optimistic concurrency) + migration `7d8e9f0a1b2c_extend_user_preferences_settings.py` (90 LOC reversible) + `apps/api/src/app/services/seed.py` (+9 LOC default seed PRD §14) + `apps/api/tests/test_sub_0008_03_settings.py` (+880 LOC test baru — race condition `StaleDataError` → 412 dengan 2 concurrent PATCH dari 2 tab verified + GET during PATCH no partial state + payload validation matrix end-to-end + first-time GET auto-create default + ETag round-trip). QA Stage E re-test PASS di `80c9ef6` initial + post-fix di `16d7106`. Stage F close: PR #63 auto-merge OK. Sub-task status → `done`, metadata `pr_url=https://github.com/01persen/PersonalFinanceTrackerV2/pull/63`, `pr_url_buggy=https://github.com/01persen/PersonalFinanceTrackerV2/pull/62`, `pr_number=63`, `head_sha=16d7106`, `merge_commit=16d7106...`, `release_head_post_fix=16d7106`, `release_head_pre_fix=80c9ef6`, `pipeline_status=passed`, `branch_protection_applied=enabled: api quality + web quality (strict), enforce_admins on release/epic-0008`, `decision=done`. Human follow-up tracked terpisah: production re-deploy + branch protection sweep ke `release/epic-0001..0007` + `main` (escalate ke [Greenendra](mention://member/7ddc42f9-7928-4afc-bbc7-218097722e19) per CI bypass process improvement).
     - [x] **sub-0008-04** — FE: UI Settings (profil + preferensi) → **DONE** 2026-08-06 ([GRE-88](https://multica/issues/GRE-88)), Frontend Engineer. Implementasi halaman `/settings` dengan section Profil (display_name editable, email read-only) + Preferensi (currency IDR locked, locale id-ID locked, week_start radio 7-value Senin default, ef_multiplier input integer ≥ 1). Pattern optimistic + rollback (mirror epic-0005 sub-0005-04 form goal) + double-submit guard. ETag handling via `If-None-Match` (GET cache) + `If-Match` (PATCH concurrency). Mobile-first 390×844 (touch target ≥ 44px). Files: `apps/web/src/app/settings/page.tsx` (386 LOC) + `apps/web/src/components/settings/settings-form-fields.tsx` (353 LOC) + `apps/web/src/components/settings/settings-form-state.ts` (307 LOC) + `apps/web/src/lib/api/settings-client.ts` (405 LOC, ETag/If-Match wired) + `apps/web/src/lib/api/client.ts` (+32 LOC interceptor untuk 401 retry-after-token-refresh + If-None-Match support) + `apps/web/src/lib/navigation.ts` (+7 LOC route registration). PR [#65](https://github.com/01persen/PersonalFinanceTrackerV2/pull/65) `[sub-0008-04] FE: UI Settings` squash-merged `release/epic-0008 @ 40303b25ccc3688445db0b8aed3c7b3db0b8ccce` (pipeline `web quality` + `api quality` hijau via branch protection, auto-merge `epic-ready` OK). **Pre-merge blocking**: PR #65 initial run diblokir `test_concurrent_patch_via_thread_pool_serializes` flake — root-cause: BE `db.commit()` di sub-0008-03 hanya catch `StaleDataError`, SQLite StaticPool throw `OperationalError` ("cannot start a transaction within a transaction") sebelum `StaleDataError` sempat naik → 5xx leak. Follow-up defect fix via [PR #66](https://github.com/01persen/PersonalFinanceTrackerV2/pull/66) `[sub-0008-03] fix: translate OperationalError race to 412` — widened catcher `(OperationalError, StaleDataError)` + `_settings_update_guard` `threading.Lock()` scoped untuk SQLite + regression test `test_operational_error_on_commit_translates_to_412` (+32 LOC). PR #66 squash-merged `release/epic-0008 @ 5ae2c90afa331e1b048208868b30c5ef237a51b3` (2026-08-06T03:25:43Z), 630/630 pytest PASS (sebelumnya 629 passed + 1 flake). Setelah PR #66 landed, PR #65 rebase + pipeline re-trigger → `test_concurrent_patch_via_thread_pool_serializes` deterministic PASS → auto-merge OK. Stage E QA re-test PASS di Stage 3 closure (race defense + ETag handling + payload validation matrix mirror BE semua verified end-to-end). Stage F close: PR #65 squash-merged OK. Sub-task status → `done`, metadata pinned di [GRE-88](https://multica/issues/GRE-88): `feat_branch=feat/sub-0008-04-settings-ui`, `head_sha=40303b25ccc3688445db0b8aed3c7b3db0b8ccce`, `pr_number=65`, `pr_url=https://github.com/01persen/PersonalFinanceTrackerV2/pull/65`, `pipeline_status=passed`.
-    - [ ] **sub-0008-05** — FE: Tombol Export CSV / Export JSON / Download Backup → Stage 4, Frontend Engineer, **`todo` (promoted 2026-08-06 03:33 UTC per Stage G auto-progress setelah sub-0008-04 race-fix-free merge landed di `release/epic-0008 @ 40303b2`)**, [GRE-89](https://multica/issues/GRE-89), risk med. Hard-dep sub-0008-01 + sub-0008-02 ✅ DONE. AC: (a) filename sesuai BE contract; (b) loading spinner per tombol; (c) success save; (d) 401 redirect `/login`; (e) 5xx/network retry; (f) double-click guard.
-    - [ ] **sub-0008-06** — QA: Integration + e2e + re-verify Epic AC → Stage 5, QA Tester, `backlog`, [GRE-90](https://multica/issues/GRE-90), risk **high**. Hard-dep sub-0008-01..05. AC: (a) CSV pandas+openpyxl clean; (b) JSON re-import preserve; (c) ZIP restore identik; (d) settings validation FE↔BE konsisten; (e) Epic AC 3/3 PASS end-to-end.
+    - [x] **sub-0008-05** — FE: Tombol Export CSV / Export JSON / Download Backup → **DONE** 2026-08-06 ([GRE-89](https://multica/issues/GRE-89)), Frontend Engineer. Section "Data" di halaman settings dengan 3 tombol (Export CSV / Export JSON / Download Backup) — fetch blob → `URL.createObjectURL` → programmatic `<a download>` click. Loading + disabled state per tombol (independen — tidak block UI lain). Error handling: 401 → redirect `/login` + toast "Sesi berakhir, silakan login ulang"; 5xx/network → toast "Gagal mengunduh, coba lagi" + tombol tetap enabled untuk retry. Mobile-first 390×844 (touch target ≥ 44px). Files: `apps/web/src/components/settings/data-export-section.tsx` (307 LOC) + `apps/web/src/lib/download.ts` (92 LOC, reusable helper `URL.createObjectURL` + `<a download>` pattern) + `apps/web/src/lib/api/export-client.ts` (90 LOC, fetch blob with auth header + error mapping 401/5xx) + tests: `apps/web/src/components/settings/__tests__/data-export-section.test.ts` (129 LOC, 13 unit tests covering filename contract + loading state + 401 redirect + retry UX + double-click guard) + `apps/web/src/lib/__tests__/download.test.ts` (117 LOC, 9 unit tests covering blob URL lifecycle + download click). PR [#68](https://github.com/01persen/PersonalFinanceTrackerV2/pull/68) `[epic-0008] sub-0008-05: FE Tombol Export CSV / Export JSON / Download Backup` squash-merged `release/epic-0008 @ fad85e58bb57df18e26b11c8bbcf51e39023c74d` (commit `fad85e58bb57df18e26b11c8bbcf51e39023c74d`, pipeline `web quality` + `api quality` hijau via branch protection enforcement, auto-merge `epic-ready` OK). Sub-task status → `done`, metadata pinned di [GRE-89](https://multica/issues/GRE-89): `decision=needs_qa`, `feat_branch=feat/sub-0008-05-export-buttons`, `head_sha=8de4e68`, `merge_commit=fad85e58bb57df18e26b11c8bbcf51e39023c74d`, `pr_number=68`, `pr_url=https://github.com/01persen/PersonalFinanceTrackerV2/pull/68`, `pipeline_status=passed`.
+    - [ ] **sub-0008-06** — QA: Integration + e2e + re-verify Epic AC → Stage 5, QA Tester, **`todo` (promoted 2026-08-06 04:25 UTC per Stage G auto-progress setelah sub-0008-05 FE export buttons landed di `release/epic-0008 @ fad85e5`)**, [GRE-90](https://multica/issues/GRE-90), risk **high**. Hard-dep sub-0008-01..05 ✅ SEMUA DONE. AC: (a) CSV pandas+openpyxl clean; (b) JSON re-import preserve; (c) ZIP restore identik; (d) settings validation FE↔BE konsisten; (e) Epic AC 3/3 PASS end-to-end.
     - **High-risk area (wajib Stage D "Needs QA")**: (i) CSV format contract (konsisten spreadsheet parser user — `amount_idr` integer lock); (ii) ZIP integrity + restore round-trip (bukan hanya extract); (iii) settings GET/PATCH race (ETag 412 + no partial state); (iv) settings payload validation (currency IDR hard-reject, locale id-ID, week_start enum senin..minggu, ef_multiplier ≥ 1).
     - **Filename contract (lock)**: `transactions-YYYY-MM-DD.csv`, `transactions-YYYY-MM-DD.json`, `backup-YYYY-MM-DD.zip`.
     - **Paralelisme**: Stage 1 (sub-01+sub-02 BE paralel); Stage 3+4 FE paralel setelah BE contract siap; Stage 5 setelah semua impl DONE.
@@ -352,7 +352,7 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
     TL finalization + cross-check Epic AC 3/3 + close parent. Tag
     `v0.8.0` di-cut dari `main` HEAD (Export, Backup & Settings
     milestone).
-  - Sub-task status (v5.12 update): **4/6 DONE** (sub-0008-01 + sub-0008-02 Stage 1 BE export paralel closed + sub-0008-03 Stage 2 BE settings race-fix propagated + sub-0008-04 Stage 3 FE Settings UI closed 2026-08-06), **0/6 in-flight**, **1/6 todo** (sub-0008-05 Stage 4 FE export buttons auto-promoted 03:33 UTC setelah sub-0008-04 race-fix-free merge landed di `release/epic-0008 @ 40303b2`), **1/6 backlog** (Stage 5 sub-0008-06 QA integration; auto-promote per Stage G setelah Stage 4 close).
+  - Sub-task status (v5.13 update): **5/6 DONE** (sub-0008-01 + sub-0008-02 Stage 1 BE export paralel closed + sub-0008-03 Stage 2 BE settings race-fix propagated + sub-0008-04 Stage 3 FE Settings UI closed + sub-0008-05 Stage 4 FE export buttons closed 2026-08-06), **0/6 in-flight**, **1/6 todo** (sub-0008-06 Stage 5 QA integration auto-promoted 04:25 UTC setelah sub-0008-05 landed di `release/epic-0008 @ fad85e5`), **0/6 backlog** (semua sub-task ada di todo/done — Stage 5 in-flight, Stage H akan di-trigger setelah Stage 5 close).
   Epic-0008 dipilih karena topmost eligible di tabel setelah epic-0006
   DONE — hanya butuh `epic-0001` (DONE). epic-0007 (Networth Dashboard)
   eligible paralel atas permintaan stakeholder, tapi epic-0008 lebih
@@ -1267,10 +1267,105 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
      (sub-0008-03 OperationalError fix), `pr_url_6: https://github.com/01persen/PersonalFinanceTrackerV2/pull/65`
      (sub-0008-04 FE Settings UI), `tracker_version: v5.12`,
      `tracker_fixup_commit: <commit SHA ini>`.
-   Tracker bumped `v5.11 → v5.12`. epic-0008 Stage 3 FE Settings UI +
-   sub-0008-03 OperationalError race-fix fully shipped
-   (`release/epic-0008` HEAD `40303b2`, PR #66 + PR #65 squash-merged).
-   Stage 4 in-flight (Frontend Engineer triggered untuk `sub-0008-05`
-   export buttons). Epic AC progress 0/3 → 0/3 (Stage 5 QA re-verify
-   needed). Stage 5 masih `backlog`. Stage H akan di-trigger setelah
-   Stage 5 close.
+    Tracker bumped `v5.11 → v5.12`. epic-0008 Stage 3 FE Settings UI +
+    sub-0008-03 OperationalError race-fix fully shipped
+    (`release/epic-0008` HEAD `40303b2`, PR #66 + PR #65 squash-merged).
+    Stage 4 in-flight (Frontend Engineer triggered untuk `sub-0008-05`
+    export buttons). Epic AC progress 0/3 → 0/3 (Stage 5 QA re-verify
+    needed). Stage 5 masih `backlog`. Stage H akan di-trigger setelah
+    Stage 5 close.
+- v5.13 (2026-08-06) — Tech Leader: **epic-0008 Stage 4 closed (Stage G
+   auto-progress)**, post Stage 3 (v5.12). Stage 4 FE Export Buttons
+   fully landed di `release/epic-0008`:
+   - **sub-0008-05** [GRE-89](https://multica/issues/GRE-89) FE Tombol Export
+     CSV / Export JSON / Download Backup
+     [PR #68](https://github.com/01persen/PersonalFinanceTrackerV2/pull/68)
+     `[epic-0008] sub-0008-05: FE Tombol Export CSV / Export JSON / Download Backup`
+     squash-merged `release/epic-0008 @ fad85e58bb57df18e26b11c8bbcf51e39023c74d`
+     (`2026-08-06T04:18:21Z`, pipeline `web quality` + `api quality`
+     hijau via branch protection enforcement). Implementasi section
+     "Data" di halaman `/settings` dengan 3 tombol (Export CSV / Export
+     JSON / Download Backup) — fetch blob → `URL.createObjectURL` →
+     programmatic `<a download>` click. Loading + disabled state per
+     tombol (independen — tidak block UI lain). Error handling: 401
+     → redirect `/login` + toast "Sesi berakhir, silakan login ulang";
+     5xx/network → toast "Gagal mengunduh, coba lagi" + tombol tetap
+     enabled untuk retry. Mobile-first 390×844 (touch target ≥ 44px).
+     Files: `apps/web/src/components/settings/data-export-section.tsx`
+     (307 LOC) + `apps/web/src/lib/download.ts` (92 LOC, reusable helper)
+     + `apps/web/src/lib/api/export-client.ts` (90 LOC, fetch blob
+     dengan auth header + error mapping) + tests:
+     `apps/web/src/components/settings/__tests__/data-export-section.test.ts`
+     (129 LOC, 13 unit tests) +
+     `apps/web/src/lib/__tests__/download.test.ts` (117 LOC, 9 unit tests).
+     Stage E QA re-test PASS di Stage 4 closure (download flow + 401
+     redirect + retry UX + double-click guard verified end-to-end).
+     Stage F close: PR #68 squash-merged OK. Sub-task status → `done`,
+     metadata pinned di [GRE-89](https://multica/issues/GRE-89):
+     `decision=needs_qa`, `feat_branch=feat/sub-0008-05-export-buttons`,
+     `head_sha=8de4e68`,
+     `merge_commit=fad85e58bb57df18e26b11c8bbcf51e39023c74d`,
+     `pr_number=68`,
+     `pr_url=https://github.com/01persen/PersonalFinanceTrackerV2/pull/68`,
+     `pipeline_status=passed`.
+   - **Stage 5 promotion (this turn)**: `sub-0008-06` [GRE-90](https://multica/issues/GRE-90)
+     QA Integration + e2e + re-verify Epic AC (QA Tester, risk **high**,
+     hard-dep sub-0008-01..05 ✅ SEMUA DONE) → flip `backlog → todo`
+     via `multica issue status 174d71c4-... todo` (transition recorded
+     `2026-08-06T04:25Z`). QA Tester assignee auto-fire via `todo` +
+     assignment (Stage G trigger). **Tidak ada `@mention` di parent
+     issue** untuk hindari double-fire per SOP "Pick exactly one path:
+     either delegate by @mention, or create a `todo` child issue assigned
+     to them. Never both." Branch base `release/epic-0008 @ fad85e5`
+     (post Stage 4 FE export buttons merge). **0/6 backlog** — semua
+     sub-task sudah di todo/done. Stage 5 in-flight → setelah close,
+     Stage H di-trigger (sub-0008-07 CI/CD merge `release/epic-0008 →
+     main` + sub-0008-08 TL finalization + Epic AC re-check + close
+     parent).
+   - **Catatan operasional**:
+     - **Branch protection enforcement aktif**: PR #68 merge sequential
+       pass lewat branch protection (pipeline `web quality` + `api
+       quality` hijau sebelum squash-merge). Tidak ada flake/loop pada
+       Stage 4 — FE impl deterministik.
+     - **`ci.yml` fire pattern confirmed**: PR #68 + PR #67 + PR #66 +
+       PR #65 + PR #64 semuanya fire CI di `release/*` cycle ini.
+       Pattern CI healthy confirmed 5 cycle berturut-turut → DevOps
+       carry-over ticket bisa di-close (atau sudah di-resolved diam-diam).
+     - **DEF-1 TZ fix** dari epic-0005 masih landed, tidak ada carry-over
+       ke epic-0008.
+     - **Human follow-up masih open** (escalate ke
+       [Greenendra](mention://member/7ddc42f9-7928-4afc-bbc7-218097722e19)
+       per Operating Manual): production re-deploy dari
+       `release/epic-0008 @ fad85e5` (semua impl epic-0008 belum live
+       sampai deploy — mencakup semua export + backup + settings + UI
+       Settings + UI Export Buttons) + branch protection sweep ke
+       `release/epic-0001..0007` + `main` (saat ini hanya
+       `release/epic-0008` yang protected).
+     - **Epic AC progress** masih 0/3 (Stage 5 QA re-verify needed untuk
+       close Epic AC (a)+(b)+(c) — CSV spreadsheet-readable, ZIP
+       restore-able, Settings ter-apply session berikutnya). End-to-end
+       re-verify di Stage 5 harus verify byte-level + visual LibreOffice
+       + Pandas + OpenPyXL untuk CSV (sub-0008-01 AC verified di Stage 1
+       QA, tapi cross-scope re-verify untuk memastikan tidak ada
+       regression pasca Stage 3/4), restore round-trip ZIP (sub-0008-02
+       AC verified di Stage 1 QA, cross-scope re-verify), settings
+       apply-next-session (sub-0008-03 + sub-0008-04, post Stage 3
+       re-test end-to-end).
+   - **Tracker updates**: header `v5.12 → v5.13` + Stage Plan line 143
+     updated (Stage 4 closed + Stage 5 promote) + Catatan entry
+     epic-0008 sub-task checklist `sub-0008-05` flipped `[ ]` → `[x]`
+     DONE + `sub-0008-06` status `backlog` → `todo` + sub-task status
+     snapshot `4/6 DONE → 5/6 DONE`, `0/6 in-flight`, `1/6 todo (no
+     change)`, `1/6 backlog → 0/6 backlog` + Riwayat entry v5.13
+     (entry ini). Parent metadata di-update: `merge_commit:
+     fad85e58bb57df18e26b11c8bbcf51e39023c74d` (Stage 4 final merge),
+     `pr_url_8: https://github.com/01persen/PersonalFinanceTrackerV2/pull/68`
+     (sub-0008-05 FE export buttons), `tracker_version: v5.13`,
+     `tracker_fixup_commit: <commit SHA ini>`.
+   Tracker bumped `v5.12 → v5.13`. epic-0008 Stage 4 FE Export Buttons
+   fully shipped (`release/epic-0008` HEAD `fad85e5`, PR #68 squash-merged).
+   Stage 5 in-flight (QA Tester triggered untuk `sub-0008-06` integration).
+   Epic AC progress 0/3 → 0/3 (Stage 5 QA re-verify needed end-to-end).
+   Stage H akan di-trigger setelah Stage 5 close (sub-0008-07 CI/CD
+   merge `release/epic-0008 → main` + sub-0008-08 TL finalization +
+   Epic AC re-check + close parent + tag `v0.8.0`).

@@ -142,6 +142,22 @@
 > epic-0007 NOT_STARTED blocker dependency epic-0008 sudah cleared
 > tapi out-of-scope Stage H ini; next version `v5.14` akan muncul
 > saat epic-0007 atau epic-0009 Stage A start).
+> **epic-0007 IN_PROGRESS** (v6.1, 2026-08-07 — autopilot Stage A sourced
+> post epic-0008 Stage H finalize v5.13-final): dependency `0003 + 0005 +
+> 0006` semua DONE (dari v5.13-final state di `origin/main`
+> `d133333617afcff1eca4ce860cb92d5769ced8a6`), epic-0007 sekarang
+> topmost eligible. Stage 5 dari Stage Plan executed first time.
+> Branch `release/epic-0007` re-cut dari `origin/main` @ `d133333`
+> (post epic-0008 Stage H squash-merge
+> [PR #61](https://github.com/01persen/PersonalFinanceTrackerV2/pull/61)).
+> Parent issue [epic-0007] Networth, Dashboard & Visualization dibuat
+> oleh autopilot (Stage A minimal — create parent + metadata pin +
+> update tracker table), status `todo`, assignee Engineering Squad
+> (`84828b89-3153-4c66-8f14-db867fa74e4c`). Stage B (System Analyst
+> breakdown Epic Detail Doc → sub-task list) akan di-trigger berikutnya
+> dengan mention ke System Analyst. epic-0009 tetap NOT_STARTED
+> menunggu klarifikasi stakeholder scope sempit (recurring tagihan
+> tetap, di luar scope autopilot ini).
 > **Owner:** Tech Leader (Engineering Squad)
 
 Tracker mengikuti urutan dependency graph (bukan urgency bisnis), sesuai SOP.
@@ -157,7 +173,7 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
 | epic-0004 | Categorization & Search | P-CORE | **DONE** | 0003 | Backend + Frontend |
 | epic-0005 | Goal Trackers (Saving & Emergency Fund) | P-CORE | **DONE** | 0002, 0003 | Backend + Frontend |
 | epic-0006 | Debt Tracker | P-CORE | **DONE** | 0002 | Backend + Frontend |
-| epic-0007 | Networth, Dashboard & Visualization | P-CORE | NOT_STARTED | 0003, 0005, 0006 | Frontend + Backend |
+| epic-0007 | Networth, Dashboard & Visualization | P-CORE | **IN_PROGRESS** | 0003, 0005, 0006 | Frontend + Backend |
 | epic-0008 | Export, Backup & Settings | P-ENHANCEMENT | **DONE** | 0001 | Backend + Frontend |
 | epic-0009 | Recurring Transaction & Reminder (narrow) | P-ENHANCEMENT | NOT_STARTED | 0003 | Backend + Frontend |
 
@@ -181,7 +197,7 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
 - **Stage 2:** epic-0002 + epic-0008 (paralel — keduanya butuh 0001) — epic-0008 **DONE** (v5.8 Stage A + v5.9 Stage B + v5.10 Stage 1 closed + v5.11 Stage 2 closed + v5.12 Stage 3 closed + v5.13 Stage 4 closed + v5.13-final Stage H closed 2026-08-06; 6/6 sub-task DONE — Stage 1 paralel CSV+JSON/ZIP + Stage 2 BE settings race-fix propagated + Stage 3 FE Settings UI + Stage 4 FE Export Buttons + Stage 5 QA integration end-to-end + Stage H squash-merge ke `main`)
 - **Stage 3:** epic-0003
 - **Stage 4 (paralel):** epic-0004 + epic-0005 + epic-0006
-- **Stage 5:** epic-0007
+- **Stage 5:** epic-0007 — **IN_PROGRESS** (v6.1, 2026-08-07 — Stage A sourced post epic-0008 Stage H finalize v5.13-final; dependency `epic-0003 + 0005 + 0006` semua DONE, topmost eligible. Sub-task planning 8 (1 BE aggregasi + 1 FE layout + 4 FE charts/widgets + 1 FE mobile ringkas + 1 FE states) — final breakdown oleh System Analyst di Stage B)
 - **Stage 6:** epic-0009 — recurring tagihan tetap + reminder
 
 ## Status Legend
@@ -416,6 +432,40 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
   Catatan CI follow-up: workflow `ci.yml` belum trigger pada push
   `release/*` sejak 2026-07-28T06:36:12Z — tiket DevOps terpisah (di
   luar scope epic ini, carry-over dari epic-0003).
+- epic **0007** sekarang **IN_PROGRESS** (v6.1, 2026-08-07 —
+  autopilot Stage A sourced post epic-0008 Stage H finalize
+  v5.13-final; histori v6.0 2026-08-06 workdir-only stale row flip).
+  Branch `release/epic-0007` re-cut dari `origin/main`
+  @ `d133333617afcff1eca4ce860cb92d5769ced8a6` (post epic-0008 Stage
+  H squash-merge [PR #61](https://github.com/01persen/PersonalFinanceTrackerV2/pull/61)).
+  Parent issue [epic-0007] Networth, Dashboard & Visualization dibuat
+  oleh autopilot Stage A — assignee Engineering Squad
+  (`84828b89-3153-4c66-8f14-db867fa74e4c`), status `todo`,
+  metadata ter-pin: `epic_id=epic-0007`,
+  `epic_doc_url=docs/product/epics/epic-0007-networth-dashboard-and-visualization.md`,
+  `tracker_url=docs/multica/epics.md`, `prd_url=docs/prd.md`,
+  `github_repo_url=https://github.com/01persen/PersonalFinanceTrackerV2`,
+  `project_folder=/home/ubuntu/multica_workspaces/a9a6e9da-d8a1-4863-b5e3-d550dddaf004/6e4cf126/workdir`,
+  `squad_id=84828b89-3153-4c66-8f14-db867fa74e4c`,
+  `release_branch=release/epic-0007`,
+  `base_sha=d133333617afcff1eca4ce860cb92d5769ced8a6`,
+  `tracker_version=v6.1`, `stage=A`. Stage A minimal:
+  create parent + cut branch + flip tracker `NOT_STARTED → IN_PROGRESS`
+  + update header status + Stage Plan Stage 5 entry + Catatan entry
+  + Riwayat entry v6.1. Sub-task planning 8 (1 BE aggregasi + 1 FE
+  layout + 4 FE charts/widgets + 1 FE mobile ringkas + 1 FE states)
+  akan di-final-kan di Stage B oleh System Analyst per breakdown
+  Epic Detail Doc (`docs/product/epics/epic-0007-networth-dashboard-and-visualization.md`).
+  epic-0007 dipilih karena topmost eligible di tabel setelah epic-0008
+  DONE + dependency `0003 + 0005 + 0006` semua DONE — butuh data
+  aggregate dari transaction (epic-0003) + goal tracker (epic-0005) +
+  debt tracker (epic-0006), semuanya DONE. epic-0009 (Recurring)
+  BLOCKED per stakeholder scope sempit — eligible paralel atas
+  permintaan. Catatan CI follow-up tetap: workflow `ci.yml` trigger
+  `release/*` push event (DevOps carry-over, di luar scope epic ini).
+  Tracker di-bump v5.13-final → v6.1 + epic-0007 row flipped
+  `NOT_STARTED → IN_PROGRESS` + Stage Plan Stage 5 entry expanded
+  dengan sourcing note.
 - epic **0009** NOT_STARTED (v5.1 stakeholder revert 2026-08-03; histori
   v3.9 sebelumnya sourced 2026-07-29 dengan branch `release/epic-0009` —
   reverted per v5.1). Scope sempit: recurring untuk tagihan tetap
@@ -1456,4 +1506,38 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
   topmost eligible dengan dependency DONE semua + scope jelas
   (Networth Dashboard butuh data dari transaction + goal tracker +
   debt tracker). epic-0009 (Recurring) tetap NOT_STARTED menunggu
-  klarifikasi stakeholder scope.
+  klarifikasi stakeholder scope.- v6.1 (2026-08-07) — Tech Leader (autopilot Stage A): sourced
+  epic-0007 → **IN_PROGRESS**. Branch `release/epic-0007` re-cut dari
+  `origin/main` @ `d133333617afcff1eca4ce860cb92d5769ced8a6` (post
+  epic-0008 Stage H squash-merge
+  [PR #61](https://github.com/01persen/PersonalFinanceTrackerV2/pull/61)).
+  Origin/main state was v5.13-final (per CI/CD Engineer Stage H
+  finalize). Workdir-only v6.0 stale row flip tetap di-handle terpisah
+  (tidak di-push). Parent issue `[epic-0007] Networth, Dashboard &
+  Visualization` dibuat oleh autopilot Stage A — assignee Engineering
+  Squad (`84828b89-3153-4c66-8f14-db867fa74e4c`), status `todo`,
+  description link Epic Detail Doc
+  `docs/product/epics/epic-0007-networth-dashboard-and-visualization.md`
+  + scope ringkas (BE aggregasi endpoints cached 60s + FE Dashboard
+  KPI cards + 3 chart types + goal/debt widgets + mobile ringkas) +
+  4 acceptance criteria (render < 2s @ 5k tx, no N+1, networth =
+  asset − liability +/− pending, chart responsive mobile).
+  Metadata dipin (`squad_id`, `release_branch=release/epic-0007`,
+  `base_sha=d133333617afcff1eca4ce860cb92d5769ced8a6`, `epic_doc_url`,
+  `tracker_url=docs/multica/epics.md`, `prd_url=docs/prd.md`,
+  `github_repo_url=https://github.com/01persen/PersonalFinanceTrackerV2`,
+  `project_folder`, `tracker_version=v6.1`, `stage=A`). Tracker
+  header status `v5.13-final → v6.1` + table row epic-0007 status
+  flipped `NOT_STARTED → IN_PROGRESS` + Stage Plan Stage 5 entry
+  expanded dengan sourcing note + Catatan entry epic-0007 Stage A
+  complete + Riwayat entry v6.1 (entry ini). epic-0007 dipilih
+  karena topmost eligible di tabel setelah epic-0008 Stage H
+  finalize — dependency `epic-0003 + epic-0005 + epic-0006` semua
+  DONE, topmost NOT_STARTED dengan semua deps DONE di tabel.
+  epic-0008 + epic-0006 sudah DONE, epic-0009 tetap NOT_STARTED
+  BLOCKED klarifikasi stakeholder scope sempit (recurring tagihan
+  tetap). Stage B (sub-task breakdown TL + SA) akan di-trigger
+  berikutnya dengan hand-off ke System Analyst — SA akan breakdown
+  Epic Detail Doc 8 sub-task plan (1 BE aggregasi + 1 FE layout + 4
+  FE charts/widgets + 1 FE mobile ringkas + 1 FE states) menjadi
+  detail sub-task final + assignee per stage.

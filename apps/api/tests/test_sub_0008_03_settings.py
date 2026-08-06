@@ -43,6 +43,7 @@ import concurrent.futures
 import unittest.mock
 
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import StaleDataError
 
@@ -745,6 +746,37 @@ def test_stale_data_error_on_commit_translates_to_412(
     assert after["version"] == 2
     assert after["ef_multiplier"] == 5
     assert after["display_name"] == "v2"
+
+
+def test_operational_error_on_commit_translates_to_412(
+    client: TestClient, fresh_db: Session
+) -> None:
+    from app.api.v1 import settings as settings_module
+
+    headers = _auth_headers(_register(client, "operational-translate@example.com")["access_token"])
+
+    def _exploding_commit(self: Session) -> None:
+        raise OperationalError(
+            "COMMIT",
+            {},
+            RuntimeError("cannot start a transaction within a transaction"),
+        )
+
+    with unittest.mock.patch.object(settings_module.Session, "commit", _exploding_commit):
+        resp = client.patch(
+            "/api/v1/settings",
+            headers={**headers, "If-Match": '"1"'},
+            json={"ef_multiplier": 7, "display_name": "should-fail"},
+        )
+
+    assert resp.status_code == 412, resp.text
+    assert resp.headers["etag"] == '"1"'
+    assert "stale" in resp.json()["detail"].lower()
+
+    after = client.get("/api/v1/settings", headers=headers).json()
+    assert after["version"] == 1
+    assert after["ef_multiplier"] == 3
+    assert after["display_name"] is None
 
 
 # ---------------------------------------------------------------------------

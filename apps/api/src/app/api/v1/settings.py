@@ -47,11 +47,14 @@ Validation happens in two layers:
 from __future__ import annotations
 
 import re
+import threading
 from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import NoReturn
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
 from sqlalchemy import select
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import StaleDataError
 
@@ -72,6 +75,16 @@ from app.services.seed import (
 )
 
 router = APIRouter(prefix="/settings", tags=["settings"])
+_SQLITE_SETTINGS_UPDATE_LOCK = threading.Lock()
+
+
+@contextmanager
+def _settings_update_guard(db: Session) -> Iterator[None]:
+    if db.get_bind().dialect.name == "sqlite":
+        with _SQLITE_SETTINGS_UPDATE_LOCK:
+            yield
+        return
+    yield
 
 
 def get_db() -> Iterator[Session]:
@@ -266,78 +279,79 @@ def update_my_settings(
     ``version``, ``email``) are never editable through this endpoint --
     Pydantic drops them from the schema entirely.
     """
-    _ = _parse_if_match(if_match)  # surface malformed header as 400
+    with _settings_update_guard(db):
+        _ = _parse_if_match(if_match)  # surface malformed header as 400
 
-    # Acquire row-level lock first so a concurrent PATCH on the same
-    # row blocks on our transaction instead of racing past the
-    # If-Match check at the same version (AC (e) -- 'GET during PATCH
-    # in-flight no partial state'). The read uses ``with_for_update``
-    # so PostgreSQL serialises the two writers at the row level; on
-    # SQLite the database-level lock provides the same guarantee.
-    locked_pref = _load_preference_for_update(db, user_id=str(current_user.id))
-    if locked_pref is None:
-        # Legacy user with no row yet -- auto-create from seed
-        # defaults (AC (a)). The create-and-commit drops the row
-        # into the DB; the subsequent If-Match check sees the fresh
-        # ``version=1`` and accepts the first PATCH.
-        pref = _load_or_create_preference(db, user_id=str(current_user.id))
-    else:
-        pref = locked_pref
+        # Acquire row-level lock first so a concurrent PATCH on the same
+        # row blocks on our transaction instead of racing past the
+        # If-Match check at the same version (AC (e) -- 'GET during PATCH
+        # in-flight no partial state'). The read uses ``with_for_update``
+        # so PostgreSQL serialises the two writers at the row level; on
+        # SQLite the database-level lock provides the same guarantee.
+        locked_pref = _load_preference_for_update(db, user_id=str(current_user.id))
+        if locked_pref is None:
+            # Legacy user with no row yet -- auto-create from seed
+            # defaults (AC (a)). The create-and-commit drops the row
+            # into the DB; the subsequent If-Match check sees the fresh
+            # ``version=1`` and accepts the first PATCH.
+            pref = _load_or_create_preference(db, user_id=str(current_user.id))
+        else:
+            pref = locked_pref
 
-    requested_version = _parse_if_match(if_match)
-    if requested_version is None:
-        # Wildcard ``*`` matches the current version; explicit ``None``
-        # means 'no If-Match at all' which we also accept as 'match
-        # current version' for backward-compat with clients that don't
-        # yet round-trip the ETag. (sub-0008-03 AC (e) only describes
-        # the *stale* case.)
-        requested_version = pref.version
-    if requested_version != pref.version:
-        # Pre-commit If-Match miss: the row is still pointing at the
-        # version we loaded under the row lock, so we know the FE's
-        # view is stale. Surface 412 with that exact version so the
-        # FE can refresh and retry without a wasted round-trip.
-        _raise_412_precondition_failed(current_version=pref.version)
+        requested_version = _parse_if_match(if_match)
+        if requested_version is None:
+            # Wildcard ``*`` matches the current version; explicit ``None``
+            # means 'no If-Match at all' which we also accept as 'match
+            # current version' for backward-compat with clients that don't
+            # yet round-trip the ETag. (sub-0008-03 AC (e) only describes
+            # the *stale* case.)
+            requested_version = pref.version
+        if requested_version != pref.version:
+            # Pre-commit If-Match miss: the row is still pointing at the
+            # version we loaded under the row lock, so we know the FE's
+            # view is stale. Surface 412 with that exact version so the
+            # FE can refresh and retry without a wasted round-trip.
+            _raise_412_precondition_failed(current_version=pref.version)
 
-    data = payload.model_dump(exclude_unset=True)
-    if "ef_multiplier" in data:
-        pref.emergency_fund_multiplier = int(data["ef_multiplier"])
-    for field, value in data.items():
-        if field == "ef_multiplier":
-            continue  # wired above to keep the storage column mapping explicit
-        setattr(pref, field, value)
+        data = payload.model_dump(exclude_unset=True)
+        if "ef_multiplier" in data:
+            pref.emergency_fund_multiplier = int(data["ef_multiplier"])
+        for field, value in data.items():
+            if field == "ef_multiplier":
+                continue  # wired above to keep the storage column mapping explicit
+            setattr(pref, field, value)
 
-    # Bump the version on every successful PATCH -- mirrors the upstream
-    # ``updated_at`` write from ``TimestampMixin`` so clients holding a
-    # cached GET see both signals on the next read.
-    pref.version = pref.version + 1
-    try:
-        db.commit()
-    except StaleDataError:
-        # Concurrent writer beat us to the row between the row-lock
-        # read and the commit. PostgreSQL's ``SELECT ... FOR UPDATE``
-        # blocks contending writers so this branch only fires under
-        # connection-isolated test engines (SQLite StaticPool) or
-        # pathological Postgres setups that don't enforce the lock;
-        # in either case the *observable* contract is the same: a
-        # 412 with the bumped ``ETag`` so the FE can refresh and
-        # retry -- never a leaked 500.
-        db.rollback()
-        # Re-read the row in a fresh transaction so the caller sees
-        # the *post-race* version, not the row we held in the
-        # rolled-back session.
-        current = db.execute(
-            select(UserPreference).where(UserPreference.user_id == current_user.id)
-        ).scalar_one_or_none()
-        if current is None:
-            # Defensive: row vanished mid-PATCH. Surface 412 with
-            # the seed-default version so the FE refetches and
-            # picks up whatever the seed module produces next.
-            _raise_412_precondition_failed(current_version=DEFAULT_PREFERENCES_VERSION)
-        _raise_412_precondition_failed(current_version=current.version)
+        # Bump the version on every successful PATCH -- mirrors the upstream
+        # ``updated_at`` write from ``TimestampMixin`` so clients holding a
+        # cached GET see both signals on the next read.
+        pref.version = pref.version + 1
+        try:
+            db.commit()
+        except (OperationalError, StaleDataError):
+            # Concurrent writer beat us to the row between the row-lock
+            # read and the commit. PostgreSQL's ``SELECT ... FOR UPDATE``
+            # blocks contending writers so this branch only fires under
+            # connection-isolated test engines (SQLite StaticPool) or
+            # pathological Postgres setups that don't enforce the lock;
+            # in either case the *observable* contract is the same: a
+            # 412 with the bumped ``ETag`` so the FE can refresh and
+            # retry -- never a leaked 500.
+            db.rollback()
+            # Re-read the row in a fresh transaction so the caller sees
+            # the *post-race* version, not the row we held in the
+            # rolled-back session.
+            current = db.execute(
+                select(UserPreference).where(UserPreference.user_id == current_user.id)
+            ).scalar_one_or_none()
+            if current is None:
+                # Defensive: row vanished mid-PATCH. Surface 412 with
+                # the seed-default version so the FE refetches and
+                # picks up whatever the seed module produces next.
+                _raise_412_precondition_failed(current_version=DEFAULT_PREFERENCES_VERSION)
+            _raise_412_precondition_failed(current_version=current.version)
 
-    db.refresh(pref)
+        db.refresh(pref)
 
-    body = SettingsPublic.from_user_and_preference(current_user, pref)
-    _attach_etag(response, version=pref.version)
-    return body
+        body = SettingsPublic.from_user_and_preference(current_user, pref)
+        _attach_etag(response, version=pref.version)
+        return body

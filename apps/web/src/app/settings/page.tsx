@@ -10,6 +10,7 @@ import {
 } from "react";
 
 import { AppShell } from "@/components/shell/app-shell";
+import { DataExportSection } from "@/components/settings/data-export-section";
 import {
   SettingsFormFields,
   SettingsFormSkeleton,
@@ -381,6 +382,10 @@ function SettingsContent() {
           </form>
         </section>
       ) : null}
+
+      <section className="card mt-6">
+        <DataExportSection />
+      </section>
     </AppShell>
   );
 }

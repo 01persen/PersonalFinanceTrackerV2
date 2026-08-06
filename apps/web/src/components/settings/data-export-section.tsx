@@ -33,16 +33,23 @@ import { useAuth } from "@/lib/auth/auth-context";
  *   (transactions-YYYY-MM-DD.csv, etc.) and falls back to the
  *   component's static filename template so a regression on the BE
  *   side still produces a sane file name.
- * - (b) Each button shows its own spinner. Buttons in flight disable
- *   themselves; the other buttons stay tappable.
+ * - (b) Each button shows its own spinner. **A button is disabled
+ *   only when IT is in-flight** — the other buttons stay tappable
+ *   so the user can fire a different export while the first is
+ *   still downloading. The `busyKind` state holds the in-flight
+ *   kind; per-button `disabled` reads `busyKind === action.kind`.
  * - (c) On success the browser fires the download and the button
  *   returns to its idle state.
  * - (d) 401 → toast + redirect to `/login`.
  * - (e) 5xx / network → toast; button stays enabled.
  * - (f) Double-click guard: the in-flight state disables the button
- *   and a `latestRequestIdRef` ignores stale results so a slow
- *   request that resolves after a retry can't fire a duplicate
- *   download.
+ *   itself, the `handleExport` early-return refuses a re-click of
+ *   the SAME button while it's mid-flight, and a
+ *   `latestRequestIdRef` ignores stale results so a slow request
+ *   that resolves after a retry can't fire a duplicate download.
+ *   This guard is scoped to the same button — clicking a different
+ *   button while another is still in-flight is the whole point of
+ *   AC (b) and is allowed.
  *
  * Mobile-first 390×844: buttons stack vertically in a single column
  * with `min-h-[44px]` touch targets. The label / spinner switch is
@@ -139,8 +146,12 @@ export function DataExportSection() {
 
   const handleExport = useCallback(
     async (action: ExportAction) => {
-      if (busyKind !== null) return; // Double-click guard — refuse
-                                 // while another button is mid-flight.
+      // Double-click guard for the SAME button — a rapid re-click on
+      // a button already mid-flight is ignored. Crucially we do NOT
+      // reject other buttons here: AC (b) requires each button's
+      // in-flight state to be independent so a slow CSV export doesn't
+      // block the JSON / ZIP download.
+      if (busyKind === action.kind) return;
       const requestId = ++latestRequestIdRef.current;
       setBusyKind(action.kind);
       setNotice(null);
@@ -207,8 +218,6 @@ export function DataExportSection() {
     [busyKind, logout, router, showNotice],
   );
 
-  const isAnyBusy = busyKind !== null;
-
   const noticeBanner = useMemo<React.ReactNode>(() => {
     if (!notice) return null;
     const tone =
@@ -253,7 +262,6 @@ export function DataExportSection() {
       <div className="grid gap-3" role="group" aria-label="Aksi ekspor data">
         {EXPORT_ACTIONS.map((action) => {
           const isBusy = busyKind === action.kind;
-          const isOtherBusy = isAnyBusy && !isBusy;
           return (
             <div
               key={action.kind}
@@ -272,8 +280,8 @@ export function DataExportSection() {
               <button
                 type="button"
                 onClick={() => void handleExport(action)}
-                disabled={isBusy || isOtherBusy}
-                aria-disabled={isBusy || isOtherBusy}
+                disabled={isBusy}
+                aria-disabled={isBusy}
                 aria-busy={isBusy}
                 className="btn-secondary mt-2 inline-flex min-h-[44px] items-center justify-center gap-2 sm:mt-0 sm:w-auto sm:px-4"
                 data-export-kind={action.kind}

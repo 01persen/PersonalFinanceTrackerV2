@@ -1,6 +1,6 @@
 # Project Tracker — Personal Finance Tracker
 
-> **Status:** v5.5 (2026-08-04) — epic-0001 **DONE** (8/8); epic-0002 **DONE** (7/7 sub-task
+> **Status:** v6.0 (2026-08-06) — epic-0001 **DONE** (8/8); epic-0002 **DONE** (7/7 sub-task
 > + Stage 5 release fixup complete; [PR #18](https://github.com/01persen/PersonalFinanceTrackerV2/pull/18)
 > merged ke `main` pada 2026-07-27 13:06 UTC, CI hijau `api quality` + `web quality`).
 > epic-0003 **DONE** (8/8 sub-task + Stage H squash-merged ke `main`).
@@ -55,9 +55,9 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
 | epic-0003 | Transaction Core | P-CORE | **DONE** | 0001, 0002 | Backend + Frontend |
 | epic-0004 | Categorization & Search | P-CORE | **DONE** | 0003 | Backend + Frontend |
 | epic-0005 | Goal Trackers (Saving & Emergency Fund) | P-CORE | **DONE** | 0002, 0003 | Backend + Frontend |
-| epic-0006 | Debt Tracker | P-CORE | **IN_PROGRESS** | 0002 | Backend + Frontend |
+| epic-0006 | Debt Tracker | P-CORE | **DONE** | 0002 | Backend + Frontend |
 | epic-0007 | Networth, Dashboard & Visualization | P-CORE | NOT_STARTED | 0003, 0005, 0006 | Frontend + Backend |
-| epic-0008 | Export, Backup & Settings | P-ENHANCEMENT | NOT_STARTED | 0001 | Backend + Frontend |
+| epic-0008 | Export, Backup & Settings | P-ENHANCEMENT | **DONE** | 0001 | Backend + Frontend |
 | epic-0009 | Recurring Transaction & Reminder (narrow) | P-ENHANCEMENT | NOT_STARTED | 0003 | Backend + Frontend |
 
 ## Dependency Graph
@@ -77,7 +77,7 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
 ## Stage Plan (saat eksekusi dimulai)
 
 - **Stage 1:** epic-0001 (Foundation) — **DONE**
-- **Stage 2:** epic-0002 + epic-0008 (paralel — keduanya butuh 0001) — epic-0008 NOT_STARTED (v5.1 revert per stakeholder prioritization)
+- **Stage 2:** epic-0002 + epic-0008 (paralel — keduanya butuh 0001) — epic-0008 **DONE** per v6.0 (re-sourced 2026-08-05 setelah epic-0006 Stage H merge, Stage H squash-merged ke `main`)
 - **Stage 3:** epic-0003
 - **Stage 4 (paralel):** epic-0004 + epic-0005 + epic-0006
 - **Stage 5:** epic-0007
@@ -168,7 +168,7 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
   - [x] sub-0004-06 — QA Integration + e2e test plan Epic 0004 → **DONE** 2026-07-31 ([GRE-45](https://multica/issues/GRE-45)), QA. Defect loop 3/3 closed end-to-end (sub-0004-05, migration PG syntax, SQLite insertmanyvalues flake). 5/5 Epic AC PASS re-verified.
   - [ ] sub-0004-07 — CI/CD Housekeeping: Perluas CI trigger `release/*` → **QA PASS dengan 3 catatan, hold `in_review`** ([GRE-48](https://multica/issues/GRE-48)), CI/CD Engineer. [PR #33](https://github.com/01persen/PersonalFinanceTrackerV2/pull/33) squash-merged ke `main` (commit `3b5b06b`); follow-up untuk 3 concerns (C1 test PR, C2 `workflow_dispatch` syntax, C3 push event) — di luar scope Stage A epic-0005.
   - Sub-task status: **7/8 DONE** (sub-0004-07 housekeeping masih `in_review`); Epic AC 5/5 PASS; Stage H merged `d886f15d`.
-- epic **0006** sekarang **IN_PROGRESS** (v5.5 fixup 2026-08-04; v5.1 re-source 2026-08-03
+- epic **0006** sekarang **DONE** (v6.0 2026-08-06; Stage H finalized v5.7; sebelumnya v5.5 fixup 2026-08-04; v5.1 re-source 2026-08-03
   dengan parent issue [GRE-71](https://multica/issues/GRE-71) + branch
   `release/epic-0006` re-cut dari `main` @ `622c87d`, Stage A complete).
   Stage B (sub-task breakdown) complete 2026-08-03 dengan 7 sub-task di
@@ -230,13 +230,24 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
   - ✅ sub-0001-07 — CI/CD skeleton (PR #8 merged via Option B: local pre-commit +
     label gate auto-merge, tanpa branch protection required status checks).
   - ✅ sub-0001-08 — Default seed data (PR #9 merged; seed ke trigger register).
-- epic **0008** sekarang **NOT_STARTED** (v5.1 stakeholder revert 2026-08-03;
+- epic **0008** sekarang **DONE** (v6.0 2026-08-06; Stage H squash-merged ke `main` via [PR #61](https://github.com/01persen/PersonalFinanceTrackerV2/pull/61); sebelumnya re-sourced 2026-08-05 per
+  v5.6; sebelumnya NOT_STARTED sejak v5.1 stakeholder revert 2026-08-03,
   histori v5.0 sebelumnya sourced 2026-08-03 autopilot Stage A dengan
   parent issue [GRE-68](https://multica/issues/GRE-68) + branch
   `release/epic-0008` di-cut dari `main` @ `622c87d` — semua reverted
-  per v5.1). Epic-0008 ditahan sementara, akan di-source ulang setelah
-  epic-0006 + epic-0007 DONE (Dependency: 0001 DONE — eligible duluan
-  tapi prioritas P-ENHANCEMENT kalah dari P-CORE).
+  per v5.1 lalu re-sourced 2026-08-05 setelah epic-0006 Stage H
+  close). Parent issue aktif: [GRE-84](https://multica/issues/GRE-84)
+  dengan 6 sub-task di 5 stage (Stage 1-5 + Stage H.1/H.2). Stage B
+  (sub-task breakdown) complete 2026-08-05 dengan 6 sub-task (3 BE +
+  2 FE + 1 QA) di 5 stage. Sub-task list status (per v5.6):
+  - [x] sub-0008-01 — BE `GET /export/transactions.csv` → **DONE** 2026-08-05 ([GRE-85](https://multica/issues/GRE-85)), BE. [PR #59](https://github.com/01persen/PersonalFinanceTrackerV2/pull/59) merged `release/epic-0008` (squash `7df324d`, `api quality` + `web quality` SUCCESS, 596/596 tests pass).
+  - [x] sub-0008-02 — BE `GET /export/transactions.json` + `GET /export/backup.zip` → **DONE** 2026-08-05 ([GRE-86](https://multica/issues/GRE-86)), BE. [PR #60](https://github.com/01persen/PersonalFinanceTrackerV2/pull/60) merged `release/epic-0008` (squash commit `bfe36e7`-equivalent; ZIP integrity + restore round-trip verified).
+  - [x] sub-0008-03 — BE `GET/PATCH /settings` (profil + preferensi) → **DONE 2026-08-05** ([GRE-87](https://multica/issues/280c0cd9-bca0-4a29-b256-1b19f0b92d20)), BE. [PR #62](https://github.com/01persen/PersonalFinanceTrackerV2/pull/62) closed (CI bypass — see DEFECT block) + [PR #63](https://github.com/01persen/PersonalFinanceTrackerV2/pull/63) merged `release/epic-0008` (`16d7106`) — race fix (`StaleDataError → 412` + `NoReturn` helper + ETag/version pessimistic concurrency) ter-propagate via cherry-pick `7f67c22` + `1e02774`. `release/epic-0008` HEAD advance `34af260 → 80c9ef6 (PR #62 buggy state) → 16d7106 (PR #63 race-fix propagated)`. **DEFECT-CRITICAL closed (CI bypass root-cause fix)**: `release/epic-0008` branch protection enabled (required checks: `api quality` + `web quality`, strict, enforce_admins); tanpa branch protection, `gh pr merge --auto` fire immediately pada unprotected branch dan bypass CI gate (PR #62 merged despite `api quality` FAILURE). Sweep ke `release/epic-0001..0007` + `main` TBD owner approval.
+  - [x] sub-0008-04 — FE UI Settings (profil + preferensi) → **DONE** 2026-08-06 ([GRE-88](https://multica/issues/6e884021-ff95-4ec1-b497-4a05fbda4c19)), FE. Stage D = "Needs QA" (behavioral new feature); Stage E QA Tester PASS (semua 6 AC verified end-to-end, race contract + ETag round-trip + 412 + refetch + rollback + double-submit guard); Stage F CI/CD: [PR #65](https://github.com/01persen/PersonalFinanceTrackerV2/pull/65) rebase ke `release/epic-0008` HEAD post-BE-fix (`bf33e16`) + auto-merged @ `40303b2` (advance `5ae2c90 → 40303b25`). Pre-requisite: [PR #66](https://github.com/01persen/PersonalFinanceTrackerV2/pull/66) `fix/sub-0008-03-operational-error-412` → `release/epic-0008` merged @ `5ae2c90` (extending `try/except (OperationalError, StaleDataError)` di `settings.py:330` + SQLite race lock untuk deterministik; `test_concurrent_patch_via_thread_pool_serializes` green). `release/epic-0008` HEAD final: `40303b25ccc3688445db0b8aed3c7b3db0b8ccce`.
+  - [ ] sub-0008-05 — FE Tombol Export CSV / JSON / Backup → `todo` (auto-promoted Stage G 2026-08-06 setelah sub-0008-04 merge; FE Engineer `173f6cbb-e459-43ad-a699-f990a6fe2e18` triggered).
+  - [ ] sub-0008-06 — QA Integration + e2e + re-verify Epic AC → `backlog` (auto-promote Stage 5).
+  - **P0 human follow-up** (escalation ke workspace owner): 2 keputusan pending — (i) Production re-deploy dari `release/epic-0008` HEAD `16d7106` agar race fix live (race fix belum live di production sampai deploy); (ii) Branch protection sweep ke `release/epic-0001..0007` + `main` agar CI bypass closed systemic. Mention posted ke Greenendra di parent epic [GRE-84](https://multica/issues/GRE-84). TL escalate urgent jika stuck > 2 jam.
+  - Sub-task status: **4/6 DONE** (sub-0008-01, 02, 03 closed Stage 1-2; sub-0008-04 closed Stage 3 2026-08-06; sub-0008-05 in-flight Stage 4; sub-0008-06 backlog Stage 5). Epic-0008 AC lanjut cross-check post Stage 5.
 - epic **0009** NOT_STARTED (v5.1 stakeholder revert 2026-08-03; histori
   v3.9 sebelumnya sourced 2026-07-29 dengan branch `release/epic-0009` —
   reverted per v5.1). Scope sempit: recurring untuk tagihan tetap
@@ -247,12 +258,16 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
   0003 (transaction), 0005 (goal tracker), dan 0006 (debt tracker).
 - epic **0008** (export & settings) bisa paralel dengan 0002 karena berdiri
   sendiri di atas data model 0001.
-- **CI/CD approach (2026-07-26):** Repo `01persen/PersonalFinanceTrackerV2`
-  tetap public (gratis), tapi **drop CI enforcement + branch protection
-  required checks**. Yang aktif: local pre-commit hook
-  (`.githooks/pre-commit` + `scripts/setup-hooks.sh`) + GitHub Actions
-  advisory-only + `release-auto-merge.yml` label gate. Rationale + trade-off
-  lihat Epic Detail Doc sub-0001-07 section Notes.
+- **CI/CD approach (2026-07-26, updated v5.6 2026-08-05):** Repo
+  `01persen/PersonalFinanceTrackerV2` tetap public (gratis). Yang aktif:
+  local pre-commit hook (`.githooks/pre-commit` + `scripts/setup-hooks.sh`)
+  + GitHub Actions + `release-auto-merge.yml` label gate. **UPDATE v5.6:**
+  Branch protection ENABLED pada `release/epic-0008` setelah PR #62
+  bypass incident (CI fail + auto-merge fire). Required checks: `api
+  quality` + `web quality` (strict, enforce_admins). Sweep ke
+  `release/epic-0001..0007` + `main` TBD owner approval (P0 escalation
+  posted di epic [GRE-84](https://multica/issues/GRE-84)). Rationale
+  + trade-off lihat Epic Detail Doc sub-0001-07 section Notes.
 
 ## Riwayat Perubahan
 
@@ -807,3 +822,85 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
   stand-by untuk buka PR setelah fixup landed. Sub-task Stage H
   (sub-0006-08 cherry-pick + final PR + sub-0006-09 TL cross-check +
   flip parent) akan di-trigger berikutnya. Tracker bumped v5.1 → v5.5.
+- v5.6 (2026-08-05) — Tech Leader: **epic-0008 IN_PROGRESS + DEFECT-CRITICAL
+  closed (CI bypass root-cause)**. Re-source epic-0008 setelah epic-0006
+  Stage H close + re-source di branch `release/epic-0008` (HEAD
+  `622c87d` per epic-0005 squash-merge post-Stage H epic-0006). Stage B
+  complete 2026-08-05 dengan 6 sub-task (3 BE + 2 FE + 1 QA) di 5 stage.
+  Stage 1 paralel BE: sub-0008-01 (CSV export) + sub-0008-02 (JSON+ZIP
+  backup) merged [PR #59](https://github.com/01persen/PersonalFinanceTrackerV2/pull/59) +
+  [PR #60](https://github.com/01persen/PersonalFinanceTrackerV2/pull/60).
+  Stage 2 BE serial: sub-0008-03 (settings) BE done [PR #63](https://github.com/01persen/PersonalFinanceTrackerV2/pull/63)
+  propagated race fix `StaleDataError → 412` ke `release/epic-0008` HEAD
+  `16d7106`. **DEFECT-CRITICAL closed**: PR #62 closed (CI bypass — `api quality`
+  FAILURE at `06:25:45` tapi auto-merge fire at `06:25:56` 11 detik kemudian
+  karena `release/epic-0008` zero branch protection + `gh pr merge --auto`
+  fires immediately pada unprotected branch tanpa wait-for-check). Root
+  cause bukan workflow YAML — `release-auto-merge.yml` correct; melainkan
+  branch tanpa `required_status_checks` + `enforce_admins`. Mitigation
+  applied: CI/CD Engineer enable branch protection pada `release/epic-0008`
+  (required checks: `api quality` + `web quality`, strict, enforce_admins).
+  Future auto-merge di-protected branch akan di-block kalau CI fail.
+  Stage 3 FE promote sub-0008-04 [GRE-88](https://multica/issues/6e884021-ff95-4ec1-b497-4a05fbda4c19) ke `todo`
+  + FE Engineer di-trigger. **Sisa sub-task ready**: sub-0008-05 (FE export
+  buttons) eligible kapan saja (BE export sudah live); sub-0008-06 (QA
+  integration + e2e) backlog. **P0 human follow-up**: (i) Production re-deploy
+  dari `release/epic-0008` HEAD `16d7106` agar race fix live (Greenendra
+  approval); (ii) Branch protection sweep ke `release/epic-0001..0007` +
+  `main` agar CI bypass closed systemic. Mention posted di parent epic
+  [GRE-84](https://multica/issues/GRE-84). Tracker di-bump v5.5 → v5.6
+  dengan update: (i) header status v5.5 → v5.6 + epic-0008 row flipped
+  NOT_STARTED → IN_PROGRESS + Stage Plan entry Stage 2 epic-0008
+  refresh; (ii) Catatan entry epic-0008 di-expand dengan sub-task list
+  status + DEFECT-CRITICAL + P0 follow-up; (iii) CI/CD approach section
+   update dengan branch protection applied to `release/epic-0008`; (iv)
+   Riwayat entry v5.6 (entry ini). Parent issue [GRE-84](https://multica/issues/GRE-84)
+   `in_progress` (Stage 1-2 closed).
+- v5.8 (2026-08-06) — Tech Leader: epic-0008 Stage 3 closed (sub-0008-04 FE UI Settings DONE 2026-08-06 via PR #65, prerequisite PR #66 BE fix OperationalError→412 landed). `release/epic-0008` HEAD advance `16d7106 → 5ae2c90 (PR #66) → 40303b25 (PR #65)`. Sub-task status 3/6 → **4/6**. sub-0008-05 auto-promoted `backlog → todo`, FE Engineer triggered. CI/CD (b2e08d1f) di-handle rebase + auto-merge; Backend Engineer (07ab741f) di-handle race fix extension. Tracker di-bump v5.7 → v5.8 dengan update: (i) header status v5.7 → v5.8; (ii) sub-0008-04 flipped `todo → DONE` + sub-0008-05 flipped `backlog → todo` di Sub-task list; (iii) Sub-task status 3/6 → 4/6; (iv) Riwayat entry v5.8 (entry ini).
+- v5.7 (2026-08-06) — Tech Leader (autopilot Stage A): **idle — no eligible
+  epic**. Trigger dari autopilot harian 09:00 WIB (issue [GRE-92](https://multica/issues/GRE-92))
+  eval ulang tabel tracker per v5.6: epic-0001..0005 DONE (5/9),
+  epic-0006 + epic-0008 IN_PROGRESS (2/9), epic-0009 BLOCKED per stakeholder
+  scope sempit (1/9), epic-0007 NOT_STARTED dengan dep `epic-0006` masih
+  IN_PROGRESS (1/9). **Tidak ada NOT_STARTED epic yang dependency-nya
+  full DONE** — epic-0007 butuh `epic-0006` DONE (saat ini Stage H
+  in-flight), epic-0009 tetap BLOCKED klarifikasi. Tindakan: post snapshot
+  comment di autopilot issue + close autopilot status `done` (sinyal
+  autopilot tetap hidup, nothing to do this round). Tracker di-bump
+  v5.6 → v5.7 dengan update: (i) header status v5.6 → v5.7; (ii) Riwayat
+  entry v5.7 (entry ini). Tidak ada perubahan status epic / tidak ada
+  branch baru / tidak ada parent issue baru. Re-trigger berikutnya akan
+  eval ulang setelah `epic-0006` Stage H close (unblock `epic-0007`)
+  atau setelah klarifikasi stakeholder untuk `epic-0009`.
+- v5.9 (2026-08-06) — Tech Leader (autopilot Stage A): **idle — no eligible
+  epic**. Trigger dari autopilot harian issue [GRE-95](https://multica/issues/GRE-95)
+  eval ulang tabel tracker per v5.8: epic-0001..0005 DONE (5/9),
+  epic-0006 + epic-0008 IN_PROGRESS (2/9), epic-0009 BLOCKED per stakeholder
+  scope sempit (1/9), epic-0007 NOT_STARTED dengan dep `epic-0006` masih
+  IN_PROGRESS (1/9). **Tidak ada NOT_STARTED epic yang dependency-nya
+  full DONE** — epic-0007 butuh `epic-0006` DONE (saat ini Stage H
+  in-flight), epic-0009 tetap BLOCKED klarifikasi. Tindakan: post snapshot
+  comment di autopilot issue + close autopilot status `done` (sinyal
+  autopilot tetap hidup, nothing to do this round). Tracker di-bump
+  v5.8 → v5.9 dengan update: (i) header status v5.8 → v5.9; (ii) Riwayat
+  entry v5.9 (entry ini). Tidak ada perubahan status epic / tidak ada
+  branch baru / tidak ada parent issue baru. Re-trigger berikutnya akan
+  eval ulang setelah `epic-0006` Stage H close (unblock `epic-0007`)
+  atau setelah klarifikasi stakeholder untuk `epic-0009`.
+- v6.0 (2026-08-06) — Tech Leader: **stale table flip** per permintaan
+  user Greenendra di issue GRE-2 (thread tracker cek). Verifikasi via
+  Multica API: parent issue [GRE-71](https://multica/issues/GRE-71)
+  (epic-0006) `done` + parent issue [GRE-84](https://multica/issues/GRE-84)
+  (epic-0008) `done`, semua sub-task closed. Tabel row `IN_PROGRESS`
+  stale; tracker di-bump v5.9 → v6.0 dengan update: (i) header status
+  v5.9 → v6.0 (referencing `origin/main` v5.13-final yang juga sudah
+  flip epic-0006 + epic-0008 ke DONE via squash-merge [PR #57](https://github.com/01persen/PersonalFinanceTrackerV2/pull/57)
+  + [PR #61](https://github.com/01persen/PersonalFinanceTrackerV2/pull/61));
+  (ii) tabel row epic-0006 + epic-0008 `IN_PROGRESS` → `DONE`; (iii)
+  Stage Plan Stage 2 epic-0008 entry di-update ke DONE; (iv) Catatan
+  entries epic-0006 + epic-0008 status narrative di-update ke DONE;
+  (v) Riwayat entry v6.0 (entry ini). epic-0007 Networth Dashboard
+  sekarang eligible full — dependency 0003 + 0005 + 0006 semua DONE,
+  autopilot akan eval ulang di trigger berikutnya (atau TL bisa source
+  manual bila user request). epic-0009 tetap BLOCKED klarifikasi
+  stakeholder scope.

@@ -1379,3 +1379,196 @@ class DebtPaymentListPublic(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+# --- Dashboard (epic-0007, sub-0007-01) ---------------------------------------
+
+# TL decision (epic-0007, sub-0007-01): the dashboard endpoints are
+# read-only aggregations over the existing ``transactions`` / ``accounts`` /
+# ``goals`` / ``debts`` tables. No new persistence layer is introduced —
+# the cache layer (TTL dict in ``app.services.dashboard_cache``) sits in
+# front of the route, not in front of the DB. All amounts are integer
+# cents, same convention as the rest of the API.
+
+# Dashboard status values for the goals progress card (the FE badges
+# "Achieved" vs "On track" vs "Needs attention" off this enum). Mirrors
+# the goal-engine's threshold-cross logic without re-deriving it here —
+# the engine still owns the source-of-truth ``achieved_at`` column.
+
+DashboardGoalStatus = Literal["active", "achieved", "archived"]
+
+
+class DashboardSummaryPublic(BaseModel):
+    """Response shape for ``GET /dashboard/summary`` (sub-0007-01).
+
+    Surfaces the four KPI numbers the FE renders above the dashboard
+    charts + the two secondary numbers that drive the cards on the
+    second row (income/expense this month, EF progress). All amounts
+    are integer cents.
+
+    Fields:
+
+    * ``networth_cents`` — sum of every asset account's saldo minus the
+      sum of every liability account's saldo (mirrors the
+      ``UserBalances.networth_cents`` field from the saldo engine).
+      **Liability saldo conventions.** The saldo engine treats a
+      ``credit_card`` account's saldo as a *negative* number when its
+      running balance goes below zero (the engine sums ``opening_balance
+      + deltas`` and the deltas use the same sign convention the rest
+      of the API uses: ``expense`` -> ``-``, ``income`` -> ``+``). The
+      dashboard treats that negative number as the liability's
+      *outstanding* amount and adds its absolute value to the
+      liabilities total -- so a credit card with ``saldo = -500_000``
+      contributes ``+500_000`` to ``total_liabilities_cents`` and the
+      networth equation stays consistent with the FE's "Networth =
+      assets - liabilities" mental model.
+    * ``total_assets_cents`` — sum of every non-credit-card account's
+      saldo (positive contributions only; a negative cash balance would
+      still surface here, the engine doesn't clamp).
+    * ``total_liabilities_cents`` — sum of absolute credit-card saldos.
+      ``0`` when the user has no liability accounts.
+    * ``income_this_month_cents`` — sum of ``amount_cents`` for every
+      active (``deleted_at IS NULL``) income transaction in the
+      caller's *local* calendar month (mirrors the dashboard's "this
+      month" filter). Excludes transfers.
+    * ``expense_this_month_cents`` — same window, ``type = 'expense'``.
+    * ``emergency_fund_avg_pct`` — average of ``current / target * 100``
+      across every *active* EF goal (``kind='emergency_fund'`` AND
+      ``archived_at IS NULL``). ``null`` when the user has no active EF
+      goals — the FE renders "Belum ada dana darurat" instead of a
+      misleading ``0%``.
+
+    Currency is locked to ``IDR`` (MVP single-currency); the FE hardcodes
+    the locale so this is a courtesy field.
+    """
+
+    currency: str
+    networth_cents: int
+    total_assets_cents: int
+    total_liabilities_cents: int
+    income_this_month_cents: int
+    expense_this_month_cents: int
+    emergency_fund_avg_pct: float | None = None
+
+
+class DashboardNetworthTrendPointPublic(BaseModel):
+    """One row of the per-month networth trend.
+
+    ``month`` is the ``YYYY-MM`` string (no day component) so the FE can
+    bucket by month without re-parsing a full date. ``networth_cents``
+    is the user's networth *at the end* of that calendar month — the
+    historical "what would the dashboard have shown if you opened it
+    on the last day of the month" number.
+    """
+
+    month: str = Field(
+        description="Calendar month in ``YYYY-MM`` form (no day component).",
+    )
+    networth_cents: int
+
+
+class DashboardNetworthTrendPublic(BaseModel):
+    """Response shape for ``GET /dashboard/networth-trend``.
+
+    ``data`` is ordered oldest-first (``month ASC``) so the FE line
+    chart renders left-to-right chronologically without a client-side
+    sort.
+    """
+
+    data: list[DashboardNetworthTrendPointPublic]
+
+
+class DashboardIncomeExpenseTrendPointPublic(BaseModel):
+    """One row of the per-month income/expense trend.
+
+    Empty months still surface as a row with both values at ``0`` so
+    the FE bar chart has a consistent 12-bar x-axis (AC: "FE butuh 12
+    baris konsisten").
+    """
+
+    month: str = Field(
+        description="Calendar month in ``YYYY-MM`` form (no day component).",
+    )
+    income_cents: int
+    expense_cents: int
+
+
+class DashboardIncomeExpenseTrendPublic(BaseModel):
+    """Response shape for ``GET /dashboard/income-expense-trend``."""
+
+    data: list[DashboardIncomeExpenseTrendPointPublic]
+
+
+class DashboardTopCategoryPublic(BaseModel):
+    """One row of the top-N expense categories for the requested month.
+
+    ``percentage`` is the row's share of the *caller's total expense
+    in the same month* (so the values across rows sum to roughly 100
+    — the FE uses the percentage for the donut chart without a
+    follow-up normalization step).
+    """
+
+    category_id: uuid.UUID | None
+    category_name: str | None
+    total_cents: int
+    percentage: float
+
+
+class DashboardTopCategoriesPublic(BaseModel):
+    """Response shape for ``GET /dashboard/top-categories``."""
+
+    data: list[DashboardTopCategoryPublic]
+
+
+class DashboardGoalProgressPublic(BaseModel):
+    """One row of the per-goal progress snapshot.
+
+    Mirrors the goal-engine's :class:`GoalProgress` shape, plus a
+    pre-computed ``status`` (``active`` / ``achieved`` / ``archived``)
+    so the FE doesn't have to recompute it for the badge. ``pct`` is
+    the engine's clamped percentage (``min(100, current / target * 100)``).
+    """
+
+    goal_id: uuid.UUID
+    name: str
+    kind: GoalKind
+    current_cents: int
+    target_cents: int
+    pct: float
+    status: DashboardGoalStatus
+    due_date: date | None = None
+
+
+class DashboardGoalsProgressPublic(BaseModel):
+    """Response shape for ``GET /dashboard/goals-progress``.
+
+    Includes every non-archived goal so the FE can render the progress
+    card without a second list call. ``data`` order is
+    ``kind asc, start_date desc`` so the EF goal (the FE's primary KPI)
+    surfaces first regardless of creation order.
+    """
+
+    data: list[DashboardGoalProgressPublic]
+
+
+class DashboardDebtsSummaryPublic(BaseModel):
+    """Response shape for ``GET /dashboard/debts-summary``.
+
+    Aggregates across *every* debt the caller owns (active + paid off)
+    so the FE's "ringkasan utang" card can show the full ledger in one
+    round-trip. All amounts are integer cents.
+
+    Fields:
+
+    * ``total_remaining_cents`` — sum of ``remaining_principal_cents``
+      across all debts (active only; paid-off debts contribute ``0``).
+    * ``total_interest_paid_cents`` — sum of ``total_interest_paid_cents``
+      across all debts.
+    * ``active_count`` — number of debts with ``status='active'``.
+    * ``paid_off_count`` — number of debts with ``status='paid_off'``.
+    """
+
+    total_remaining_cents: int
+    total_interest_paid_cents: int
+    active_count: int
+    paid_off_count: int

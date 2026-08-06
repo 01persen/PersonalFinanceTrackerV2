@@ -67,6 +67,7 @@ from app.db.models.debt import Debt, DebtPayment
 from app.db.models.enums import DebtStatus
 from app.db.models.user import User
 from app.db.session import get_session
+from app.services import dashboard_cache
 from app.services.debt_calculator import (
     calculate_flat_monthly_payment_cents,
     count_debt_payments,
@@ -201,6 +202,12 @@ def create_debt(
     db.add(debt)
     db.commit()
     db.refresh(debt)
+    # sub-0007-01 — invalidate dashboard cache for the ``debts``
+    # table. The two affected endpoints are ``/summary`` (a brand-new
+    # debt affects the liabilities bucket only if the user already
+    # has credit-card accounts; safe to refresh either way) and
+    # ``/debts-summary`` (every new debt rolls up into the totals).
+    dashboard_cache.invalidate_for_table(user_id=current_user.id, table="debts")
     return DebtPublic.model_validate(debt)
 
 
@@ -246,6 +253,10 @@ def update_debt(
     )
     db.commit()
     db.refresh(debt)
+    # sub-0007-01 — same invalidation as the create path: principal /
+    # bunga_pct / tenor / status all roll up into the debts-summary
+    # totals and the summary's liabilities bucket.
+    dashboard_cache.invalidate_for_table(user_id=current_user.id, table="debts")
     return DebtPublic.model_validate(debt)
 
 
@@ -262,6 +273,10 @@ def delete_debt(
     debt = _get_owned_debt(db, debt_id=debt_id, current_user=current_user)
     db.delete(debt)
     db.commit()
+    # sub-0007-01 — debt delete is hard (the row vanishes; cascade
+    # drops the payments), so the debts-summary + summary endpoints
+    # must both refresh.
+    dashboard_cache.invalidate_for_table(user_id=current_user.id, table="debts")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -400,6 +415,11 @@ def create_debt_payment(
 
     db.commit()
     db.refresh(payment)
+    # sub-0007-01 — a payment changes both ``remaining_principal_cents``
+    # and ``total_interest_paid_cents`` for its parent debt, so the
+    # debts-summary endpoint's totals shift. Invalidate the ``debts``
+    # bucket (which maps to ``summary`` + ``debts-summary``).
+    dashboard_cache.invalidate_for_table(user_id=current_user.id, table="debts")
     return DebtPaymentPublic.model_validate(payment)
 
 
@@ -597,6 +617,11 @@ def update_debt_payment(
 
     db.commit()
     db.refresh(payment)
+    # sub-0007-01 — PATCH on a payment shifts both totals
+    # (``remaining_principal_cents`` via the principal portion;
+    # ``total_interest_paid_cents`` via the interest portion). The
+    # debts-summary endpoint must refresh.
+    dashboard_cache.invalidate_for_table(user_id=current_user.id, table="debts")
     return DebtPaymentPublic.model_validate(payment)
 
 
@@ -627,4 +652,9 @@ def delete_debt_payment(
     db.flush()  # so the subsequent SUM() in refresh_debt_status sees the row removed
     refresh_debt_status(db=db, debt=debt)
     db.commit()
+    # sub-0007-01 — a payment delete can flip a paid-off debt back
+    # to ``active`` (and back again on the next payment), which moves
+    # the debt between the active / paid-off buckets on the
+    # debts-summary card. Always invalidate on payment delete.
+    dashboard_cache.invalidate_for_table(user_id=current_user.id, table="debts")
     return Response(status_code=status.HTTP_204_NO_CONTENT)

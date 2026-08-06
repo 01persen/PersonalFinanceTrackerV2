@@ -142,8 +142,8 @@
 > epic-0007 NOT_STARTED blocker dependency epic-0008 sudah cleared
 > tapi out-of-scope Stage H ini; next version `v5.14` akan muncul
 > saat epic-0007 atau epic-0009 Stage A start).
-> **epic-0007 IN_PROGRESS** (v6.2, 2026-08-07 — Tech Leader Stage A
-> complete post autopilot Stage A sourced v6.1): dependency `0003 + 0005 +
+> **epic-0007 IN_PROGRESS** (v6.3, 2026-08-07 — Tech Leader Stage B
+> complete post Stage A v6.2): dependency `0003 + 0005 +
 > 0006` semua DONE (dari v5.13-final state di `origin/main`
 > `d133333617afcff1eca4ce860cb92d5769ced8a6`), epic-0007 sekarang
 > topmost eligible. Stage 5 dari Stage Plan executed first time.
@@ -155,8 +155,8 @@
 > `release_branch=release/epic-0007`,
 > `base_sha=d133333617afcff1eca4ce860cb92d5769ced8a6`, `epic_doc_url`,
 > `tracker_url`, `prd_url`, `github_repo_url`, `project_folder`,
-> `tracker_version=v6.2`, `stage=A`) + status flip `todo → in_progress`
-> + Catatan + Riwayat entry v6.2 + force-push.
+> `tracker_version=v6.3`, `stage=B`) + status flip `todo → in_progress`
+> + Catatan + Riwayat entry v6.3 + force-push.
 > Parent issue [epic-0007] Networth, Dashboard & Visualization dibuat
 > oleh autopilot (Stage A minimal — create parent + initial metadata
 > `epic_id`/`epic_doc_url`/`tracker_url` + tracker table flip +
@@ -205,7 +205,7 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
 - **Stage 2:** epic-0002 + epic-0008 (paralel — keduanya butuh 0001) — epic-0008 **DONE** (v5.8 Stage A + v5.9 Stage B + v5.10 Stage 1 closed + v5.11 Stage 2 closed + v5.12 Stage 3 closed + v5.13 Stage 4 closed + v5.13-final Stage H closed 2026-08-06; 6/6 sub-task DONE — Stage 1 paralel CSV+JSON/ZIP + Stage 2 BE settings race-fix propagated + Stage 3 FE Settings UI + Stage 4 FE Export Buttons + Stage 5 QA integration end-to-end + Stage H squash-merge ke `main`)
 - **Stage 3:** epic-0003
 - **Stage 4 (paralel):** epic-0004 + epic-0005 + epic-0006
-- **Stage 5:** epic-0007 — **IN_PROGRESS** (v6.2, 2026-08-07 — Tech Leader Stage A complete post autopilot Stage A sourced v6.1; dependency `epic-0003 + 0005 + 0006` semua DONE, topmost eligible. Sub-task planning 8 (1 BE aggregasi + 1 FE layout + 4 FE charts/widgets + 1 FE mobile ringkas + 1 FE states) — final breakdown oleh System Analyst di Stage B)
+- **Stage 5:** epic-0007 — **IN_PROGRESS** (v6.3, 2026-08-07 — Tech Leader Stage B complete post Stage A v6.2; dependency `epic-0003 + 0005 + 0006` semua DONE, topmost eligible. **Sub-task list final 11 sub-task di 5 stage aktif + Stage H** (1 BE aggregasi + 1 FE layout + 4 FE charts/widgets + 2 FE state/mobile + 1 QA integration + 2 Stage H finalize) — breakdown oleh System Analyst di Stage B, accepted TL dengan 4 keputusan (stdlib cache, hand-rolled SVG, full-screen route, avg EF pct))
 - **Stage 6:** epic-0009 — recurring tagihan tetap + reminder
 
 ## Status Legend
@@ -492,6 +492,49 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
     8 (1 BE aggregasi + 1 FE layout + 4 FE charts/widgets + 1 FE mobile
     ringkas + 1 FE states) atau breakdown lebih granular sesuai
     kompleksitas Epic Detail Doc.
+  - **Stage B — System Analyst breakdown + Tech Leader complete**
+    (v6.3, 2026-08-07, post Stage A v6.2): System Analyst reply
+    dengan tabel sub-task final **11 sub-task** (lebih granular dari
+    initial 8 plan karena 6 BE endpoint + 4 FE sections + mobile +
+    states memerlukan breakdown terpisah). Breakdown:
+    - Stage 1 (1 sub-task paralel): `sub-0007-01` BE dashboard
+      aggregation endpoints + 60s cache → assigned Backend Engineer
+      (GRE-99, `--status todo` kickoff).
+    - Stage 2 (1 sub-task): `sub-0007-02` FE Dashboard layout (web
+      desktop) + KPI cards + IDR formatter lib → assigned Frontend
+      Engineer (GRE-100, `--status backlog`).
+    - Stage 3 (4 sub-task paralel): `sub-0007-03` FE Chart line
+      networth-trend (SVG hand-rolled, GRE-101), `sub-0007-04` FE
+      Chart bar income/expense (SVG hand-rolled, GRE-102),
+      `sub-0007-05` FE Chart donut top-5 kategori (SVG hand-rolled,
+      GRE-103), `sub-0007-06` FE Widget goal-progress + debt-summary
+      (GRE-104) → semua assigned Frontend Engineer, `--status backlog`.
+    - Stage 4 (2 sub-task paralel): `sub-0007-07` FE Mobile ringkas
+      view (390×844) + responsive wrapper (GRE-105), `sub-0007-08`
+      FE Empty state + loading skeleton + error state (GRE-106) →
+      assigned Frontend Engineer, `--status backlog`.
+    - Stage 5 (1 sub-task): `sub-0007-09` QA integration + e2e +
+      Epic AC re-verify → assigned QA Tester (GRE-107, `--status backlog`).
+    - Stage H.1 (1 sub-task): `sub-0007-10` CI/CD open + squash-merge
+      PR `release/epic-0007 → main` → assigned CI/CD Engineer (GRE-108,
+      `--status backlog`).
+    - Stage H.2 (1 sub-task): `sub-0007-11` TL cross-check 4 Epic AC
+      + flip parent ke `done` + tag `v0.9.0` → assigned Tech Leader
+      (GRE-109, `--status backlog`).
+    - Total: 11 sub-task (1 BE + 7 FE + 1 QA + 1 CI/CD + 1 TL).
+    - TL accept 4 keputusan dari SA breakdown:
+      1. **60s cache → stdlib TTL dict** (zero new dep, ~40 LOC `dashboard_cache.py`).
+      2. **Chart library → hand-rolled SVG** (zero new dep, ~580 LOC total 3 chart, no bundle cost).
+      3. **Mobile routing → full-screen route `/dashboard/full`** (cleaner URL, shareable, no `?view=full` query).
+      4. **KPI EF progress → avg % across EF goals aktif** (kalau 0 EF goal → "Belum ada dana darurat" empty).
+    - TL complete Stage B dengan: (1) 11 sub-issue created dengan
+      `--status todo` (Stage 1) + `--status backlog` (sisanya);
+      (2) Catatan entry Stage B complete (entry ini); (3) Riwayat
+      entry v6.3; (4) bump tracker `v6.2 → v6.3`; (5) update
+      metadata `tracker_version=v6.3`, `stage=B`. Stage 1 kickoff
+      ke Backend Engineer (sub-0007-01) sudah jalan via `--status todo`
+      assignment (auto-fire — TIDAK mention di parent untuk avoid
+      double-trigger).
 - epic **0009** NOT_STARTED (v5.1 stakeholder revert 2026-08-03; histori
   v3.9 sebelumnya sourced 2026-07-29 dengan branch `release/epic-0009` —
   reverted per v5.1). Scope sempit: recurring untuk tagihan tetap
@@ -1567,6 +1610,33 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
   Epic Detail Doc 8 sub-task plan (1 BE aggregasi + 1 FE layout + 4
   FE charts/widgets + 1 FE mobile ringkas + 1 FE states) menjadi
   detail sub-task final + assignee per stage.
+- v6.3 (2026-08-07) — Tech Leader: epic-0007 **Stage B complete**
+  (post Stage A v6.2). System Analyst breakdown Epic Detail Doc
+  → 11 sub-task final (lebih granular dari initial 8 plan). TL
+  accept 4 keputusan: (1) 60s cache → stdlib TTL dict (zero new dep);
+  (2) chart library → hand-rolled SVG (zero new dep); (3) mobile
+  routing → full-screen route `/dashboard/full`; (4) KPI EF progress
+  → avg % across EF goals aktif. 11 sub-issue created:
+  `sub-0007-01` (GRE-99, BE, Stage 1, `todo` kickoff),
+  `sub-0007-02` (GRE-100, FE, Stage 2, `backlog`),
+  `sub-0007-03` (GRE-101, FE, Stage 3, `backlog`),
+  `sub-0007-04` (GRE-102, FE, Stage 3, `backlog`),
+  `sub-0007-05` (GRE-103, FE, Stage 3, `backlog`),
+  `sub-0007-06` (GRE-104, FE, Stage 3, `backlog`),
+  `sub-0007-07` (GRE-105, FE, Stage 4, `backlog`),
+  `sub-0007-08` (GRE-106, FE, Stage 4, `backlog`),
+  `sub-0007-09` (GRE-107, QA, Stage 5, `backlog`),
+  `sub-0007-10` (GRE-108, CI/CD, Stage H.1, `backlog`),
+  `sub-0007-11` (GRE-109, TL, Stage H.2, `backlog`). Stage 1
+  kickoff ke Backend Engineer (sub-0007-01) sudah jalan via
+  `--status todo` assignment (auto-fire — TIDAK mention di parent
+  untuk avoid double-trigger). Metadata updated:
+  `tracker_version=v6.3`, `stage=B`. Tracker bumped v6.2 → v6.3.
+  Stage Plan Stage 5 entry expanded dengan 11 sub-task final + 4
+  keputusan TL. Catatan entry Stage B complete dengan sub-task
+  organization + TL keputusan + workflow. Riwayat entry v6.3 (entry
+  ini). Commit akan di-push ke `release/epic-0007` untuk
+  synchronize dengan remote.
 - v6.2 (2026-08-07) — Tech Leader: epic-0007 **Stage A complete**
   (post autopilot v6.1). Status parent `[GRE-98]` flipped
   `todo → in_progress`. Metadata pin lengkap (10 keys):

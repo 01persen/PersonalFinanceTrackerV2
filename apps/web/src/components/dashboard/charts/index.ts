@@ -11,3 +11,4 @@
  */
 export { NetworthTrendChart } from "@/components/dashboard/charts/networth-trend-chart";
 export { IncomeExpenseChart } from "@/components/dashboard/charts/income-expense-chart";
+export { TopCategoriesDonut } from "@/components/dashboard/charts/top-categories-donut";

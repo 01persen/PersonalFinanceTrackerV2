@@ -11,7 +11,7 @@ import {
   DashboardSkeleton,
   DebtsSummaryPlaceholder,
   GoalsProgressPlaceholder,
-  IncomeExpenseTrendPlaceholder,
+  IncomeExpenseChart,
   KpiCards,
   NetworthTrendChart,
   TopCategoriesPlaceholder,
@@ -21,6 +21,7 @@ import { useAuth } from "@/lib/auth/auth-context";
 import { AuthGuard } from "@/lib/auth/auth-guard";
 import { loadDashboard } from "@/lib/dashboard/dashboard-client";
 import type {
+  DashboardIncomeExpenseTrend,
   DashboardNetworthTrend,
   DashboardSummary,
 } from "@/lib/dashboard/types";
@@ -32,6 +33,7 @@ interface DashboardState {
   status: "loading" | "ready" | "error";
   summary: DashboardSummary | null;
   networthTrend: DashboardNetworthTrend | null;
+  incomeExpenseTrend: DashboardIncomeExpenseTrend | null;
   errorMessage: string | null;
 }
 
@@ -39,6 +41,7 @@ const INITIAL_STATE: DashboardState = {
   status: "loading",
   summary: null,
   networthTrend: null,
+  incomeExpenseTrend: null,
   errorMessage: null,
 };
 
@@ -123,6 +126,7 @@ function DashboardContent() {
         status: "ready",
         summary: payload.summary,
         networthTrend: payload.networthTrend,
+        incomeExpenseTrend: payload.incomeExpenseTrend,
         errorMessage: null,
       });
     } catch (error) {
@@ -132,6 +136,7 @@ function DashboardContent() {
         status: "error",
         summary: null,
         networthTrend: null,
+        incomeExpenseTrend: null,
         errorMessage: summarizeError(error),
       });
     }
@@ -188,7 +193,9 @@ function DashboardContent() {
                 <NetworthTrendChart data={state.networthTrend?.data ?? []} />
               </div>
               <div className="md:col-span-4">
-                <IncomeExpenseTrendPlaceholder />
+                <IncomeExpenseChart
+                  data={state.incomeExpenseTrend?.data ?? []}
+                />
               </div>
               <div className="md:col-span-6">
                 <GoalsProgressPlaceholder />

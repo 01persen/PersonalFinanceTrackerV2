@@ -10,3 +10,4 @@
  * shape exposed by `lib/dashboard/types.ts` (sub-0007-02).
  */
 export { NetworthTrendChart } from "@/components/dashboard/charts/networth-trend-chart";
+export { IncomeExpenseChart } from "@/components/dashboard/charts/income-expense-chart";

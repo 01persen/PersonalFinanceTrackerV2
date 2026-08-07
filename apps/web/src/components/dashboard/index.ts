@@ -16,7 +16,7 @@ export {
   TONE_STYLES,
 } from "@/components/dashboard/kpi-cards";
 export { NetworthTrendChart } from "@/components/dashboard/charts/networth-trend-chart";
-export { IncomeExpenseTrendPlaceholder } from "@/components/dashboard/income-expense-trend-placeholder";
+export { IncomeExpenseChart } from "@/components/dashboard/charts/income-expense-chart";
 export { TopCategoriesPlaceholder } from "@/components/dashboard/top-categories-placeholder";
 export { GoalsProgressPlaceholder } from "@/components/dashboard/goals-progress-placeholder";
 export { DebtsSummaryPlaceholder } from "@/components/dashboard/debts-summary-placeholder";

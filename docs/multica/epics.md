@@ -181,6 +181,20 @@
 > `feat/sub-0007-01-dashboard-aggregations` → `release/epic-0007`)
 > in-flight via CI/CD Engineer mention (sub-task `sub-0007-01` status
 > `in_review` awaiting Stage F completion).
+> **epic-0007 (v6.5, 2026-08-07 — Tech Leader Stage G auto-progress,
+> post sub-0007-01 Stage F merge)**: sub-task `sub-0007-01`
+> `[GRE-99](https://multica/issues/GRE-99)` **DONE** (Stage F complete
+> via CI/CD Engineer squash-merge
+> [PR #73](https://github.com/01persen/PersonalFinanceTrackerV2/pull/73)
+> commit `3c8904c` 2026-08-07T02:31:51Z, pipeline `api quality` +
+> `web quality` SUCCESS, `release/epic-0007` HEAD advance
+> `3c8904c → 3c8904c`). Sub-task `sub-0007-02`
+> `[GRE-100](https://multica/issues/GRE-100)` promoted `backlog → todo`
+> + auto-fire Frontend Engineer (`173f6cbb-e459-43ad-a699-f990a6fe2e18`)
+> untuk Stage C kickoff FE Dashboard layout (web desktop) + KPI cards +
+> IDR formatter lib. Sub-task progress epic-0007: **1/11 DONE, 0/11
+> in-flight, 1/11 todo, 9/11 backlog**. Branch `release/epic-0007`
+> tip `3c8904c`. Catatan + Riwayat entry v6.5 (entry ini).
 > **Owner:** Tech Leader (Engineering Squad)
 
 Tracker mengikuti urutan dependency graph (bukan urgency bisnis), sesuai SOP.
@@ -220,7 +234,7 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
 - **Stage 2:** epic-0002 + epic-0008 (paralel — keduanya butuh 0001) — epic-0008 **DONE** (v5.8 Stage A + v5.9 Stage B + v5.10 Stage 1 closed + v5.11 Stage 2 closed + v5.12 Stage 3 closed + v5.13 Stage 4 closed + v5.13-final Stage H closed 2026-08-06; 6/6 sub-task DONE — Stage 1 paralel CSV+JSON/ZIP + Stage 2 BE settings race-fix propagated + Stage 3 FE Settings UI + Stage 4 FE Export Buttons + Stage 5 QA integration end-to-end + Stage H squash-merge ke `main`)
 - **Stage 3:** epic-0003
 - **Stage 4 (paralel):** epic-0004 + epic-0005 + epic-0006
-- **Stage 5:** epic-0007 — **IN_PROGRESS** (v6.3, 2026-08-07 — Tech Leader Stage B complete post Stage A v6.2; dependency `epic-0003 + 0005 + 0006` semua DONE, topmost eligible. **Sub-task list final 11 sub-task di 5 stage aktif + Stage H** (1 BE aggregasi + 1 FE layout + 4 FE charts/widgets + 2 FE state/mobile + 1 QA integration + 2 Stage H finalize) — breakdown oleh System Analyst di Stage B, accepted TL dengan 4 keputusan (stdlib cache, hand-rolled SVG, full-screen route, avg EF pct))
+- **Stage 5:** epic-0007 — **IN_PROGRESS** (v6.5, 2026-08-07 — Tech Leader Stage G auto-progress post sub-0007-01 Stage F complete; sub-task `sub-0007-01` BE dashboard aggregation DONE; `sub-0007-02` FE layout promoted `todo`. 10 sub-task remaining: Stage 2 FE layout, Stage 3 4 FE charts/widgets, Stage 4 2 FE state/mobile, Stage 5 QA integration, Stage H 2 finalize. Dependency `epic-0003 + 0005 + 0006` semua DONE. **Sub-task list final 11 sub-task** — breakdown oleh System Analyst di Stage B v6.3, accepted TL dengan 4 keputusan (stdlib cache, hand-rolled SVG, full-screen route, avg EF pct))
 - **Stage 6:** epic-0009 — recurring tagihan tetap + reminder
 
 ## Status Legend
@@ -1706,3 +1720,25 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
   `sub-0007-01` `in_review` (QA PASS, awaiting Stage F). Metadata
   `ef_achieved_followup` updated `SA_spec_clarification_post_merge`
   → `SA_spec_clarification_done_2026-08-06`.
+- v6.5 (2026-08-07) — Tech Leader: epic-0007 **Stage G auto-progress**
+  post sub-0007-01 Stage F complete (CI/CD squash-merge
+  [PR #73](https://github.com/01persen/PersonalFinanceTrackerV2/pull/73)
+  commit `3c8904c` 2026-08-07T02:31:51Z, pipeline `api quality` +
+  `web quality` SUCCESS, `release/epic-0007` HEAD `3c8904c`). TL
+  action: (1) `sub-0007-01` `[GRE-99](https://multica/issues/GRE-99)`
+  status flip `in_review → done`; (2) `sub-0007-02`
+  `[GRE-100](https://multica/issues/GRE-100)` promoted `backlog → todo`
+  + auto-fire Frontend Engineer (`173f6cbb`) untuk Stage C kickoff FE
+  Dashboard layout (web desktop) + KPI cards + IDR formatter lib; (3)
+  metadata parent issue update `tracker_version=v6.3 → v6.5` (next
+  agent run akan re-pin); (4) tracker di-bump `v6.4 → v6.5` dengan
+  header status block v6.5 paragraph + Stage Plan Stage 5 entry
+  updated + Riwayat entry v6.5 (entry ini). Commit akan di-push ke
+  `release/epic-0007` untuk synchronize dengan remote (force-push
+  aman — branch hanya punya commit lokal tracker + sub-0007-01 merge).
+  Sub-task progress: **1/11 DONE** (sub-0007-01) + **1/11 todo**
+  (sub-0007-02 FE layout) + **9/11 backlog**. Auto-progress loop:
+  Stage G trigger akan fire lagi setelah sub-0007-02 complete
+  (Stage D → E → F → G loop) untuk promote sub-0007-03 → sub-0007-06
+  paralel Stage 3, dst sampai Stage H. Stage H.1 (`sub-0007-10`)
+  + Stage H.2 (`sub-0007-11`) tetap `backlog` sampai Stage 5 close.

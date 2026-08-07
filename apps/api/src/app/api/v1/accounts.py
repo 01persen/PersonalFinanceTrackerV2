@@ -43,6 +43,7 @@ from app.db.models.account import Account
 from app.db.models.enums import AccountType
 from app.db.models.user import User
 from app.db.session import get_session
+from app.services import dashboard_cache
 from app.services.balance import calculate_account_balance, calculate_user_balances
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
@@ -105,6 +106,11 @@ def create_account(
     db.add(account)
     db.commit()
     db.refresh(account)
+    # sub-0007-01 -- invalidate the dashboard cache so the next
+    # ``/dashboard/summary`` and ``/dashboard/networth-trend`` call
+    # sees the new account's opening balance. The two endpoints are
+    # the only dashboard reads that depend on the accounts aggregate.
+    dashboard_cache.invalidate_for_table(user_id=current_user.id, table="accounts")
     return AccountPublic.from_account(account)
 
 
@@ -252,6 +258,9 @@ def update_account(
 
     db.commit()
     db.refresh(account)
+    # sub-0007-01 -- invalidate dashboard cache on type / balance / archive
+    # changes so the next read sees the corrected networth.
+    dashboard_cache.invalidate_for_table(user_id=current_user.id, table="accounts")
     return AccountPublic.from_account(account)
 
 
@@ -275,4 +284,8 @@ def delete_account(
     account = _get_owned_account(db, account_id=account_id, current_user=current_user)
     account.archived = True
     db.commit()
+    # sub-0007-01 -- invalidating on archive hides the account from the
+    # saldo engine's aggregate (the engine's ``archived.is_(False)``
+    # filter is what powers that), so the networth read must refresh.
+    dashboard_cache.invalidate_for_table(user_id=current_user.id, table="accounts")
     return Response(status_code=status.HTTP_204_NO_CONTENT)

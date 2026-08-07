@@ -166,6 +166,21 @@
 > dengan mention ke System Analyst. epic-0009 tetap NOT_STARTED
 > menunggu klarifikasi stakeholder scope sempit (recurring tagihan
 > tetap, di luar scope autopilot ini).
+> **epic-0007 (v6.4, 2026-08-06 — System Analyst EF avg semantic
+> clarification, post-sub-0007-01 QA spec-clarification #4)**:
+> Tech Leader memutuskan defer spec-clarification EF achieved-exclusion
+> ke backlog (current behavior accepted, NOT blocker merge). Rationale:
+> (1) convention consistency — `goal_engine.compute_goal_progress`
+> (sub-0005-02) pakai filter `archived_at IS NULL`; BE Engineer mirror
+> convention ini di `dashboard.py:215-223` (divergence dari epic spec
+> wording adalah by-design consequence, bukan oversight); (2) product
+> UX lebih sehat — "achieved" EF (current >= target, belum di-archive)
+> tetap relevan untuk display (FE show "Dana darurat: 100% ✓"); (3)
+> no regression + existing tests pass. SA per TL request update
+> Epic Detail Doc + tambah Note ini. Stage F (CI/CD merge
+> `feat/sub-0007-01-dashboard-aggregations` → `release/epic-0007`)
+> in-flight via CI/CD Engineer mention (sub-task `sub-0007-01` status
+> `in_review` awaiting Stage F completion).
 > **Owner:** Tech Leader (Engineering Squad)
 
 Tracker mengikuti urutan dependency graph (bukan urgency bisnis), sesuai SOP.
@@ -535,6 +550,21 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
       ke Backend Engineer (sub-0007-01) sudah jalan via `--status todo`
       assignment (auto-fire — TIDAK mention di parent untuk avoid
       double-trigger).
+  - **EF avg semantic clarification — System Analyst complete** (v6.4,
+    2026-08-06, post sub-0007-01 QA spec-clarification #4): EF avg
+    semantic clarified post-sub-0007-01 QA 2026-08-06 —
+    achieved-not-archived counted, archived excluded (mirror
+    sub-0005-02 convention). Tech Leader memutuskan defer
+    spec-clarification #4 ke backlog (current BE behavior accepted,
+    not blocker merge). Epic Detail Doc
+    `docs/product/epics/epic-0007-networth-dashboard-and-visualization.md`
+    di-update dengan `Spec Clarifications` sub-section: EF avg formula
+    eksplisit — "achieved-not-archived goals counted in average; only
+    `archived_at IS NOT NULL` excluded (consistent dengan
+    `compute_goal_progress` aggregator dari sub-0005-02; TL decision
+    2026-08-06 post-#4 spec clarification)". Status epic-0007 tetap
+    `IN_PROGRESS`; Stage F (CI/CD merge) tetap in-flight via CI/CD
+    Engineer mention.
 - epic **0009** NOT_STARTED (v5.1 stakeholder revert 2026-08-03; histori
   v3.9 sebelumnya sourced 2026-07-29 dengan branch `release/epic-0009` —
   reverted per v5.1). Scope sempit: recurring untuk tagihan tetap
@@ -1658,3 +1688,21 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
   `docs/product/epics/epic-0007-networth-dashboard-and-visualization.md`
   → 8 sub-task final + assignee per stage) akan di-trigger berikutnya
   dengan hand-off mention ke System Analyst.
+- v6.4 (2026-08-06) — System Analyst: epic-0007 **EF avg semantic
+  clarification complete** (post sub-0007-01 QA spec-clarification #4,
+  TL decision 2026-08-06 defer-to-backlog). Tech Leader memutuskan
+  accept current BE behavior (filter `archived_at IS NULL` di
+  `dashboard.py:215-223` mirror `compute_goal_progress` aggregator
+  dari sub-0005-02) — achieved-not-archived EF goals tetap masuk
+  average, bukan blocker merge. SA update: (1) Epic Detail Doc
+  `docs/product/epics/epic-0007-networth-dashboard-and-visualization.md`
+  dengan `Spec Clarifications` sub-section + status flip
+  `NOT_STARTED → IN_PROGRESS` + `Last Updated` line; (2) tracker
+  header status block dengan v6.4 paragraph; (3) Catatan entry
+  EF avg clarification di epic-0007 row; (4) Riwayat entry v6.4
+  (entry ini). Tracker di-bump `v6.3 → v6.4`. Stage F (CI/CD merge
+  `feat/sub-0007-01-dashboard-aggregations` → `release/epic-0007`)
+  tetap in-flight via CI/CD Engineer mention. Sub-task status:
+  `sub-0007-01` `in_review` (QA PASS, awaiting Stage F). Metadata
+  `ef_achieved_followup` updated `SA_spec_clarification_post_merge`
+  → `SA_spec_clarification_done_2026-08-06`.

@@ -2,10 +2,11 @@
 
 - **ID:** epic-0007
 - **Prioritas:** P-CORE
-- **Status:** NOT_STARTED
+- **Status:** IN_PROGRESS
 - **Owner:** Frontend Engineer (primary) + Backend (aggregate)
 - **Dependency:** epic-0003, epic-0005, epic-0006
 - **Branch:** `release/epic-0007`
+- **Last Updated:** 2026-08-06 — System Analyst: EF avg semantic clarification (post-sub-0007-01 QA spec-clarification #4, TL decision 2026-08-06). Tracker bumped v6.3 → v6.4.
 
 ## Tujuan
 
@@ -27,6 +28,17 @@ Networth = total assets − total liabilities (auto-computed).
   - `GET /dashboard/goals-progress` — progress semua goal.
   - `GET /dashboard/debts-summary` — total sisa utang + total bunga paid.
 - Cache 60 detik di server.
+
+#### Spec Clarifications
+
+- **EF avg formula (`emergency_fund_avg_pct` di `GET /dashboard/summary`)**:
+  achieved-not-archived goals counted in average; only `archived_at IS NOT NULL`
+  excluded (consistent dengan `compute_goal_progress` aggregator dari
+  sub-0005-02; TL decision 2026-08-06 post-sub-0007-01 QA spec-clarification #4).
+  Goal dengan `current_amount_cents >= target_amount_cents` (achieved) tapi
+  `archived_at IS NULL` tetap masuk average. Empty EF set → `null` (FE render
+  "Belum ada dana darurat"). Implikasi FE: "Dana darurat: 100% ✓" tetap
+  ditampilkan untuk achieved-not-archived goal (success state).
 
 ### Frontend
 

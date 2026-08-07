@@ -213,6 +213,27 @@
 > progress epic-0007: **2/11 DONE, 0/11 in-flight, 4/11 todo, 5/11
 > backlog**. Branch `release/epic-0007` tip `17c114e`. Catatan +
 > Riwayat entry v6.6 (entry ini).
+> **epic-0007 (v6.7, 2026-08-07 — Tech Leader Stage G auto-progress
+> loop ke-3, post sub-0007-03 Stage F merge)**: sub-task `sub-0007-03`
+> `[GRE-101](https://multica/issues/GRE-101)` **DONE** (Stage F complete
+> via CI/CD Engineer squash-merge
+> [PR #75](https://github.com/01persen/PersonalFinanceTrackerV2/pull/75)
+> commit `7f99e73` 2026-08-07T07:25:00Z, pipeline `api quality` +
+> `web quality` SUCCESS, `release/epic-0007` HEAD advance
+> `17c114e → 7f99e73`). QA PASS report (Stage E) verified all 6 AC
+> sub-0007-03 + 46/46 unit tests (16 networth-trend + 30 sub-0007-02
+> no regression). Note: PR #75 sekaligus squash-merge sub-0007-02
+> (FE dashboard files) + sub-0007-03 (networth-trend chart) — end
+> state `release/epic-0007` berisi FE dashboard layout + KPI cards
+> + networth-trend chart, sesuai intent Stage F sub-0007-02 +
+> sub-0007-03. Sub-tasks `sub-0007-04` `[GRE-102](https://multica/issues/GRE-102)` (bar chart),
+> `sub-0007-05` `[GRE-103](https://multica/issues/GRE-103)` (donut chart),
+> `sub-0007-06` `[GRE-104](https://multica/issues/GRE-104)` (widgets goal+debt)
+> TETAP `todo` (Stage 3 paralel, running — TIDAK perlu promotion).
+> Sub-task progress epic-0007: **3/11 DONE, 0/11 in-flight, 3/11 todo,
+> 5/11 backlog**. Branch `release/epic-0007` tip `7f99e73`. TIDAK
+> ada promotion baru di v6.7 — Stage 3 sibling sub-task 04/05/06
+> sudah running paralel. Catatan + Riwayat entry v6.7 (entry ini).
 > **Owner:** Tech Leader (Engineering Squad)
 
 Tracker mengikuti urutan dependency graph (bukan urgency bisnis), sesuai SOP.
@@ -252,7 +273,7 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
 - **Stage 2:** epic-0002 + epic-0008 (paralel — keduanya butuh 0001) — epic-0008 **DONE** (v5.8 Stage A + v5.9 Stage B + v5.10 Stage 1 closed + v5.11 Stage 2 closed + v5.12 Stage 3 closed + v5.13 Stage 4 closed + v5.13-final Stage H closed 2026-08-06; 6/6 sub-task DONE — Stage 1 paralel CSV+JSON/ZIP + Stage 2 BE settings race-fix propagated + Stage 3 FE Settings UI + Stage 4 FE Export Buttons + Stage 5 QA integration end-to-end + Stage H squash-merge ke `main`)
 - **Stage 3:** epic-0003
 - **Stage 4 (paralel):** epic-0004 + epic-0005 + epic-0006
-- **Stage 5:** epic-0007 — **IN_PROGRESS** (v6.6, 2026-08-07 — Tech Leader Stage G auto-progress post sub-0007-02 Stage F complete; sub-task `sub-0007-01` BE dashboard aggregation DONE; `sub-0007-02` FE layout DONE; `sub-0007-03/04/05/06` FE charts + widgets promoted `todo` (Stage 3 paralel). 9 sub-task remaining: Stage 3 4 FE charts/widgets in-flight, Stage 4 2 FE state/mobile, Stage 5 QA integration, Stage H 2 finalize. Dependency `epic-0003 + 0005 + 0006` semua DONE. **Sub-task list final 11 sub-task** — breakdown oleh System Analyst di Stage B v6.3, accepted TL dengan 4 keputusan (stdlib cache, hand-rolled SVG, full-screen route, avg EF pct))
+- **Stage 5:** epic-0007 — **IN_PROGRESS** (v6.7, 2026-08-07 — Tech Leader Stage G auto-progress loop ke-3 post sub-0007-03 Stage F complete; sub-task `sub-0007-01` BE dashboard aggregation DONE; `sub-0007-02` FE layout DONE; `sub-0007-03` FE line chart networth-trend DONE; `sub-0007-04/05/06` FE charts + widgets running `todo` (Stage 3 paralel). 8 sub-task remaining: Stage 3 3 FE charts/widgets in-flight, Stage 4 2 FE state/mobile, Stage 5 QA integration, Stage H 2 finalize. Dependency `epic-0003 + 0005 + 0006` semua DONE. **Sub-task list final 11 sub-task** — breakdown oleh System Analyst di Stage B v6.3, accepted TL dengan 4 keputusan (stdlib cache, hand-rolled SVG, full-screen route, avg EF pct))
 - **Stage 6:** epic-0009 — recurring tagihan tetap + reminder
 
 ## Status Legend
@@ -1782,7 +1803,39 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
    Riwayat entry v6.6 (entry ini). Sub-task progress: **2/11 DONE**
    (sub-0007-01 + sub-0007-02) + **4/11 todo** (Stage 3 FE paralel) +
    **5/11 backlog** (Stage 4 mobile+states × 2 + Stage 5 QA + Stage H
-   × 2). Auto-progress loop berikutnya fire setelah semua Stage 3
+   × 2).    Auto-progress loop berikutnya fire setelah semua Stage 3
    sub-task DONE → promote Stage 4 (sub-0007-07 mobile ringkas +
    sub-0007-08 empty/loading/error state) paralel, dst sampai
    Stage H.1 (sub-0007-10) + Stage H.2 (sub-0007-11).
+- v6.7 (2026-08-07) — Tech Leader: epic-0007 **Stage G auto-progress
+   loop ke-3** post sub-0007-03 Stage F complete (CI/CD squash-merge
+   [PR #75](https://github.com/01persen/PersonalFinanceTrackerV2/pull/75)
+   commit `7f99e73` 2026-08-07T07:25:00Z, pipeline `api quality` +
+   `web quality` SUCCESS, `release/epic-0007` HEAD advance
+   `17c114e → 7f99e73`). QA Tester PASS report (Stage E) verified
+   all 6 AC sub-0007-03 + 46/46 unit tests (16 networth-trend + 30
+   sub-0007-02 no regression). Note: PR #75 squash-merge sekaligus
+   membawa sub-0007-02 FE dashboard files (KPI cards + IDR formatter
+   lib) + sub-0007-03 networth-trend chart — end state `release/epic-0007`
+   berisi FE dashboard layout + networth-trend chart, sama dengan
+   intent Stage F sub-0007-02 + sub-0007-03. Branch `feat/sub-0007-03-networth-trend-chart`
+   di-delete per `--delete-branch` (historical). TL actions:
+   (1) `sub-0007-03` `[GRE-101](https://multica/issues/GRE-101)` status
+   flip `in_review → done` + metadata pin `merge_commit=7f99e73`,
+   `pr_url=https://github.com/01persen/PersonalFinanceTrackerV2/pull/75`,
+   `pr_number=75`, `pipeline_status=passed`, `feat_branch` kept
+   historical; (2) `sub-0007-04` `[GRE-102](https://multica/issues/GRE-102)` (bar chart),
+   `sub-0007-05` `[GRE-103](https://multica/issues/GRE-103)` (donut chart),
+   `sub-0007-06` `[GRE-104](https://multica/issues/GRE-104)` (widgets goal+debt)
+   TETAP `todo` (Stage 3 paralel sudah running, TIDAK ada promotion
+   baru); (3) metadata parent issue update `tracker_version=v6.6 → v6.7`
+   (next agent run akan re-pin); (4) tracker di-bump `v6.6 → v6.7`
+   dengan header status block v6.7 paragraph + Stage Plan Stage 5
+   entry updated + Riwayat entry v6.7 (entry ini). Sub-task progress:
+   **3/11 DONE** (sub-0007-01 + sub-0007-02 + sub-0007-03) + **3/11 todo**
+   (Stage 3 FE paralel: sub-0007-04/05/06) + **5/11 backlog** (Stage 4
+   mobile+states × 2 + Stage 5 QA + Stage H × 2). Auto-progress loop
+   berikutnya fire setelah semua Stage 3 sub-task DONE → promote
+   Stage 4 (sub-0007-07 mobile ringkas + sub-0007-08 empty/loading/error
+   state) paralel, dst sampai Stage H.1 (sub-0007-10) + Stage H.2
+   (sub-0007-11).

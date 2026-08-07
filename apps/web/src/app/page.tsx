@@ -1,26 +1,148 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { AppShell } from "@/components/shell/app-shell";
-import { NavigationIcon } from "@/components/shell/icons";
+import {
+  DashboardError,
+  DashboardGrid,
+  DashboardHeader,
+  DashboardSkeleton,
+  DebtsSummaryPlaceholder,
+  GoalsProgressPlaceholder,
+  IncomeExpenseTrendPlaceholder,
+  KpiCards,
+  NetworthTrendPlaceholder,
+  TopCategoriesPlaceholder,
+} from "@/components/dashboard";
+import { ApiError } from "@/lib/api/client";
 import { useAuth } from "@/lib/auth/auth-context";
 import { AuthGuard } from "@/lib/auth/auth-guard";
-import { navigationItems } from "@/lib/navigation";
+import { loadDashboard } from "@/lib/dashboard/dashboard-client";
+import type { DashboardSummary } from "@/lib/dashboard/types";
 
-const upcomingFeatures = navigationItems.filter((item) => !item.available).slice(0, 3);
+const TREND_MONTHS = 12;
+const TOP_CATEGORIES_LIMIT = 5;
 
-export default function HomePage() {
+interface DashboardState {
+  status: "loading" | "ready" | "error";
+  summary: DashboardSummary | null;
+  errorMessage: string | null;
+}
+
+const INITIAL_STATE: DashboardState = {
+  status: "loading",
+  summary: null,
+  errorMessage: null,
+};
+
+/**
+ * Translate a dashboard fetch failure into a user-friendly message.
+ * Mirrors the language used in `<MonthlyError>` so the page reads as
+ * part of the same family. 401/403 redirect to the global "sesi
+ * berakhir" path; 422/500 fall back to the BE's `detail` string when
+ * available, otherwise a generic Indonesian message.
+ */
+function summarizeError(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.status === 401 || error.status === 403) {
+      return "Sesi kamu sudah berakhir. Masuk lagi untuk memuat dashboard.";
+    }
+    if (error.status === 422) {
+      return error.message || "Permintaan ke dashboard tidak valid.";
+    }
+    if (error.status >= 500) {
+      return "Server sedang bermasalah. Coba lagi beberapa saat.";
+    }
+    return error.message || "Gagal memuat dashboard.";
+  }
+  return "Tidak bisa memuat dashboard. Periksa koneksi lalu coba lagi.";
+}
+
+export default function DashboardPage() {
   return (
     <AuthGuard>
-      <HomeContent />
+      <DashboardContent />
     </AuthGuard>
   );
 }
 
-function HomeContent() {
+function DashboardContent() {
   const router = useRouter();
-  const { user, logout, isLoading } = useAuth();
+  const { user, logout, isLoading: isLoggingOut } = useAuth();
+
+  const [state, setState] = useState<DashboardState>(INITIAL_STATE);
+
+  /**
+   * Race defenses (mirrors sub-0003-06 / sub-0003-07):
+   *   - `latestLoadIdRef` bumps per `load()` call so the catch/setState
+   *     after `await` only fires when the captured id is still current.
+   *   - `abortControllerRef` lets each new load cancel the prior
+   *     request mid-flight so its resolved value (success or error)
+   *     never lands in component state.
+   *   - The `useEffect` cleanup aborts on unmount, so navigating away
+   *     doesn't leave a dangling fetch that re-enters setState after
+   *     teardown.
+   */
+  const latestLoadIdRef = useRef<number>(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const load = useCallback(async () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    const loadId = ++latestLoadIdRef.current;
+
+    setState((current) => ({
+      ...current,
+      status: "loading",
+      errorMessage: null,
+    }));
+
+    const dropStale = () =>
+      loadId !== latestLoadIdRef.current || controller.signal.aborted;
+
+    try {
+      const payload = await loadDashboard({
+        trendMonths: TREND_MONTHS,
+        topCategoriesLimit: TOP_CATEGORIES_LIMIT,
+        signal: controller.signal,
+      });
+
+      if (dropStale()) return;
+
+      setState({
+        status: "ready",
+        summary: payload.summary,
+        errorMessage: null,
+      });
+    } catch (error) {
+      if (dropStale()) return;
+      if (controller.signal.aborted) return;
+      setState({
+        status: "error",
+        summary: null,
+        errorMessage: summarizeError(error),
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+    };
+  }, [load]);
+
+  const handleRetry = useCallback(() => {
+    void load();
+  }, [load]);
 
   const handleLogout = async () => {
     await logout();
@@ -28,76 +150,67 @@ function HomeContent() {
   };
 
   return (
-    <AppShell user={user} isLoggingOut={isLoading} onLogout={handleLogout}>
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="grid gap-6 p-6 sm:p-8 lg:grid-cols-[minmax(0,1fr)_19rem] lg:items-center">
-          <div>
-            <span className="inline-flex rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700">
-              Fondasi siap
-            </span>
-            <h2 className="mt-4 max-w-2xl text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">
-              Selamat datang di pusat keuanganmu.
-            </h2>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600 sm:text-base">
-              Shell aplikasi sudah siap untuk menampung fitur akun, transaksi, target, laporan,
-              dan pengaturan pada epic berikutnya.
-            </p>
-          </div>
+    <AppShell
+      user={user}
+      isLoggingOut={isLoggingOut}
+      onLogout={handleLogout}
+    >
+      <DashboardHeader user={user} />
 
-          <div className="rounded-2xl bg-slate-950 p-5 text-white shadow-lg shadow-slate-200">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand-500">
-              Sesi aktif
-            </p>
-            <p className="mt-3 truncate text-sm font-semibold" title={user?.email}>
-              {user?.email ?? "Profil belum tersedia"}
-            </p>
-            <p className="mt-1 text-xs leading-5 text-slate-400">
-              Identitas ini dimuat dari endpoint profil yang terlindungi.
-            </p>
-          </div>
-        </div>
-      </section>
+      <div className="mt-6 space-y-6">
+        {state.status === "loading" ? <DashboardSkeleton /> : null}
 
-      <section className="mt-6" aria-labelledby="upcoming-heading">
-        <div className="flex items-end justify-between gap-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand-700">
-              Berikutnya
-            </p>
-            <h2 id="upcoming-heading" className="mt-1 text-lg font-bold text-slate-900">
-              Fitur yang segera hadir
-            </h2>
-          </div>
-          <span className="text-xs font-medium text-slate-500">Epic 0002+</span>
-        </div>
+        {state.status === "error" ? (
+          <DashboardError
+            message={state.errorMessage}
+            onRetry={handleRetry}
+          />
+        ) : null}
 
-        <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {upcomingFeatures.map((item) => (
-            <article key={item.href} className="card flex min-h-44 flex-col">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-50 text-brand-700">
-                <NavigationIcon name={item.icon} className="h-5 w-5" />
+        {state.status === "ready" && state.summary ? (
+          <>
+            <KpiCards
+              networthCents={state.summary.networthCents}
+              incomeThisMonthCents={state.summary.incomeThisMonthCents}
+              expenseThisMonthCents={state.summary.expenseThisMonthCents}
+              emergencyFundAvgPct={state.summary.emergencyFundAvgPct}
+            />
+
+            <DashboardGrid>
+              <div className="md:col-span-8">
+                <NetworthTrendPlaceholder />
               </div>
-              <h3 className="mt-4 font-semibold text-slate-900">{item.label}</h3>
-              <p className="mt-1 text-sm leading-6 text-slate-600">{item.description}</p>
-              <p className="mt-auto pt-4 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                Segera tersedia
-              </p>
-            </article>
-          ))}
-        </div>
-      </section>
+              <div className="md:col-span-4">
+                <IncomeExpenseTrendPlaceholder />
+              </div>
+              <div className="md:col-span-6">
+                <GoalsProgressPlaceholder />
+              </div>
+              <div className="md:col-span-6">
+                <DebtsSummaryPlaceholder />
+              </div>
+            </DashboardGrid>
 
-      <section className="card mt-6 text-center" aria-labelledby="empty-dashboard-heading">
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-500">
-          <NavigationIcon name="reports" className="h-6 w-6" />
-        </div>
-        <h2 id="empty-dashboard-heading" className="mt-4 text-base font-semibold text-slate-900">
-          Belum ada data ringkasan
-        </h2>
-        <p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-slate-600">
-          Saldo, arus kas, dan progres target akan muncul setelah fitur akun dan transaksi aktif.
-        </p>
-      </section>
+            <TopCategoriesSection />
+          </>
+        ) : null}
+      </div>
     </AppShell>
+  );
+}
+
+/**
+ * Standalone card for the top-categories donut chart. Kept out of the
+ * 12-column grid on purpose — the donut card sits below the grid as a
+ * standalone full-width row so the donut can breathe (the sub-0007-05
+ * chart will replace the body without changing this layout shell).
+ */
+function TopCategoriesSection() {
+  return (
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-12 md:gap-6">
+      <div className="md:col-span-12">
+        <TopCategoriesPlaceholder />
+      </div>
+    </div>
   );
 }

@@ -8,6 +8,10 @@ export { DashboardHeader } from "@/components/dashboard/dashboard-header";
 export { DashboardGrid } from "@/components/dashboard/dashboard-grid";
 export { DashboardError } from "@/components/dashboard/dashboard-error";
 export { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
+export { DashboardContent } from "@/components/dashboard/dashboard-content";
+export {
+  DashboardMobileSummary,
+} from "@/components/dashboard/dashboard-mobile-summary";
 export {
   KpiCard,
   KpiCards,

@@ -1,0 +1,308 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+
+import { AppShell } from "@/components/shell/app-shell";
+import {
+  DashboardError,
+  DashboardGrid,
+  DashboardHeader,
+  DashboardMobileSummary,
+  DashboardSkeleton,
+  DebtSummarySection,
+  GoalProgressSection,
+  IncomeExpenseChart,
+  KpiCards,
+  NetworthTrendChart,
+  TopCategoriesPlaceholder,
+} from "@/components/dashboard";
+import { ApiError } from "@/lib/api/client";
+import { useAuth } from "@/lib/auth/auth-context";
+import { loadDashboard } from "@/lib/dashboard/dashboard-client";
+import type {
+  DashboardDebtsSummary,
+  DashboardGoalsProgress,
+  DashboardIncomeExpenseTrend,
+  DashboardNetworthTrend,
+  DashboardSummary,
+} from "@/lib/dashboard/types";
+
+/**
+ * Shared dashboard shell (sub-0007-02 + sub-0007-07).
+ *
+ * Owns the parallel fetch of the six dashboard aggregation endpoints
+ * (sub-0007-01), the loading/error/ready state machine, the
+ * `latestLoadIdRef` race defense (mirrors sub-0003-06/07), and the
+ * responsive layout that splits between the mobile ringkas summary
+ * (`<DashboardMobileSummary>`, sub-0007-07) and the desktop full
+ * dashboard (the KPI row + 12-column grid + widgets + top-categories
+ * placeholder — sub-0007-02/03/04/05/06).
+ *
+ * Why one shell for two routes:
+ *
+ *   - `/` (root) renders this shell with both mobile + desktop panes
+ *     toggled by Tailwind's `md:hidden` / `hidden md:block` utilities.
+ *   - `/dashboard/full` (sub-0007-07) renders the same shell but
+ *     passes `showMobileSummary={false}` so the user — usually a
+ *     mobile visitor who tapped "Lihat dashboard lengkap" — sees the
+ *     desktop layout regardless of viewport width. The route also
+ *     injects a back-link via `topSlot`.
+ *
+ * Extracting the shell out of `app/page.tsx` lets both routes share
+ * the race-defense + fetch + state machinery without duplicating any
+ * of it. Mirrors the same barrel-convention used by the goals /
+ * transactions / debts modules.
+ */
+
+const TREND_MONTHS = 12;
+const TOP_CATEGORIES_LIMIT = 5;
+
+interface DashboardState {
+  status: "loading" | "ready" | "error";
+  summary: DashboardSummary | null;
+  networthTrend: DashboardNetworthTrend | null;
+  incomeExpenseTrend: DashboardIncomeExpenseTrend | null;
+  goalsProgress: DashboardGoalsProgress | null;
+  debtsSummary: DashboardDebtsSummary | null;
+  errorMessage: string | null;
+}
+
+const INITIAL_STATE: DashboardState = {
+  status: "loading",
+  summary: null,
+  networthTrend: null,
+  incomeExpenseTrend: null,
+  goalsProgress: null,
+  debtsSummary: null,
+  errorMessage: null,
+};
+
+interface DashboardContentProps {
+  /**
+   * Whether to mount the mobile ringkas summary (`<DashboardMobileSummary>`,
+   * sub-0007-07). Default `true`. The `/dashboard/full` route passes
+   * `false` so a user who taps "Lihat dashboard lengkap" from the
+   * mobile summary lands on the full desktop layout regardless of
+   * viewport width.
+   */
+  showMobileSummary?: boolean;
+  /**
+   * Optional element rendered above `<DashboardHeader>` — used by the
+   * `/dashboard/full` route to surface a "Kembali ke beranda" back
+   * link. Kept out of the desktop root so the default `/` view doesn't
+   * carry a redundant back-link.
+   */
+  topSlot?: ReactNode;
+}
+
+/**
+ * Translate a dashboard fetch failure into a user-friendly message.
+ * Mirrors the language used in `<MonthlyError>` so the page reads as
+ * part of the same family. 401/403 redirect to the global "sesi
+ * berakhir" path; 422/500 fall back to the BE's `detail` string when
+ * available, otherwise a generic Indonesian message.
+ */
+function summarizeError(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.status === 401 || error.status === 403) {
+      return "Sesi kamu sudah berakhir. Masuk lagi untuk memuat dashboard.";
+    }
+    if (error.status === 422) {
+      return error.message || "Permintaan ke dashboard tidak valid.";
+    }
+    if (error.status >= 500) {
+      return "Server sedang bermasalah. Coba lagi beberapa saat.";
+    }
+    return error.message || "Gagal memuat dashboard.";
+  }
+  return "Tidak bisa memuat dashboard. Periksa koneksi lalu coba lagi.";
+}
+
+export function DashboardContent({
+  showMobileSummary = true,
+  topSlot,
+}: DashboardContentProps) {
+  const router = useRouter();
+  const { user, logout, isLoading: isLoggingOut } = useAuth();
+
+  const [state, setState] = useState<DashboardState>(INITIAL_STATE);
+
+  /**
+   * Race defenses (mirrors sub-0003-06 / sub-0003-07):
+   *   - `latestLoadIdRef` bumps per `load()` call so the catch/setState
+   *     after `await` only fires when the captured id is still current.
+   *   - `abortControllerRef` lets each new load cancel the prior
+   *     request mid-flight so its resolved value (success or error)
+   *     never lands in component state.
+   *   - The `useEffect` cleanup aborts on unmount, so navigating away
+   *     doesn't leave a dangling fetch that re-enters setState after
+   *     teardown.
+   */
+  const latestLoadIdRef = useRef<number>(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const load = useCallback(async () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    const loadId = ++latestLoadIdRef.current;
+
+    setState((current) => ({
+      ...current,
+      status: "loading",
+      errorMessage: null,
+    }));
+
+    const dropStale = () =>
+      loadId !== latestLoadIdRef.current || controller.signal.aborted;
+
+    try {
+      const payload = await loadDashboard({
+        trendMonths: TREND_MONTHS,
+        topCategoriesLimit: TOP_CATEGORIES_LIMIT,
+        signal: controller.signal,
+      });
+
+      if (dropStale()) return;
+
+      setState({
+        status: "ready",
+        summary: payload.summary,
+        networthTrend: payload.networthTrend,
+        incomeExpenseTrend: payload.incomeExpenseTrend,
+        goalsProgress: payload.goalsProgress,
+        debtsSummary: payload.debtsSummary,
+        errorMessage: null,
+      });
+    } catch (error) {
+      if (dropStale()) return;
+      if (controller.signal.aborted) return;
+      setState({
+        status: "error",
+        summary: null,
+        networthTrend: null,
+        incomeExpenseTrend: null,
+        goalsProgress: null,
+        debtsSummary: null,
+        errorMessage: summarizeError(error),
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+    };
+  }, [load]);
+
+  const handleRetry = useCallback(() => {
+    void load();
+  }, [load]);
+
+  const handleLogout = async () => {
+    await logout();
+    router.replace("/login");
+  };
+
+  const emptyTrend: DashboardNetworthTrend = { data: [] };
+
+  return (
+    <AppShell
+      user={user}
+      isLoggingOut={isLoggingOut}
+      onLogout={handleLogout}
+    >
+      {topSlot}
+
+      <DashboardHeader user={user} />
+
+      <div className="mt-6 space-y-6">
+        {state.status === "loading" ? <DashboardSkeleton /> : null}
+
+        {state.status === "error" ? (
+          <DashboardError
+            message={state.errorMessage}
+            onRetry={handleRetry}
+          />
+        ) : null}
+
+        {state.status === "ready" && state.summary ? (
+          <>
+            <div
+              className="hidden space-y-6 md:block"
+              data-testid="dashboard-desktop-pane"
+            >
+              <KpiCards
+                networthCents={state.summary.networthCents}
+                incomeThisMonthCents={state.summary.incomeThisMonthCents}
+                expenseThisMonthCents={state.summary.expenseThisMonthCents}
+                emergencyFundAvgPct={state.summary.emergencyFundAvgPct}
+              />
+
+              <DashboardGrid>
+                <div className="md:col-span-8">
+                  <NetworthTrendChart
+                    data={state.networthTrend?.data ?? []}
+                  />
+                </div>
+                <div className="md:col-span-4">
+                  <IncomeExpenseChart
+                    data={state.incomeExpenseTrend?.data ?? []}
+                  />
+                </div>
+                <div className="md:col-span-6">
+                  <GoalProgressSection
+                    goals={state.goalsProgress?.data ?? null}
+                  />
+                </div>
+                <div className="md:col-span-6">
+                  <DebtSummarySection
+                    summary={state.debtsSummary ?? null}
+                  />
+                </div>
+              </DashboardGrid>
+
+              <TopCategoriesSection />
+            </div>
+
+            {showMobileSummary ? (
+              <DashboardMobileSummary
+                summary={state.summary}
+                networthTrend={state.networthTrend ?? emptyTrend}
+              />
+            ) : null}
+          </>
+        ) : null}
+      </div>
+    </AppShell>
+  );
+}
+
+/**
+ * Standalone card for the top-categories donut chart. Kept out of the
+ * 12-column grid on purpose — the donut card sits below the grid as a
+ * standalone full-width row so the donut can breathe (the sub-0007-05
+ * chart will replace the body without changing this layout shell).
+ */
+function TopCategoriesSection() {
+  return (
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-12 md:gap-6">
+      <div className="md:col-span-12">
+        <TopCategoriesPlaceholder />
+      </div>
+    </div>
+  );
+}

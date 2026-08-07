@@ -9,8 +9,8 @@ import {
   DashboardGrid,
   DashboardHeader,
   DashboardSkeleton,
-  DebtsSummaryPlaceholder,
-  GoalsProgressPlaceholder,
+  DebtSummarySection,
+  GoalProgressSection,
   IncomeExpenseChart,
   KpiCards,
   NetworthTrendChart,
@@ -21,6 +21,8 @@ import { useAuth } from "@/lib/auth/auth-context";
 import { AuthGuard } from "@/lib/auth/auth-guard";
 import { loadDashboard } from "@/lib/dashboard/dashboard-client";
 import type {
+  DashboardDebtsSummary,
+  DashboardGoalsProgress,
   DashboardIncomeExpenseTrend,
   DashboardNetworthTrend,
   DashboardSummary,
@@ -34,6 +36,8 @@ interface DashboardState {
   summary: DashboardSummary | null;
   networthTrend: DashboardNetworthTrend | null;
   incomeExpenseTrend: DashboardIncomeExpenseTrend | null;
+  goalsProgress: DashboardGoalsProgress | null;
+  debtsSummary: DashboardDebtsSummary | null;
   errorMessage: string | null;
 }
 
@@ -42,6 +46,8 @@ const INITIAL_STATE: DashboardState = {
   summary: null,
   networthTrend: null,
   incomeExpenseTrend: null,
+  goalsProgress: null,
+  debtsSummary: null,
   errorMessage: null,
 };
 
@@ -127,6 +133,8 @@ function DashboardContent() {
         summary: payload.summary,
         networthTrend: payload.networthTrend,
         incomeExpenseTrend: payload.incomeExpenseTrend,
+        goalsProgress: payload.goalsProgress,
+        debtsSummary: payload.debtsSummary,
         errorMessage: null,
       });
     } catch (error) {
@@ -137,6 +145,8 @@ function DashboardContent() {
         summary: null,
         networthTrend: null,
         incomeExpenseTrend: null,
+        goalsProgress: null,
+        debtsSummary: null,
         errorMessage: summarizeError(error),
       });
     }
@@ -198,10 +208,10 @@ function DashboardContent() {
                 />
               </div>
               <div className="md:col-span-6">
-                <GoalsProgressPlaceholder />
+                <GoalProgressSection goals={state.goalsProgress?.data ?? null} />
               </div>
               <div className="md:col-span-6">
-                <DebtsSummaryPlaceholder />
+                <DebtSummarySection summary={state.debtsSummary ?? null} />
               </div>
             </DashboardGrid>
 

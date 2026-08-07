@@ -13,14 +13,17 @@ import {
   GoalsProgressPlaceholder,
   IncomeExpenseTrendPlaceholder,
   KpiCards,
-  NetworthTrendPlaceholder,
+  NetworthTrendChart,
   TopCategoriesPlaceholder,
 } from "@/components/dashboard";
 import { ApiError } from "@/lib/api/client";
 import { useAuth } from "@/lib/auth/auth-context";
 import { AuthGuard } from "@/lib/auth/auth-guard";
 import { loadDashboard } from "@/lib/dashboard/dashboard-client";
-import type { DashboardSummary } from "@/lib/dashboard/types";
+import type {
+  DashboardNetworthTrend,
+  DashboardSummary,
+} from "@/lib/dashboard/types";
 
 const TREND_MONTHS = 12;
 const TOP_CATEGORIES_LIMIT = 5;
@@ -28,12 +31,14 @@ const TOP_CATEGORIES_LIMIT = 5;
 interface DashboardState {
   status: "loading" | "ready" | "error";
   summary: DashboardSummary | null;
+  networthTrend: DashboardNetworthTrend | null;
   errorMessage: string | null;
 }
 
 const INITIAL_STATE: DashboardState = {
   status: "loading",
   summary: null,
+  networthTrend: null,
   errorMessage: null,
 };
 
@@ -117,6 +122,7 @@ function DashboardContent() {
       setState({
         status: "ready",
         summary: payload.summary,
+        networthTrend: payload.networthTrend,
         errorMessage: null,
       });
     } catch (error) {
@@ -125,6 +131,7 @@ function DashboardContent() {
       setState({
         status: "error",
         summary: null,
+        networthTrend: null,
         errorMessage: summarizeError(error),
       });
     }
@@ -178,7 +185,7 @@ function DashboardContent() {
 
             <DashboardGrid>
               <div className="md:col-span-8">
-                <NetworthTrendPlaceholder />
+                <NetworthTrendChart data={state.networthTrend?.data ?? []} />
               </div>
               <div className="md:col-span-4">
                 <IncomeExpenseTrendPlaceholder />

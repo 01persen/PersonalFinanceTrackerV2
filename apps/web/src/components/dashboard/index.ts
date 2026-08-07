@@ -1,8 +1,8 @@
 /**
- * Public surface for the dashboard module (sub-0007-02). Pages import
- * from `@/components/dashboard` only — never reach into individual
- * files. Mirrors the same barrel convention used by the goals /
- * transactions / debts modules so refactors stay contained.
+ * Public surface for the dashboard module (sub-0007-02 + sub-0007-03+).
+ * Pages import from `@/components/dashboard` only — never reach into
+ * individual files. Mirrors the same barrel convention used by the
+ * goals / transactions / debts modules so refactors stay contained.
  */
 export { DashboardHeader } from "@/components/dashboard/dashboard-header";
 export { DashboardGrid } from "@/components/dashboard/dashboard-grid";
@@ -15,7 +15,7 @@ export {
   formatPercent,
   TONE_STYLES,
 } from "@/components/dashboard/kpi-cards";
-export { NetworthTrendPlaceholder } from "@/components/dashboard/networth-trend-placeholder";
+export { NetworthTrendChart } from "@/components/dashboard/charts/networth-trend-chart";
 export { IncomeExpenseTrendPlaceholder } from "@/components/dashboard/income-expense-trend-placeholder";
 export { TopCategoriesPlaceholder } from "@/components/dashboard/top-categories-placeholder";
 export { GoalsProgressPlaceholder } from "@/components/dashboard/goals-progress-placeholder";

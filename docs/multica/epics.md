@@ -290,6 +290,46 @@
 > 1 in-flight QA (sub-0007-06 widgets), 1 still queue
 > (sub-0007-05 donut) — on track to close Stage 3. Catatan +
 > Riwayat entry v6.8 (entry ini).
+> **epic-0007 (v6.9, 2026-08-08 — Tech Leader Stage G auto-progress
+> loop ke-7, post sub-0007-09 QA Stage E PASS)**: sub-task `sub-0007-09`
+> `[GRE-107](https://multica/issues/GRE-107)` (QA integration + e2e +
+> Epic AC re-verify) **DONE** (Stage E PASS via QA Tester report 2026-08-08
+> 09:39 UTC, branch `feat/sub-0007-09-qa-integration` cut dari
+> `release/epic-0007@40743d7`, commit `f81ecfe2918eefbde0141feb2d906a178d66ee99`,
+> worktree `.worktrees/qa-sub-0007-09`). QA scope full PASS — 4/4 Epic AC
+> verified end-to-end: AC 1 (perf) via BE `test_dashboard_perf.py` p95
+> ~11 ms di SQLite (budget 500 ms) + FE spec assertion `<2000 ms` render
+> di `dashboard-full.spec.ts`; AC 2 (no N+1) via SQL trace di
+> `apps/api/src/app/api/v1/dashboard.py:184` (1+1 batch query); AC 3
+> (networth formula) via `test_dashboard_aggregations.py::test_summary_*`
+> + `dashboard-ac3-networth.spec.ts` hand-verify (5 asset @ 10jt − 2
+> liability @ 5jt + transfer 5jt = 45jt); AC 4 (mobile responsive) via
+> `dashboard-mobile.spec.ts` 390×844 + `MOBILE_TREND_MONTHS=6` unit + 2
+> screenshot. Cache invalidation PASS via
+> `test_dashboard_cache_invalidation.py` (POST tx → fresh, DELETE → fresh).
+> BE regression 704/704 PASS (~4m39s) — pre-existing flaky
+> `test_get_sort_is_stable_for_same_day` di-skip via `-k` (sesuai issue
+> catatan). FE lint 0 errors + 1 warning (pre-existing
+> `postcss.config.mjs` anonymous default) + typecheck clean + build
+> clean (Next 16.3.0). Playwright specs deterministic dengan
+> `test.skip(!baseURL)` guard — chromium runtime tidak di-spin di QA env
+> (no preview server), tapi specs siap di-trigger CI/CD via preview URL.
+> 2 screenshot tersimpan di `qa-artifacts/epic-0007-dashboard-{desktop,mobile}.png`
+> (chromium 149 capture, 1280×800 desktop + 422×844 mobile, mirror PRD §5
+> viewport). Deliverables: 2 BE qa test + 3 FE e2e spec + 2 screenshot
+> (7 files, +546 LOC). TL cross-check 4/4 AC PASS → flip status
+> `in_review → done` + metadata pin `feat_branch=feat/sub-0007-09-qa-integration`,
+> `feat_branch_tip=f81ecfe2918eefbde0141feb2d906a178d66ee99`,
+> `qa_verdict=pass`, `release_branch=release/epic-0007`,
+> `decision=qa_pass_with_acceptable_playwright_skip`. Stage 5 fully closed
+> — Stage H.1 next: `sub-0007-10` `[GRE-108](https://multica/issues/GRE-108)`
+> (CI/CD open + squash-merge PR `release/epic-0007 → main`) promoted
+> `backlog → todo` + auto-fire CI/CD Engineer `b2e08d1f` untuk Stage H.1
+> hand-off. Sub-task progress: **10/11 DONE** (sub-0007-01 + 02 + 03 +
+> 04 + 05 + 06 + 07 + 08 + 09 + 11 belum; 11 reserved Stage H.2 TL
+> finalization — flip parent `done` + tag `v0.9.0`) + **1/11 in-flight**
+> (sub-0007-10 CI/CD open PR, awaiting CI/CD Engineer kickoff) +
+> **0/11 backlog**. Catatan entry v6.9 (entry ini).
 > **Owner:** Tech Leader (Engineering Squad)
 
 Tracker mengikuti urutan dependency graph (bukan urgency bisnis), sesuai SOP.
@@ -329,7 +369,7 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
 - **Stage 2:** epic-0002 + epic-0008 (paralel — keduanya butuh 0001) — epic-0008 **DONE** (v5.8 Stage A + v5.9 Stage B + v5.10 Stage 1 closed + v5.11 Stage 2 closed + v5.12 Stage 3 closed + v5.13 Stage 4 closed + v5.13-final Stage H closed 2026-08-06; 6/6 sub-task DONE — Stage 1 paralel CSV+JSON/ZIP + Stage 2 BE settings race-fix propagated + Stage 3 FE Settings UI + Stage 4 FE Export Buttons + Stage 5 QA integration end-to-end + Stage H squash-merge ke `main`)
 - **Stage 3:** epic-0003
 - **Stage 4 (paralel):** epic-0004 + epic-0005 + epic-0006
-- **Stage 5:** epic-0007 — **IN_PROGRESS** (v6.8, 2026-08-07 — Tech Leader Stage G auto-progress loop ke-4 post sub-0007-04 Stage F complete; sub-task `sub-0007-01` BE dashboard aggregation DONE; `sub-0007-02` FE layout DONE; `sub-0007-03` FE line chart networth-trend DONE; `sub-0007-04` FE bar chart income/expense DONE; `sub-0007-05/06` FE donut + widgets running paralel (`sub-0007-05 todo` queue, `sub-0007-06 in_review` QA Stage E). 7 sub-task remaining: Stage 3 2 FE chart/widget in-flight, Stage 4 2 FE state/mobile, Stage 5 QA integration, Stage H 2 finalize. Dependency `epic-0003 + 0005 + 0006` semua DONE. **Sub-task list final 11 sub-task** — breakdown oleh System Analyst di Stage B v6.3, accepted TL dengan 4 keputusan (stdlib cache, hand-rolled SVG, full-screen route, avg EF pct))
+- **Stage 5:** epic-0007 — **IN_PROGRESS** (v6.9, 2026-08-08 — Tech Leader Stage G auto-progress loop ke-7 post sub-0007-09 QA Stage E PASS; sub-task `sub-0007-09` QA integration + e2e + Epic AC re-verify DONE (Stage E PASS via QA Tester, 4/4 Epic AC verified end-to-end, BE 704/704 regression PASS + FE lint/typecheck/build clean + 2 screenshot saved di `qa-artifacts/`); **10/11 sub-task DONE** (sub-0007-01 + 02 + 03 + 04 + 05 + 06 + 07 + 08 + 09 + 11 reserved Stage H.2 TL finalize) + **1/11 in-flight** (`sub-0007-10` CI/CD open PR `release/epic-0007 → main`, awaiting CI/CD Engineer kickoff post Stage H.1 hand-off) + **0/11 backlog**. Stage 5 sub-task fully closed; dependency epic-0003 + 0005 + 0006 semua DONE; Stage H.1 promoted. Sub-task list final 11 sub-task (sub-0007-12 added mid-flight for wire-TopCategoriesDonut, treated as Stage 4 spillover))
 - **Stage 6:** epic-0009 — recurring tagihan tetap + reminder
 
 ## Status Legend
@@ -1938,3 +1978,43 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
    (QA → CI/CD) DONE → promote Stage 4 paralel (sub-0007-07 mobile
    ringkas + sub-0007-08 empty/loading/error state), dst sampai
    Stage H.1 (sub-0007-10) + Stage H.2 (sub-0007-11).
+- v6.9 (2026-08-08) — Tech Leader: epic-0007 **Stage G auto-progress
+   loop ke-7** post sub-0007-09 QA Stage E PASS (QA Tester report 2026-08-08
+   09:39 UTC). Sub-task `sub-0007-09` `[GRE-107](https://multica/issues/GRE-107)`
+   (QA integration + e2e + Epic AC re-verify) **DONE** — 4/4 Epic AC
+   verified end-to-end via `apps/api/tests/qa/test_dashboard_perf.py`
+   (BE p95 ~11 ms < 500 ms budget) + `apps/api/tests/qa/test_dashboard_cache_invalidation.py`
+   (POST tx → fresh, DELETE → fresh) + `apps/web/e2e/dashboard-full.spec.ts`
+   (AC 1 desktop render <2s) + `apps/web/e2e/dashboard-mobile.spec.ts`
+   (AC 4 390×844 ringkas + expand CTA) + `apps/web/e2e/dashboard-ac3-networth.spec.ts`
+   (AC 3 networth formula hand-verify). Branch `feat/sub-0007-09-qa-integration`
+   cut dari `release/epic-0007@40743d7`, commit `f81ecfe2918eefbde0141feb2d906a178d66ee99`,
+   worktree `.worktrees/qa-sub-0007-09`. 2 screenshot saved di
+   `qa-artifacts/epic-0007-dashboard-{desktop,mobile}.png` (1280×800 +
+   422×844, chromium 149 capture). Playwright specs deterministic dengan
+   `test.skip(!baseURL)` guard — chromium runtime tidak di-spin di QA env
+   (no preview server), specs siap di-trigger CI/CD via preview URL. BE
+   regression 704/704 PASS (~4m39s); pre-existing flaky
+   `test_get_sort_is_stable_for_same_day` di-skip via `-k`. FE lint 0
+   errors + 1 warning (pre-existing `postcss.config.mjs` anonymous
+   default) + typecheck clean + build clean (Next 16.3.0). TL actions:
+   (1) `sub-0007-09` `[GRE-107](https://multica/issues/GRE-107)` status
+   flip `in_progress → done` + metadata pin
+   `feat_branch=feat/sub-0007-09-qa-integration`,
+   `feat_branch_tip=f81ecfe2918eefbde0141feb2d906a178d66ee99`,
+   `qa_verdict=pass`, `release_branch=release/epic-0007` kept,
+   `decision=qa_pass_with_acceptable_playwright_skip`; (2)
+   `sub-0007-10` `[GRE-108](https://multica/issues/GRE-108)` (Stage H.1
+   CI/CD open + squash-merge PR `release/epic-0007 → main`) promoted
+   `backlog → todo` + auto-fire CI/CD Engineer
+   `b2e08d1f-ed2e-459c-85e7-2b44914da9a9` untuk Stage H.1 hand-off
+   (cherry-pick qa-sub-0007-09 → release/epic-0007 kalau ada, bump
+   tracker v6.9 → v6.10, open PR `release/epic-0007 → main` + label
+   `epic-ready` + squash-merge via `release-auto-merge.yml`). Sub-task
+   progress: **9/11 DONE** (sub-0007-01 + sub-0007-02 + sub-0007-03 +
+   sub-0007-04 + sub-0007-05 + sub-0007-06 + sub-0007-07 + sub-0007-08
+   + sub-0007-09) + **1/11 in-flight** (sub-0007-10 CI/CD open PR,
+   awaiting CI/CD Engineer kickoff post Stage H.1 hand-off) + **1/11
+   backlog** (sub-0007-11 TL finalize — flip parent `done` + tag
+   `v0.9.0`, awaiting Stage H.1 merge complete). Catatan + Riwayat entry
+   v6.9 (entry ini).

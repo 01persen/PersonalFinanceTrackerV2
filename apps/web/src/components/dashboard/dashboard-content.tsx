@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -11,6 +12,7 @@ import {
 
 import { AppShell } from "@/components/shell/app-shell";
 import {
+  DashboardEmptyState,
   DashboardError,
   DashboardGrid,
   DashboardHeader,
@@ -20,8 +22,11 @@ import {
   GoalProgressSection,
   IncomeExpenseChart,
   KpiCards,
+  LookupWarning,
   NetworthTrendChart,
+  Toast,
   TopCategoriesPlaceholder,
+  scheduleToastDismiss,
 } from "@/components/dashboard";
 import { ApiError } from "@/lib/api/client";
 import { useAuth } from "@/lib/auth/auth-context";
@@ -32,13 +37,14 @@ import type {
   DashboardIncomeExpenseTrend,
   DashboardNetworthTrend,
   DashboardSummary,
+  DashboardTopCategories,
 } from "@/lib/dashboard/types";
 
 /**
- * Shared dashboard shell (sub-0007-02 + sub-0007-07).
+ * Shared dashboard shell (sub-0007-02 + sub-0007-07 + sub-0007-08).
  *
  * Owns the parallel fetch of the six dashboard aggregation endpoints
- * (sub-0007-01), the loading/error/ready state machine, the
+ * (sub-0007-01), the loading/error/ready/empty state machine, the
  * `latestLoadIdRef` race defense (mirrors sub-0003-06/07), and the
  * responsive layout that splits between the mobile ringkas summary
  * (`<DashboardMobileSummary>`, sub-0007-07) and the desktop full
@@ -59,6 +65,22 @@ import type {
  * the race-defense + fetch + state machinery without duplicating any
  * of it. Mirrors the same barrel-convention used by the goals /
  * transactions / debts modules.
+ *
+ * Empty + lookup-warning + toast wiring (sub-0007-08):
+ *
+ *   - `<DashboardEmptyState>` replaces the KPI/grid when the user is
+ *     brand-new (no accounts, no transactions). The CTA points the
+ *     user at `/accounts/new`. Triggered on both `/` and
+ *     `/dashboard/full` so a brand-new user never sees a grid of
+ *     zero-valued cards.
+ *   - `<LookupWarning kind="categories" />` is surfaced whenever the
+ *     top-categories payload contains an entry with `categoryName
+ *     === null`. The donut renders the slot as "Tanpa nama"; the
+ *     banner explains WHY. Non-blocking — the rest of the dashboard
+ *     keeps rendering.
+ *   - `<Toast>` pairs with the lookup warning for the transient
+ *     side-channel notification. Auto-dismisses after 5 s; re-arms
+ *     on each retry so the user sees the notification each time.
  */
 
 const TREND_MONTHS = 12;
@@ -69,6 +91,7 @@ interface DashboardState {
   summary: DashboardSummary | null;
   networthTrend: DashboardNetworthTrend | null;
   incomeExpenseTrend: DashboardIncomeExpenseTrend | null;
+  topCategories: DashboardTopCategories | null;
   goalsProgress: DashboardGoalsProgress | null;
   debtsSummary: DashboardDebtsSummary | null;
   errorMessage: string | null;
@@ -79,6 +102,7 @@ const INITIAL_STATE: DashboardState = {
   summary: null,
   networthTrend: null,
   incomeExpenseTrend: null,
+  topCategories: null,
   goalsProgress: null,
   debtsSummary: null,
   errorMessage: null,
@@ -125,6 +149,51 @@ function summarizeError(error: unknown): string {
   return "Tidak bisa memuat dashboard. Periksa koneksi lalu coba lagi.";
 }
 
+/**
+ * `true` when the dashboard payload signals a brand-new user — no
+ * accounts (assets + liabilities all zero) and no transactions this
+ * month. AC sub-0007-08 expects the empty-state CTA in this branch
+ * so the user lands on the "Tambah akun pertama" path instead of a
+ * grid of zero-valued KPI cards.
+ *
+ * Exported for the unit test (sub-0007-08) so the wiring predicate
+ * can be pinned in isolation from React rendering.
+ */
+export function isBrandNewUser(
+  summary: DashboardSummary | null,
+  topCategories: DashboardTopCategories | null,
+): boolean {
+  if (summary === null) return false;
+  const hasNoAccounts =
+    summary.totalAssetsCents === 0 && summary.totalLiabilitiesCents === 0;
+  const hasNoTransactionsThisMonth =
+    summary.incomeThisMonthCents === 0 && summary.expenseThisMonthCents === 0;
+  const hasNoTopCategories =
+    topCategories === null || topCategories.data.length === 0;
+  return hasNoAccounts && hasNoTransactionsThisMonth && hasNoTopCategories;
+}
+
+/**
+ * `true` when at least one top category entry came back with a
+ * `null` name — the BE surfaces uncategorised expenses that way
+ * (sub-0007-01) and the donut renders the slot as "Tanpa nama"
+ * (AC sub-0007-08). The shell surfaces a non-blocking
+ * `<LookupWarning>` + `<Toast>` so the user notices the fallback
+ * isn't intentional.
+ *
+ * Exported for the unit test (sub-0007-08) so the lookup-failure
+ * detection can be pinned in isolation from React rendering.
+ */
+export function hasCategoryLookupFailure(
+  topCategories: DashboardTopCategories | null,
+): boolean {
+  if (topCategories === null) return false;
+  return topCategories.data.some(
+    (point) =>
+      point.categoryName === null || point.categoryName.trim().length === 0,
+  );
+}
+
 export function DashboardContent({
   showMobileSummary = true,
   topSlot,
@@ -133,6 +202,8 @@ export function DashboardContent({
   const { user, logout, isLoading: isLoggingOut } = useAuth();
 
   const [state, setState] = useState<DashboardState>(INITIAL_STATE);
+  const [toastDismissed, setToastDismissed] = useState(false);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /**
    * Race defenses (mirrors sub-0003-06 / sub-0003-07):
@@ -161,6 +232,7 @@ export function DashboardContent({
       status: "loading",
       errorMessage: null,
     }));
+    setToastDismissed(false);
 
     const dropStale = () =>
       loadId !== latestLoadIdRef.current || controller.signal.aborted;
@@ -179,6 +251,7 @@ export function DashboardContent({
         summary: payload.summary,
         networthTrend: payload.networthTrend,
         incomeExpenseTrend: payload.incomeExpenseTrend,
+        topCategories: payload.topCategories,
         goalsProgress: payload.goalsProgress,
         debtsSummary: payload.debtsSummary,
         errorMessage: null,
@@ -191,6 +264,7 @@ export function DashboardContent({
         summary: null,
         networthTrend: null,
         incomeExpenseTrend: null,
+        topCategories: null,
         goalsProgress: null,
         debtsSummary: null,
         errorMessage: summarizeError(error),
@@ -205,6 +279,10 @@ export function DashboardContent({
         abortControllerRef.current.abort();
         abortControllerRef.current = null;
       }
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current);
+        toastTimerRef.current = null;
+      }
     };
   }, [load]);
 
@@ -212,10 +290,50 @@ export function DashboardContent({
     void load();
   }, [load]);
 
+  const handleToastDismiss = useCallback(() => {
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = null;
+    }
+    setToastDismissed(true);
+  }, []);
+
   const handleLogout = async () => {
     await logout();
     router.replace("/login");
   };
+
+  const categoryLookupFailed = useMemo(
+    () => hasCategoryLookupFailure(state.topCategories),
+    [state.topCategories],
+  );
+
+  const isBrandNew = useMemo(
+    () => isBrandNewUser(state.summary, state.topCategories),
+    [state.summary, state.topCategories],
+  );
+
+  // Auto-dismiss the lookup-warning toast after 5 s. Re-armed
+  // whenever the lookup failure surfaces again (e.g. after a retry
+  // that didn't help) so the user sees the notification each time.
+  useEffect(() => {
+    if (!categoryLookupFailed || toastDismissed) return;
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+    }
+    toastTimerRef.current = scheduleToastDismiss(() => {
+      setToastDismissed(true);
+      toastTimerRef.current = null;
+    }, 5000);
+    return () => {
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current);
+        toastTimerRef.current = null;
+      }
+    };
+  }, [categoryLookupFailed, toastDismissed, state.status]);
+
+  const showToast = categoryLookupFailed && !toastDismissed;
 
   const emptyTrend: DashboardNetworthTrend = { data: [] };
 
@@ -239,8 +357,19 @@ export function DashboardContent({
           />
         ) : null}
 
-        {state.status === "ready" && state.summary ? (
+        {state.status === "ready" && state.summary && isBrandNew ? (
+          <DashboardEmptyState />
+        ) : null}
+
+        {state.status === "ready" && state.summary && !isBrandNew ? (
           <>
+            {categoryLookupFailed ? (
+              <LookupWarning
+                kind="categories"
+                onRetry={handleRetry}
+              />
+            ) : null}
+
             <div
               className="hidden space-y-6 md:block"
               data-testid="dashboard-desktop-pane"
@@ -287,6 +416,13 @@ export function DashboardContent({
           </>
         ) : null}
       </div>
+
+      {showToast ? (
+        <Toast
+          message="Beberapa kategori tidak dapat dimuat. Label diganti 'Tanpa nama' sementara."
+          onDismiss={handleToastDismiss}
+        />
+      ) : null}
     </AppShell>
   );
 }

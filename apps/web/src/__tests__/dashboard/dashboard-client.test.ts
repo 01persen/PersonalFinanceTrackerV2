@@ -199,7 +199,7 @@ const syncTestCases: SyncTestCase[] = [
     run(): void {
       // The BE surfaces `(category_id=null)` for un-categorised
       // expenses. The adapter must keep the row (the FE renders it
-      // under "Tanpa kategori").
+      // under "Tanpa nama" per AC sub-0007-08).
       const adapted = adaptDashboardTopCategories({
         data: [
           {

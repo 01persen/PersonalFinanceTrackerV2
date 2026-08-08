@@ -105,8 +105,9 @@ def test_soft_delete_transaction_invalidates_summary_cache(
     didn't invalidate, the FE would show stale totals after the user
     removes a transaction.
     """
-    from app.db.models.transaction import Transaction
     from datetime import UTC, datetime
+
+    from app.db.models.transaction import Transaction
 
     headers = {
         "Authorization": f"Bearer {_register(client, 'qa-cache-delete@example.com')['access_token']}"

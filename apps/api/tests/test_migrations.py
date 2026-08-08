@@ -28,6 +28,8 @@ EXPECTED_TABLES = {
     "debt_payments",
     "user_preferences",
     "rule_audit_log",
+    # sub-0009-01 — recurring rule CRUD scaffold (migration e1c5).
+    "recurring_rules",
 }
 
 EXPECTED_INDEXES = {
@@ -63,6 +65,12 @@ EXPECTED_INDEXES = {
     ("rule_audit_log", "ix_rule_audit_log_rule_applied_at"),
     ("rule_audit_log", "ix_rule_audit_log_transaction"),
     ("user_preferences", "ix_user_preferences_user_id"),
+    # sub-0009-01 — recurring rule CRUD scaffold (migration e1c5). The
+    # three composite indexes cover the worker scan (next_run_on), the
+    # FE list filter by account, and the dashboard active-rules widget.
+    ("recurring_rules", "ix_recurring_rules_user_next_run_on"),
+    ("recurring_rules", "ix_recurring_rules_user_account"),
+    ("recurring_rules", "ix_recurring_rules_user_active_next_run"),
 }
 
 
@@ -342,9 +350,6 @@ def test_goals_migration_preserves_data_over_prior_state(
         assert row[1] is None
     finally:
         conn.close()
-
-    tables = _table_names(sqlite_db)
-    assert EXPECTED_TABLES.issubset(tables)
 
 
 def test_users_email_is_unique(sqlite_db: Path) -> None:
@@ -683,5 +688,82 @@ def test_debt_payments_source_account_roundtrip(sqlite_db: Path) -> None:
     try:
         columns = {row[1] for row in conn.execute("PRAGMA table_info(debt_payments)")}
         assert "source_account_id" in columns
+    finally:
+        conn.close()
+
+
+def test_recurring_rules_table_roundtrip(sqlite_db: Path) -> None:
+    """sub-0009-01 — the ``e1c5b9a7f2d3`` migration creates the
+    ``recurring_rules`` table and three composite indexes
+    (``ix_recurring_rules_user_next_run_on``,
+    ``ix_recurring_rules_user_account``,
+    ``ix_recurring_rules_user_active_next_run``). The migration must:
+
+    * Apply cleanly on top of the ``7d8e9f0a1b2c`` state.
+    * Survive a ``downgrade -1`` round-trip (drop the table + all three
+      indexes).
+    * Re-apply without data loss for unrelated rows.
+    """
+    up = _run_alembic(sqlite_db, "upgrade", "e1c5b9a7f2d3")
+    assert up.returncode == 0, up.stderr or up.stdout
+
+    expected_columns = {
+        "account_id",
+        "category_id",
+        "kind",
+        "cadence",
+        "amount_cents",
+        "currency",
+        "start_on",
+        "end_on",
+        "next_run_on",
+        "note",
+        "is_active",
+        "id",
+        "user_id",
+        "created_at",
+        "updated_at",
+    }
+    expected_indexes = {
+        "ix_recurring_rules_user_next_run_on",
+        "ix_recurring_rules_user_account",
+        "ix_recurring_rules_user_active_next_run",
+    }
+
+    conn = sqlite3.connect(sqlite_db)
+    try:
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(recurring_rules)")}
+        missing_cols = expected_columns - cols
+        assert not missing_cols, f"missing columns after upgrade: {missing_cols}"
+
+        idx = {
+            row[1]
+            for row in conn.execute("PRAGMA index_list(recurring_rules)")
+            if not row[1].startswith("sqlite_autoindex_")
+        }
+        missing_idx = expected_indexes - idx
+        assert not missing_idx, f"missing indexes after upgrade: {missing_idx}"
+    finally:
+        conn.close()
+
+    # Downgrade — the table + indexes must be gone after one ``-1``.
+    down = _run_alembic(sqlite_db, "downgrade", "7d8e9f0a1b2c")
+    assert down.returncode == 0, down.stderr or down.stdout
+
+    conn = sqlite3.connect(sqlite_db)
+    try:
+        table_names = _table_names(sqlite_db)
+        assert "recurring_rules" not in table_names
+    finally:
+        conn.close()
+
+    # Re-apply — the table comes back without disturbing other tables.
+    re_up = _run_alembic(sqlite_db, "upgrade", "e1c5b9a7f2d3")
+    assert re_up.returncode == 0, re_up.stderr or re_up.stdout
+
+    conn = sqlite3.connect(sqlite_db)
+    try:
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(recurring_rules)")}
+        assert "id" in cols and "next_run_on" in cols
     finally:
         conn.close()

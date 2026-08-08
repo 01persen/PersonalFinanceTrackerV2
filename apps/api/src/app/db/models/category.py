@@ -15,6 +15,7 @@ from app.db.models.mixins import GUID, TimestampMixin, UserFKMixin, UUIDPKMixin
 
 if TYPE_CHECKING:
     from app.db.models.category_rule import CategoryRule
+    from app.db.models.recurring_rule import RecurringRule
     from app.db.models.transaction import Transaction
     from app.db.models.user import User
 
@@ -39,9 +40,7 @@ class Category(Base, UUIDPKMixin, UserFKMixin, TimestampMixin):
     # while the row is active. The composite index (user_id, kind, archived_at)
     # keeps the active-rows filter ("archived_at IS NULL") cheap for the list
     # endpoint and any future aggregations over the category tree.
-    archived_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     user: Mapped[User] = relationship(back_populates="categories")
     parent: Mapped[Category | None] = relationship(
@@ -50,3 +49,4 @@ class Category(Base, UUIDPKMixin, UserFKMixin, TimestampMixin):
     children: Mapped[list[Category]] = relationship(back_populates="parent")
     transactions: Mapped[list[Transaction]] = relationship(back_populates="category")
     rules: Mapped[list[CategoryRule]] = relationship(back_populates="category")
+    recurring_rules: Mapped[list[RecurringRule]] = relationship(back_populates="category")

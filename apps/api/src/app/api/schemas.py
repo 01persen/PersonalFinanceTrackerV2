@@ -19,6 +19,8 @@ from app.db.models.enums import (
     DebtKind,
     DebtStatus,
     GoalKind,
+    RecurringRuleCadence,
+    RecurringRuleKind,
     TransactionType,
 )
 
@@ -1572,3 +1574,173 @@ class DashboardDebtsSummaryPublic(BaseModel):
     total_interest_paid_cents: int
     active_count: int
     paid_off_count: int
+
+
+# ---------------------------------------------------------------------------
+# Recurring rules (sub-0009-01, epic-0009)
+# ---------------------------------------------------------------------------
+
+
+class RecurringRuleCreate(BaseModel):
+    """Body for ``POST /recurring-rules``.
+
+    Captures the schedule the materializer (sub-0009-02) will use to
+    spawn transactions plus the FK targets the worker needs to
+    instantiate each row. The response shape mirrors the persisted
+    columns one-to-one (see :class:`RecurringRulePublic`) so the FE
+    doesn't have to re-shape the create response.
+
+    Validation rules (per sub-0009-01 AC):
+
+    * ``kind`` must be one of ``bill`` / ``subscription`` /
+      ``cicilan_fixed`` — Pydantic ``Enum`` → 422 on bad input.
+    * ``cadence`` must be one of ``daily`` / ``weekly`` / ``monthly`` /
+      ``yearly`` — Pydantic ``Enum`` → 422.
+    * ``amount_cents`` must be ``> 0`` — Pydantic ``gt=0`` → 422. All
+      three locked kinds are auto-materialised as expense transactions
+      (PRD §epic-0009 scope) so the materializer would otherwise have
+      to deal with negative amounts.
+    * ``currency`` must be ``"IDR"`` — model validator → 422 (mirrors
+      the transaction create schema).
+    * ``account_id`` must belong to the caller — enforced in the route
+      against the persisted ``accounts`` row (404, not 403, same pattern
+      as the transactions / goals router).
+    * ``category_id`` (optional) must belong to the caller AND match the
+      expense category kind — enforced in the route (404 for ownership,
+      422 for kind mismatch).
+    * ``end_on >= start_on`` when both are set — model validator → 422.
+
+    ``next_run_on`` is intentionally NOT settable on create — the
+    service layer always derives it from ``start_on + cadence`` so the
+    FE cannot land a row with an inconsistent schedule. The
+    ``extra="forbid"`` rejects any client attempt to send it with 422.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    account_id: uuid.UUID
+    category_id: uuid.UUID | None = None
+    kind: RecurringRuleKind
+    cadence: RecurringRuleCadence
+    amount_cents: int = Field(
+        gt=0,
+        description="Per-cycle amount in cents (positive integer). Mirrors the transaction contract.",
+    )
+    currency: str = Field(min_length=3, max_length=3, default="IDR")
+    start_on: date
+    end_on: date | None = None
+    note: str | None = Field(default=None, max_length=2000)
+    is_active: bool = True
+
+    @model_validator(mode="after")
+    def _check_currency(self) -> RecurringRuleCreate:
+        if self.currency != "IDR":
+            raise ValueError(
+                f"currency must be 'IDR' (MVP is single-currency); got {self.currency!r}"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _check_end_on(self) -> RecurringRuleCreate:
+        if self.end_on is not None and self.end_on < self.start_on:
+            raise ValueError(
+                f"end_on ({self.end_on.isoformat()}) must be >= "
+                f"start_on ({self.start_on.isoformat()})"
+            )
+        return self
+
+
+class RecurringRuleUpdate(BaseModel):
+    """Body for ``PATCH /recurring-rules/{id}`` — every field is optional.
+
+    Server-controlled fields (``id``, ``user_id``, ``created_at``,
+    ``updated_at``, ``next_run_on``) are NOT editable through this
+    endpoint — the schema rejects them with 422 before the route runs
+    (via ``extra="forbid"``). The service layer re-derives
+    ``next_run_on`` when ``start_on`` or ``cadence`` change so the FE
+    never has to send it.
+
+    ``end_on`` can be cleared by sending ``null`` (open-ended rule). A
+    new non-null value is re-validated against the effective
+    ``start_on`` in the route (422 for ``end_on < start_on``).
+
+    ``account_id`` ownership + ``category_id`` ownership + category-kind
+    match are enforced in the route (404 / 422) — same pattern as the
+    create schema.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    account_id: uuid.UUID | None = None
+    category_id: uuid.UUID | None = None
+    kind: RecurringRuleKind | None = None
+    cadence: RecurringRuleCadence | None = None
+    amount_cents: int | None = Field(default=None, gt=0)
+    currency: str | None = Field(default=None, min_length=3, max_length=3)
+    start_on: date | None = None
+    end_on: date | None = None
+    note: str | None = Field(default=None, max_length=2000)
+    is_active: bool | None = None
+
+    @model_validator(mode="after")
+    def _check_currency(self) -> RecurringRuleUpdate:
+        if self.currency is not None and self.currency != "IDR":
+            raise ValueError(
+                f"currency must be 'IDR' (MVP is single-currency); got {self.currency!r}"
+            )
+        return self
+
+
+class RecurringRulePublic(BaseModel):
+    """Output shape for a single recurring rule row.
+
+    Mirrors the columns on
+    :class:`app.db.models.recurring_rule.RecurringRule` directly via
+    ``from_attributes=True``. ``kind`` and ``cadence`` render as the
+    StrEnum members so FE consumers get the same string the DB stores,
+    not a Python enum repr.
+
+    ``next_run_on`` is always server-derived — the create + update
+    endpoints refuse any client attempt to set it directly. The FE
+    uses it to render the "due soon" badge without a separate worker
+    round-trip.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    user_id: uuid.UUID
+    account_id: uuid.UUID
+    category_id: uuid.UUID | None = None
+    kind: RecurringRuleKind
+    cadence: RecurringRuleCadence
+    amount_cents: int
+    currency: str
+    start_on: date
+    end_on: date | None = None
+    next_run_on: date
+    note: str | None = None
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class RecurringRuleListPublic(BaseModel):
+    """Response envelope for ``GET /recurring-rules`` (paginated).
+
+    Mirrors :class:`TransactionListPublic` / :class:`GoalListPublic`
+    semantically: ``total`` is the *unfiltered-by-page* count of the
+    caller's rules matching the active-filter, ``limit`` + ``offset``
+    are echoed back. Default page size is 50 (matches the transactions
+    list endpoint).
+
+    No ``is_active`` filter is exposed here in MVP — the FE flips the
+    flag client-side if it wants to hide paused rules. A server-side
+    filter lands if/when the rule count per user climbs enough to make
+    the unsorted scan expensive.
+    """
+
+    items: list[RecurringRulePublic]
+    total: int
+    limit: int
+    offset: int

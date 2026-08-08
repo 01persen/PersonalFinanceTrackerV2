@@ -48,3 +48,39 @@ class DebtKind(StrEnum):
 class DebtStatus(StrEnum):
     ACTIVE = "active"
     PAID_OFF = "paid_off"
+
+
+class RecurringRuleKind(StrEnum):
+    """Discriminator for the recurring rule rows created in sub-0009-01.
+
+    PRD §epic-0009 locks the three MVP flavours:
+
+    * ``bill`` — kartu kredit / tagihan dengan nominal fixed per cycle.
+    * ``subscription`` — Netflix, Spotify, internet, dan langganan tetap.
+    * ``cicilan_fixed`` — cicilan flat (KPR, KKB, KTA) yang nominalnya
+      tidak berubah per cycle.
+
+    All three are auto-materialized as expense transactions by the
+    worker in sub-0009-02. Salary / income nominal yang variabel tetap
+    manual (out-of-scope untuk epic ini).
+    """
+
+    BILL = "bill"
+    SUBSCRIPTION = "subscription"
+    CICILAN_FIXED = "cicilan_fixed"
+
+
+class RecurringRuleCadence(StrEnum):
+    """Cadence for the next-run computation on a recurring rule.
+
+    ``daily`` / ``weekly`` advances by 1 / 7 days. ``monthly`` advances
+    by one calendar month — e.g. start_on = 2026-01-31 → next_run_on =
+    2026-02-28 (clamp to last-day-of-month when the target month is
+    shorter). ``yearly`` advances by one calendar year (Feb 29 → Feb 28
+    on non-leap target years).
+    """
+
+    DAILY = "daily"
+    WEEKLY = "weekly"
+    MONTHLY = "monthly"
+    YEARLY = "yearly"

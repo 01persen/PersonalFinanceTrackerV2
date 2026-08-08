@@ -13,6 +13,7 @@ from app.db.models.mixins import TimestampMixin, UserFKMixin, UUIDPKMixin
 
 if TYPE_CHECKING:
     from app.db.models.goal import Goal
+    from app.db.models.recurring_rule import RecurringRule
     from app.db.models.transaction import Transaction
     from app.db.models.user import User
 
@@ -35,3 +36,6 @@ class Account(Base, UUIDPKMixin, UserFKMixin, TimestampMixin):
         back_populates="account", cascade="all, delete-orphan"
     )
     goals: Mapped[list[Goal]] = relationship(back_populates="linked_account")
+    recurring_rules: Mapped[list[RecurringRule]] = relationship(
+        back_populates="account", cascade="all, delete-orphan"
+    )

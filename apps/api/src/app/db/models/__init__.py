@@ -10,10 +10,13 @@ from app.db.models.enums import (
     DebtKind,
     DebtStatus,
     GoalKind,
+    RecurringRuleCadence,
+    RecurringRuleKind,
     TransactionType,
 )
 from app.db.models.goal import Goal
 from app.db.models.mixins import GUID, TimestampMixin, UserFKMixin, UUIDPKMixin
+from app.db.models.recurring_rule import RecurringRule
 from app.db.models.rule_audit_log import RuleAuditLog
 from app.db.models.transaction import Transaction
 from app.db.models.user import User
@@ -32,6 +35,9 @@ __all__ = [
     "DebtStatus",
     "Goal",
     "GoalKind",
+    "RecurringRule",
+    "RecurringRuleCadence",
+    "RecurringRuleKind",
     "RuleAuditLog",
     "TimestampMixin",
     "Transaction",

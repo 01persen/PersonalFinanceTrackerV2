@@ -1,0 +1,32 @@
+/**
+ * Public surface for the dashboard module (sub-0007-02 + sub-0007-03+).
+ * Pages import from `@/components/dashboard` only — never reach into
+ * individual files. Mirrors the same barrel convention used by the
+ * goals / transactions / debts modules so refactors stay contained.
+ */
+export { DashboardHeader } from "@/components/dashboard/dashboard-header";
+export { DashboardGrid } from "@/components/dashboard/dashboard-grid";
+export { DashboardError } from "@/components/dashboard/dashboard-error";
+export { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
+export { DashboardContent } from "@/components/dashboard/dashboard-content";
+export {
+  DashboardEmptyState,
+  LookupWarning,
+  Toast,
+  scheduleToastDismiss,
+} from "@/components/dashboard/states";
+export {
+  KpiCard,
+  KpiCards,
+  type KpiTone,
+  formatPercent,
+  TONE_STYLES,
+} from "@/components/dashboard/kpi-cards";
+export { NetworthTrendChart } from "@/components/dashboard/charts/networth-trend-chart";
+export { IncomeExpenseChart } from "@/components/dashboard/charts/income-expense-chart";
+export { TopCategoriesDonut } from "@/components/dashboard/charts/top-categories-donut";
+export { DashboardMobileSummary } from "@/components/dashboard/dashboard-mobile-summary";
+export {
+  GoalProgressSection,
+  DebtSummarySection,
+} from "@/components/dashboard/widgets";

@@ -77,6 +77,7 @@ from app.db.models.rule_audit_log import RuleAuditLog
 from app.db.models.transaction import Transaction
 from app.db.models.user import User
 from app.db.session import get_session
+from app.services import dashboard_cache
 from app.services.goal_progress_recompute import enqueue_goal_progress_recompute
 from app.services.rule_engine import (
     resolve_category_for_transaction,
@@ -280,6 +281,17 @@ def create_transaction(
     # the recompute body's empty result returns ``0`` immediately).
     enqueue_goal_progress_recompute(background_tasks, account.id)
 
+    # sub-0007-01 — invalidate every dashboard cache slot for this
+    # user. A brand-new transaction rolls up into the summary (this-
+    # month income/expense), the income-expense trend (the bar
+    # chart's newest bucket), the networth trend (the latest saldo
+    # delta), the top-categories (if it's an expense in the current
+    # month), and the goals-progress card (if it lands on a linked
+    # account — the recompute hook already covers the saldo side,
+    # but the dashboard cache must refresh too). Easier to flush
+    # the whole user than reason about which endpoint changed.
+    dashboard_cache.invalidate_for_table(user_id=current_user.id, table="transactions")
+
     return TransactionPublic.model_validate(transaction)
 
 
@@ -376,6 +388,15 @@ def create_transfer(
     # helper dedupes by id, so a transfer where source == destination
     # (caught by Pydantic, but defensive) would only schedule once.
     enqueue_goal_progress_recompute(background_tasks, [source.id, destination.id])
+
+    # sub-0007-01 — invalidate every dashboard cache slot. Transfers
+    # move money between two of the caller's own accounts, so the
+    # networth doesn't change — but the per-account / per-month
+    # breakdowns still surface the two transfer rows until the
+    # summary filter (``type != TRANSFER``) is re-applied. Flushing
+    # the whole dashboard keeps the FE honest until the spec calls
+    # out a more targeted invalidation.
+    dashboard_cache.invalidate_for_table(user_id=current_user.id, table="transactions")
 
     return TransferPublic(
         source=TransactionPublic.model_validate(source_tx),
@@ -820,6 +841,11 @@ def update_transaction(
         [old_account_id, new_account_id] if new_account_id is not None else old_account_id,
     )
 
+    # sub-0007-01 — same invalidation as the create path: every
+    # dashboard slot needs to refresh because amount / category /
+    # account changes all move multiple cards.
+    dashboard_cache.invalidate_for_table(user_id=current_user.id, table="transactions")
+
     return TransactionPublic.model_validate(transaction)
 
 
@@ -866,6 +892,12 @@ def delete_transaction(
         # sub-0005-02 — recompute on the first soft-delete path only;
         # idempotent retries don't refire.
         enqueue_goal_progress_recompute(background_tasks, transaction.account_id)
+        # sub-0007-01 — soft-delete excludes the row from every
+        # dashboard aggregate (the summary, trend, and top-categories
+        # queries all filter on ``deleted_at IS NULL``), so all six
+        # endpoints must refresh. Idempotent retries skip this — the
+        # first delete already flushed the cache.
+        dashboard_cache.invalidate_for_table(user_id=current_user.id, table="transactions")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

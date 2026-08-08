@@ -73,6 +73,7 @@ from app.db.models.enums import GoalKind
 from app.db.models.goal import Goal
 from app.db.models.user import User
 from app.db.session import get_session
+from app.services import dashboard_cache
 from app.services.goal_engine import (
     compute_ef_lama_mengumpulkan_bulan,
     compute_ef_target_snapshot_cents,
@@ -363,6 +364,11 @@ def create_goal(
     db.add(goal)
     db.commit()
     db.refresh(goal)
+    # sub-0007-01 — invalidate dashboard cache for the ``goals`` table.
+    # The two affected endpoints are ``/summary`` (EF avg pct uses
+    # every active EF goal) and ``/goals-progress`` (the goal progress
+    # card directly mirrors the goals table).
+    dashboard_cache.invalidate_for_table(user_id=current_user.id, table="goals")
     return GoalPublic.from_goal(goal)
 
 
@@ -518,6 +524,10 @@ def update_goal(
 
     db.commit()
     db.refresh(goal)
+    # sub-0007-01 — every PATCH field touches the goals-progress card
+    # (the engine rebuilds progress on every read), so the cache must
+    # refresh on every successful PATCH.
+    dashboard_cache.invalidate_for_table(user_id=current_user.id, table="goals")
     return GoalPublic.from_goal(goal)
 
 
@@ -546,6 +556,12 @@ def delete_goal(
     if goal.archived_at is None:
         goal.archived_at = datetime.now(UTC)  # type: ignore[assignment]
         db.commit()
+        # sub-0007-01 — archive changes the goal's status bucket in
+        # the goals-progress card and removes EF goals from the
+        # summary's EF avg pct. Invalidating only on the first archive
+        # mirrors the soft-delete idempotent pattern (an already-
+        # archived row has no new state to surface).
+        dashboard_cache.invalidate_for_table(user_id=current_user.id, table="goals")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

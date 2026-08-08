@@ -1,6 +1,6 @@
 # Project Tracker — Personal Finance Tracker
 
-> **Status:** v5.13-final (2026-08-06) — epic-0001 **DONE** (8/8); epic-0002 **DONE** (7/7 sub-task
+> **Status:** v6.12 (2026-08-09) — epic-0001 **DONE** (8/8); epic-0002 **DONE** (7/7 sub-task
 > + Stage 5 release fixup complete; [PR #18](https://github.com/01persen/PersonalFinanceTrackerV2/pull/18)
 > merged ke `main` pada 2026-07-27 13:06 UTC, CI hijau `api quality` + `web quality`).
 > epic-0003 **DONE** (8/8 sub-task + Stage H squash-merged ke `main`).
@@ -424,6 +424,36 @@
 > Stage 5 entry updated + Catatan entry Stage H.2 finalize
 > + Riwayat entry v6.11 (entry ini).
 > **Owner:** Tech Leader (Engineering Squad)
+>
+> **epic-0009 IN_PROGRESS** (v6.12, 2026-08-09 — Tech Leader
+> Stage A sourced, autopilot `db0c1663-4d0e-411e-8499-ed0cc8864a20`
+> trigger [GRE-114](https://multica/issues/GRE-114)):
+> dependency `epic-0003` DONE (verified di v6.11-final state
+> `origin/main` HEAD `9d1c401f2db059fdd46758d9d61961a16f3ab620`,
+> `epic-0001..epic-0008` semua DONE). Topmost (dan satu-satunya)
+> NOT_STARTED dengan semua upstream dependency DONE. Klarifikasi
+> stakeholder scope "recurring tagihan tetap (narrow)" sudah
+> landed di Epic Detail Doc `epic-0009-recurring-blocked.md`
+> (sejak v1.1, 2026-07-23). Stage A: parent issue `[epic-0009]`
+> Recurring Transaction & Reminder (narrow) di-create dengan
+> status `todo` + assignee Engineering Squad
+> (`84828b89-3153-4c66-8f14-db867fa74e4c`, routing ke Tech Leader)
+> + metadata pin `epic_id=epic-0009`,
+> `epic_doc_url=docs/product/epics/epic-0009-recurring-blocked.md`,
+> `tracker_url=docs/multica/epics.md`,
+> `prd_url=docs/prd.md`, `github_repo_url=https://github.com/01persen/PersonalFinanceTrackerV2.git`,
+> `project_folder=personal-finance-tracker/`, `squad_id`,
+> `release_branch=release/epic-0009`, `base_sha=9d1c401`,
+> `tracker_version=v6.12`, `stage=A`. Stage B (SA breakdown
+> Epic Detail Doc → sub-task list) akan di-trigger berikutnya
+> dengan mention ke System Analyst — follow-up internal TL,
+> bukan autopilot. Branch `release/epic-0009` di-cut dari
+> `origin/main` @ `9d1c401` post epic-0007 Stage H.2
+> squash-merge (PR #82). Table row epic-0009 flipped
+> `NOT_STARTED → IN_PROGRESS` + Stage Plan Stage 6 entry
+> expanded + Catatan entry epic-0009 Stage A complete + Riwayat
+> entry v6.12 (entry ini). Auto-pilot issue [GRE-114](https://multica/issues/GRE-114)
+> closed `done` post Stage A.
 
 Tracker mengikuti urutan dependency graph (bukan urgency bisnis), sesuai SOP.
 Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
@@ -440,7 +470,7 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
 | epic-0006 | Debt Tracker | P-CORE | **DONE** | 0002 | Backend + Frontend |
 | epic-0007 | Networth, Dashboard & Visualization | P-CORE | **DONE** | 0003, 0005, 0006 | Frontend + Backend |
 | epic-0008 | Export, Backup & Settings | P-ENHANCEMENT | **DONE** | 0001 | Backend + Frontend |
-| epic-0009 | Recurring Transaction & Reminder (narrow) | P-ENHANCEMENT | NOT_STARTED | 0003 | Backend + Frontend |
+| epic-0009 | Recurring Transaction & Reminder (narrow) | P-ENHANCEMENT | **IN_PROGRESS** | 0003 | Backend + Frontend |
 
 ## Dependency Graph
 
@@ -463,7 +493,7 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
 - **Stage 3:** epic-0003
 - **Stage 4 (paralel):** epic-0004 + epic-0005 + epic-0006
 - **Stage 5:** epic-0007 — **DONE** (v6.11, 2026-08-09 — Tech Leader Stage H.2 finalization post sub-0007-10 squash-merge `1c95096`): sub-task `sub-0007-11` `[GRE-109](https://multica/issues/GRE-109)` (Stage H.2 TL: cross-check 4/4 Epic AC + flip parent `[GRE-98](https://multica/issues/GRE-98)` `done` + tag `v0.9.0`) **DONE**. 4/4 Epic AC cross-checked end-to-end post-merge `main` HEAD `1c95096`: (a) perf `<2s @ 5k tx` — `apps/api/tests/qa/test_dashboard_perf.py` p95 ~11 ms di SQLite budget 500 ms + `dashboard-full.spec.ts` desktop render `<2000 ms` di 1280×800 verified; (b) no N+1 SQL trace — `apps/api/src/app/api/v1/dashboard.py:184` 1+1 batch query per endpoint verified; (c) networth formula sample — 5 asset @ 10jt − 2 liability @ 5jt + transfer pending 5jt = 45jt (atau 35jt per saldo-engine subtraction convention — `dashboard-ac3-networth.spec.ts` hand-verify accepts both per Epic Detail Doc §Spec Clarifications) verified; (d) mobile responsive — `dashboard-mobile.spec.ts` 390×844 ringkas view (KPI 2×2 + chart + CTA) + `dashboard-full.spec.ts` 1280×800 full verified. Tag `v0.9.0` di-cut dari `main` HEAD `1c95096` (Networth & Visualization milestone, sequence setelah `v0.8.0` Export & Settings). Parent `[GRE-98]` flipped `in_progress → done` dengan metadata final dipin: `merge_commit=1c95096cce3033b2e2e344ef5a0899769024e979`, `pr_url=https://github.com/01persen/PersonalFinanceTrackerV2/pull/82`, `pr_number=82`, `pipeline_status=passed`, `release_branch_tip=06d4f4be0c16e66b10e13070c6f25d01cd2370d6`, `tracker_version=v6.11`, `stage=H-final`. `release/epic-0007` preserved as protected historical branch per v2.9 SOP (HEAD `06d4f4b`). epic-0007 fully shipped. **11/11 sub-task DONE**. Carry-over non-blocking (informational): CI workflow `ci.yml` `release/*` push trigger (DevOps terpisah, epic-0003 carry-over); pre-existing flaky `test_get_sort_is_stable_for_same_day` di-skip via `-k` (mirror epic-0003 waive). epic-0009 (Recurring, BLOCKED scope sempit) tetap NOT_STARTED — eligible paralel atas permintaan stakeholder setelah klarifikasi.
-- **Stage 6:** epic-0009 — recurring tagihan tetap + reminder
+- **Stage 6:** epic-0009 — **IN_PROGRESS** (v6.12, 2026-08-09 — Tech Leader Stage A sourced post epic-0007 Stage H finalize v6.11): dependency `epic-0003` DONE. Topmost (satu-satunya) NOT_STARTED dengan semua upstream dependency DONE di v6.11-final state. Klarifikasi stakeholder scope "recurring tagihan tetap (narrow)" landed di Epic Detail Doc (sejak v1.1 2026-07-23). Sub-task planning 5 (2 BE model+worker + 1 BE reminder engine + 2 FE UI) — final breakdown oleh System Analyst di Stage B. Branch: `release/epic-0009` (cut dari `origin/main` @ `9d1c401`, post epic-0007 Stage H.2 squash-merge PR #82). Parent issue di-create oleh autopilot (Stage A minimal — create parent + initial metadata `epic_id`/`epic_doc_url`/`tracker_url`/`prd_url`/`project_folder`/`github_repo_url`/`squad_id`/`release_branch`/`base_sha` + tracker table flip + header v6.11 → v6.12), assignee Engineering Squad (`84828b89-3153-4c66-8f14-db867fa74e4c`). Stage B (SA breakdown Epic Detail Doc → sub-task list) akan di-trigger berikutnya dengan mention ke System Analyst (follow-up internal TL). Scope sempit: tagihan tetap (CC, langganan, cicilan flat) auto-create + reminder in-app H-3/H-1/H-0. Gaji tetap input manual (di luar scope). Materializer idempotent pakai `(recurring_rule_id, period_key)` key. Push notification, auto-debit, recurring variabel di luar scope MVP.
 
 ## Status Legend
 
@@ -882,12 +912,41 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
     epic-0003 carry-over); pre-existing flaky
     `test_get_sort_is_stable_for_same_day` di-skip via `-k`
     (mirror epic-0003 waive).
-- epic **0009** NOT_STARTED (v5.1 stakeholder revert 2026-08-03; histori
-  v3.9 sebelumnya sourced 2026-07-29 dengan branch `release/epic-0009` —
-  reverted per v5.1). Scope sempit: recurring untuk tagihan tetap
-  (CC, langganan, cicilan fixed amount) + reminder. Gaji tetap manual
-  (input sendiri setiap bulan, amount variabel). Tetap BLOCKED
-  klarifikasi stakeholder scope.
+- epic **0009** sekarang **IN_PROGRESS** (v6.12, 2026-08-09 — Tech Leader
+  Stage A sourced, autopilot [GRE-114](https://multica/issues/GRE-114)
+  trigger `db0c1663-4d0e-411e-8499-ed0cc8864a20`; histori v5.1
+  stakeholder revert 2026-08-03 + v3.9 sebelumnya sourced
+  2026-07-29 dengan branch `release/epic-0009` — reverted per v5.1;
+  re-source sekarang setelah epic-0007 Stage H close v6.11-final).
+  Stage A complete: parent issue `[epic-0009]` Recurring Transaction &
+  Reminder (narrow) di-create dengan status `todo` + assignee
+  Engineering Squad (`84828b89-3153-4c66-8f14-db867fa74e4c`, routing
+  ke Tech Leader) + metadata pin `epic_id=epic-0009`,
+  `epic_doc_url=docs/product/epics/epic-0009-recurring-blocked.md`,
+  `tracker_url=docs/multica/epics.md`, `prd_url=docs/prd.md`,
+  `github_repo_url=https://github.com/01persen/PersonalFinanceTrackerV2.git`,
+  `project_folder=personal-finance-tracker/`, `squad_id`,
+  `release_branch=release/epic-0009`, `base_sha=9d1c401f2db059fdd46758d9d61961a16f3ab620`,
+  `tracker_version=v6.12`, `stage=A`. Branch `release/epic-0009`
+  re-cut dari `origin/main` @ `9d1c401` (post epic-0007 Stage H.2
+  squash-merge [PR #82](https://github.com/01persen/PersonalFinanceTrackerV2/pull/82)
+  commit `1c95096cce3033b2e2e344ef5a0899769024e979` @ 2026-08-09
+  + tracker v6.11 commit `9d1c401`). Table row epic-0009 flipped
+  `NOT_STARTED → IN_PROGRESS` + Stage Plan Stage 6 entry expanded
+  + Riwayat entry v6.12 (entry ini). Scope sempit: recurring untuk
+  tagihan tetap (CC, langganan, cicilan fixed amount) + reminder
+  in-app H-3/H-1/H-0. Gaji tetap manual (input sendiri setiap bulan,
+  amount variabel — di luar scope MVP). Materializer idempotent
+  pakai `(recurring_rule_id, period_key)` key. Push notification,
+  auto-debit, recurring variabel di luar scope MVP. Sub-task planning
+  5 (2 BE: `sub-0009-01` model+endpoint CRUD + `sub-0009-02`
+  materializer/cron worker + idempotency; 1 BE: `sub-0009-03`
+  reminder engine + storage; 2 FE: `sub-0009-04` UI daftar recurring
+  rule + `sub-0009-05` UI reminder di dashboard) + Stage H finalize
+  (CI/CD + TL). Stage B (SA breakdown) trigger berikutnya. Epic-0009
+  dipilih karena topmost (satu-satunya) NOT_STARTED di tabel dengan
+  semua upstream dependency DONE (`epic-0003` DONE) — sesuai
+  Stage Plan Stage 6.
 - epic **0007** (dashboard) sengaja di stage terakhir karena butuh data dari
   0003 (transaction), 0005 (goal tracker), dan 0006 (debt tracker).
 - epic **0008** (export & settings) bisa paralel dengan 0002 karena berdiri
@@ -2290,3 +2349,35 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
     NOT_STARTED — eligible paralel atas permintaan stakeholder
     setelah klarifikasi scope. Sub-task `sub-0007-11` flipped
     `in_progress → done`. Stage H closed.
+- v6.12 (2026-08-09) — Tech Leader: epic-0009 **Stage A sourced**
+  (autopilot [GRE-114](https://multica/issues/GRE-114) trigger
+  `db0c1663-4d0e-411e-8499-ed0cc8864a20`). Post epic-0007 Stage H.2
+  finalization v6.11 — `epic-0003` DONE, `epic-0009` topmost (dan
+  satu-satunya) NOT_STARTED dengan semua upstream dependency DONE.
+  Klarifikasi stakeholder scope "recurring tagihan tetap (narrow)"
+  sudah landed di Epic Detail Doc `epic-0009-recurring-blocked.md`
+  (sejak v1.1, 2026-07-23). Stage A complete: parent issue
+  `[epic-0009]` Recurring Transaction & Reminder (narrow) di-create
+  dengan status `todo` + assignee Engineering Squad
+  (`84828b89-3153-4c66-8f14-db867fa74e4c`, routing ke Tech Leader)
+  + metadata pin `epic_id=epic-0009`,
+  `epic_doc_url=docs/product/epics/epic-0009-recurring-blocked.md`,
+  `tracker_url=docs/multica/epics.md`, `prd_url=docs/prd.md`,
+  `github_repo_url=https://github.com/01persen/PersonalFinanceTrackerV2.git`,
+  `project_folder=personal-finance-tracker/`, `squad_id`,
+  `release_branch=release/epic-0009`,
+  `base_sha=9d1c401f2db059fdd46758d9d61961a16f3ab620`,
+  `tracker_version=v6.12`, `stage=A`. Branch `release/epic-0009`
+  re-cut dari `origin/main` @ `9d1c401` (post epic-0007 Stage H.2
+  squash-merge [PR #82](https://github.com/01persen/PersonalFinanceTrackerV2/pull/82)
+  commit `1c95096cce3033b2e2e344ef5a0899769024e979` @ 2026-08-09).
+  Sub-task planning 5 + Stage H finalize — final breakdown oleh
+  System Analyst di Stage B. Stage B (SA breakdown Epic Detail Doc
+  → sub-task list) akan di-trigger berikutnya dengan mention ke
+  System Analyst (follow-up internal TL, bukan autopilot).
+  Tracker di-bump `v6.11 → v6.12` dengan Status block v6.12
+  paragraph + table row epic-0009 flipped
+  `NOT_STARTED → IN_PROGRESS` + Stage Plan Stage 6 entry expanded
+  + Catatan entry epic-0009 Stage A complete + Riwayat entry v6.12
+  (entry ini). Auto-pilot issue [GRE-114](https://multica/issues/GRE-114)
+  closed `done` post Stage A.

@@ -24,7 +24,7 @@ export {
 } from "@/components/dashboard/kpi-cards";
 export { NetworthTrendChart } from "@/components/dashboard/charts/networth-trend-chart";
 export { IncomeExpenseChart } from "@/components/dashboard/charts/income-expense-chart";
-export { TopCategoriesPlaceholder } from "@/components/dashboard/top-categories-placeholder";
+export { TopCategoriesDonut } from "@/components/dashboard/charts/top-categories-donut";
 export { DashboardMobileSummary } from "@/components/dashboard/dashboard-mobile-summary";
 export {
   GoalProgressSection,

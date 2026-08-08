@@ -25,7 +25,7 @@ import {
   LookupWarning,
   NetworthTrendChart,
   Toast,
-  TopCategoriesPlaceholder,
+  TopCategoriesDonut,
   scheduleToastDismiss,
 } from "@/components/dashboard";
 import { ApiError } from "@/lib/api/client";
@@ -38,6 +38,7 @@ import type {
   DashboardNetworthTrend,
   DashboardSummary,
   DashboardTopCategories,
+  DashboardTopCategory,
 } from "@/lib/dashboard/types";
 
 /**
@@ -489,7 +490,7 @@ export function DashboardContent({
                 </div>
               </DashboardGrid>
 
-              <TopCategoriesSection />
+              <TopCategoriesSection data={state.topCategories?.data ?? []} />
             </div>
 
             {view.showMobile ? (
@@ -518,11 +519,15 @@ export function DashboardContent({
  * standalone full-width row so the donut can breathe (the sub-0007-05
  * chart will replace the body without changing this layout shell).
  */
-function TopCategoriesSection() {
+function TopCategoriesSection({
+  data,
+}: {
+  data: DashboardTopCategory[];
+}) {
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-12 md:gap-6">
       <div className="md:col-span-12">
-        <TopCategoriesPlaceholder />
+        <TopCategoriesDonut data={data} />
       </div>
     </div>
   );

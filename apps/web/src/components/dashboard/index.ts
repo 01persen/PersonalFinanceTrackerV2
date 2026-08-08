@@ -10,8 +10,11 @@ export { DashboardError } from "@/components/dashboard/dashboard-error";
 export { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
 export { DashboardContent } from "@/components/dashboard/dashboard-content";
 export {
-  DashboardMobileSummary,
-} from "@/components/dashboard/dashboard-mobile-summary";
+  DashboardEmptyState,
+  LookupWarning,
+  Toast,
+  scheduleToastDismiss,
+} from "@/components/dashboard/states";
 export {
   KpiCard,
   KpiCards,
@@ -22,6 +25,7 @@ export {
 export { NetworthTrendChart } from "@/components/dashboard/charts/networth-trend-chart";
 export { IncomeExpenseChart } from "@/components/dashboard/charts/income-expense-chart";
 export { TopCategoriesPlaceholder } from "@/components/dashboard/top-categories-placeholder";
+export { DashboardMobileSummary } from "@/components/dashboard/dashboard-mobile-summary";
 export {
   GoalProgressSection,
   DebtSummarySection,

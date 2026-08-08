@@ -28,7 +28,10 @@ interface TopCategoriesDonutProps {
    * non-negative integer in minor units (1/100 rupiah), `percentage`
    * is a pre-computed 0..100 float, and `categoryName` may be `null`
    * for uncategorized expense — the donut renders that bucket as
-   * "Tanpa kategori" so the slot still has a readable label.
+   * "Tanpa nama" (per AC sub-0007-08) so the slot still has a
+   * readable label, and the parent surfaces a non-blocking
+   * `<LookupWarning>` + `<Toast>` so the user knows the real category
+   * name is missing.
    */
   data: DashboardTopCategory[];
 }
@@ -192,11 +195,11 @@ function buildSegmentLayout(data: DashboardTopCategory[]): {
 /**
  * Render label for a category. The backend may return `categoryName`
  * as `null` for the uncategorized bucket — we surface that as the
- * conventional "Tanpa kategori" string so the donut still has a
- * readable row instead of a blank slot.
+ * conventional "Tanpa nama" string so the donut still has a readable
+ * row instead of a blank slot. AC sub-0007-08 pins the exact copy.
  */
 function formatCategoryLabel(name: string | null): string {
-  if (!name || name.trim().length === 0) return "Tanpa kategori";
+  if (!name || name.trim().length === 0) return "Tanpa nama";
   return name;
 }
 

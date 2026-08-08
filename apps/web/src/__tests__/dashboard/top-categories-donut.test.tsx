@@ -24,8 +24,8 @@
  *     non-degenerate sweep and an empty string for a zero sweep
  *   - `polarToCartesian` returns (cx + r, cy) at the 12 o'clock
  *     anchor (angle 0 → -π/2 rotation puts the point to the right)
- *   - `formatCategoryLabel` falls back to "Tanpa kategori" when the
- *     backend returned `null`/blank
+ *   - `formatCategoryLabel` falls back to "Tanpa nama" (per AC
+ *     sub-0007-08) when the backend returned `null`/blank
  *   - `buildAriaLabel` echoes the empty-state copy on empty data and
  *     the total expense when data is present
  *
@@ -242,16 +242,16 @@ const testCases: TestCase[] = [
     },
   },
   {
-    name: "formatCategoryLabel(null) → 'Tanpa kategori' fallback",
+    name: "formatCategoryLabel(null) → 'Tanpa nama' fallback (AC sub-0007-08)",
     run(): void {
-      assert.equal(formatCategoryLabel(null), "Tanpa kategori");
+      assert.equal(formatCategoryLabel(null), "Tanpa nama");
     },
   },
   {
-    name: "formatCategoryLabel('') → 'Tanpa kategori' fallback (blank guard)",
+    name: "formatCategoryLabel('') → 'Tanpa nama' fallback (blank guard)",
     run(): void {
-      assert.equal(formatCategoryLabel(""), "Tanpa kategori");
-      assert.equal(formatCategoryLabel("   "), "Tanpa kategori");
+      assert.equal(formatCategoryLabel(""), "Tanpa nama");
+      assert.equal(formatCategoryLabel("   "), "Tanpa nama");
     },
   },
   {
@@ -267,10 +267,10 @@ const testCases: TestCase[] = [
     },
   },
   {
-    name: "buildAriaLabel(uncategorized) → 'Tanpa kategori' surfaces in label",
+    name: "buildAriaLabel(uncategorized) → 'Tanpa nama' surfaces in label",
     run(): void {
       const label = buildAriaLabel(UNCATEGORIZED_DATA);
-      assert.match(label, /Tanpa kategori/);
+      assert.match(label, /Tanpa nama/);
     },
   },
   {

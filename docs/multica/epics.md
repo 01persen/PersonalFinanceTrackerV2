@@ -372,6 +372,57 @@
 > `v0.9.0`), awaiting Stage H.1 merge complete. Catatan +
 > Stage Plan Stage 5 entry updated + Riwayat entry v6.10
 > (entry ini).
+> **epic-0007 (v6.11, 2026-08-09 — Tech Leader Stage H.2
+> finalization, post sub-0007-10 squash-merge `1c95096`)**:
+> sub-task `sub-0007-11` `[GRE-109](https://multica/issues/GRE-109)`
+> (Stage H.2 TL: cross-check 4/4 Epic AC + flip parent
+> `[GRE-98](https://multica/issues/GRE-98)` `done` + tag
+> `v0.9.0`) **DONE**. CI/CD Engineer squash-merge
+> [PR #82](https://github.com/01persen/PersonalFinanceTrackerV2/pull/82)
+> `release/epic-0007 → main` commit `1c95096cce3033b2e2e344ef5a0899769024e979`
+> post-CI hijau (`api quality` PASS 4m35s BE pytest 704/704
+> + ruff clean + mypy clean + `web quality` PASS 53s lint
+> 0 errors + typecheck clean + build clean Next 16.3.0).
+> `main` HEAD advance `d133333 → 1c95096`. Lint fix commit
+> `06d4f4b` resolve ruff I001 import sort di
+> `apps/api/tests/qa/test_dashboard_cache_invalidation.py:108`
+> (CI caught pre-merge; reorder `datetime` stdlib ke posisi
+> sebelum `app.*` import). `release/epic-0007` preserved as
+> protected historical branch per v2.9 SOP (HEAD `06d4f4b`).
+> Tag `v0.9.0` di-cut dari `main` HEAD `1c95096` (Networth &
+> Visualization milestone, sequence setelah `v0.8.0` Export &
+> Settings). 4/4 Epic AC cross-checked end-to-end post-merge
+> `main` HEAD `1c95096`: (a) perf `<2s @ 5k tx` —
+> `apps/api/tests/qa/test_dashboard_perf.py` p95 ~11 ms di
+> SQLite budget 500 ms + `dashboard-full.spec.ts` desktop
+> render `<2000 ms` di 1280×800 verified; (b) no N+1 SQL
+> trace — `apps/api/src/app/api/v1/dashboard.py:184` 1+1
+> batch query per endpoint verified; (c) networth formula
+> sample — 5 asset @ 10jt − 2 liability @ 5jt + transfer
+> pending 5jt = 45jt (atau 35jt per saldo-engine subtraction
+> convention — `dashboard-ac3-networth.spec.ts` hand-verify
+> accepts both per Epic Detail Doc §Spec Clarifications)
+> verified; (d) mobile responsive — `dashboard-mobile.spec.ts`
+> 390×844 ringkas view (KPI 2×2 + chart + CTA) +
+> `dashboard-full.spec.ts` 1280×800 full verified.
+> Parent `[GRE-98](https://multica/issues/GRE-98)` flipped
+> `in_progress → done` dengan metadata final dipin:
+> `merge_commit=1c95096cce3033b2e2e344ef5a0899769024e979`,
+> `pr_url=https://github.com/01persen/PersonalFinanceTrackerV2/pull/82`,
+> `pr_number=82`, `pipeline_status=passed`,
+> `release_branch_tip=06d4f4be0c16e66b10e13070c6f25d01cd2370d6`,
+> `tracker_version=v6.11`, `stage=H-final`.
+> **epic-0007 fully shipped** — 11/11 sub-task DONE
+> (sub-0007-01..11). Carry-over non-blocking (informational):
+> CI workflow `ci.yml` `release/*` push trigger (DevOps
+> terpisah, epic-0003 carry-over); pre-existing flaky
+> `test_get_sort_is_stable_for_same_day` di-skip via `-k`
+> (mirror epic-0003 waive). epic-0009 (Recurring, BLOCKED
+> scope sempit) tetap NOT_STARTED — eligible paralel atas
+> permintaan stakeholder setelah klarifikasi scope. Table
+> row epic-0007 flipped `IN_PROGRESS → DONE` + Stage Plan
+> Stage 5 entry updated + Catatan entry Stage H.2 finalize
+> + Riwayat entry v6.11 (entry ini).
 > **Owner:** Tech Leader (Engineering Squad)
 
 Tracker mengikuti urutan dependency graph (bukan urgency bisnis), sesuai SOP.
@@ -387,7 +438,7 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
 | epic-0004 | Categorization & Search | P-CORE | **DONE** | 0003 | Backend + Frontend |
 | epic-0005 | Goal Trackers (Saving & Emergency Fund) | P-CORE | **DONE** | 0002, 0003 | Backend + Frontend |
 | epic-0006 | Debt Tracker | P-CORE | **DONE** | 0002 | Backend + Frontend |
-| epic-0007 | Networth, Dashboard & Visualization | P-CORE | **IN_PROGRESS** | 0003, 0005, 0006 | Frontend + Backend |
+| epic-0007 | Networth, Dashboard & Visualization | P-CORE | **DONE** | 0003, 0005, 0006 | Frontend + Backend |
 | epic-0008 | Export, Backup & Settings | P-ENHANCEMENT | **DONE** | 0001 | Backend + Frontend |
 | epic-0009 | Recurring Transaction & Reminder (narrow) | P-ENHANCEMENT | NOT_STARTED | 0003 | Backend + Frontend |
 
@@ -411,7 +462,7 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
 - **Stage 2:** epic-0002 + epic-0008 (paralel — keduanya butuh 0001) — epic-0008 **DONE** (v5.8 Stage A + v5.9 Stage B + v5.10 Stage 1 closed + v5.11 Stage 2 closed + v5.12 Stage 3 closed + v5.13 Stage 4 closed + v5.13-final Stage H closed 2026-08-06; 6/6 sub-task DONE — Stage 1 paralel CSV+JSON/ZIP + Stage 2 BE settings race-fix propagated + Stage 3 FE Settings UI + Stage 4 FE Export Buttons + Stage 5 QA integration end-to-end + Stage H squash-merge ke `main`)
 - **Stage 3:** epic-0003
 - **Stage 4 (paralel):** epic-0004 + epic-0005 + epic-0006
-- **Stage 5:** epic-0007 — **IN_PROGRESS** (v6.10, 2026-08-09 — CI/CD Engineer Stage H.1 auto-progress post sub-0007-10 cherry-pick qa commit + open PR `release/epic-0007 → main` + label `epic-ready`; sub-task `sub-0007-09` QA Stage E PASS 4/4 Epic AC verified end-to-end (v6.9) + sub-task `sub-0007-10` CI/CD Stage H.1 DONE cherry-pick 2 commit `f81ecfe + ce79b05` ke `release/epic-0007` (release HEAD `b1439a1`) + open [PR #82](https://github.com/01persen/PersonalFinanceTrackerV2/pull/82) `release/epic-0007 → main` + label `epic-ready`); **10/11 sub-task DONE** (sub-0007-01 + 02 + 03 + 04 + 05 + 06 + 07 + 08 + 09 + 10 Stage H.1) + **1/11 backlog** (`sub-0007-11` TL Stage H.2 finalize, awaiting auto-merge complete). Sub-task list final 11 sub-task (sub-0007-12 added mid-flight for wire-TopCategoriesDonut, treated as Stage 4 spillover))
+- **Stage 5:** epic-0007 — **DONE** (v6.11, 2026-08-09 — Tech Leader Stage H.2 finalization post sub-0007-10 squash-merge `1c95096`): sub-task `sub-0007-11` `[GRE-109](https://multica/issues/GRE-109)` (Stage H.2 TL: cross-check 4/4 Epic AC + flip parent `[GRE-98](https://multica/issues/GRE-98)` `done` + tag `v0.9.0`) **DONE**. 4/4 Epic AC cross-checked end-to-end post-merge `main` HEAD `1c95096`: (a) perf `<2s @ 5k tx` — `apps/api/tests/qa/test_dashboard_perf.py` p95 ~11 ms di SQLite budget 500 ms + `dashboard-full.spec.ts` desktop render `<2000 ms` di 1280×800 verified; (b) no N+1 SQL trace — `apps/api/src/app/api/v1/dashboard.py:184` 1+1 batch query per endpoint verified; (c) networth formula sample — 5 asset @ 10jt − 2 liability @ 5jt + transfer pending 5jt = 45jt (atau 35jt per saldo-engine subtraction convention — `dashboard-ac3-networth.spec.ts` hand-verify accepts both per Epic Detail Doc §Spec Clarifications) verified; (d) mobile responsive — `dashboard-mobile.spec.ts` 390×844 ringkas view (KPI 2×2 + chart + CTA) + `dashboard-full.spec.ts` 1280×800 full verified. Tag `v0.9.0` di-cut dari `main` HEAD `1c95096` (Networth & Visualization milestone, sequence setelah `v0.8.0` Export & Settings). Parent `[GRE-98]` flipped `in_progress → done` dengan metadata final dipin: `merge_commit=1c95096cce3033b2e2e344ef5a0899769024e979`, `pr_url=https://github.com/01persen/PersonalFinanceTrackerV2/pull/82`, `pr_number=82`, `pipeline_status=passed`, `release_branch_tip=06d4f4be0c16e66b10e13070c6f25d01cd2370d6`, `tracker_version=v6.11`, `stage=H-final`. `release/epic-0007` preserved as protected historical branch per v2.9 SOP (HEAD `06d4f4b`). epic-0007 fully shipped. **11/11 sub-task DONE**. Carry-over non-blocking (informational): CI workflow `ci.yml` `release/*` push trigger (DevOps terpisah, epic-0003 carry-over); pre-existing flaky `test_get_sort_is_stable_for_same_day` di-skip via `-k` (mirror epic-0003 waive). epic-0009 (Recurring, BLOCKED scope sempit) tetap NOT_STARTED — eligible paralel atas permintaan stakeholder setelah klarifikasi.
 - **Stage 6:** epic-0009 — recurring tagihan tetap + reminder
 
 ## Status Legend
@@ -786,10 +837,51 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
     protected branch, mirror epic-0006/0008). `main` HEAD akan
     advance `d133333 → <merge_commit>` post squash-merge.
     `release/epic-0007` preserved as protected historical
-    branch. Sub-task progress: **10/11 DONE** (sub-0007-01..10)
+    branch.     Sub-task progress: **10/11 DONE** (sub-0007-01..10)
     + **1/11 backlog** (`sub-0007-11` TL Stage H.2 — cross-check
     4 AC + flip parent `done` + tag `v0.9.0`, awaiting auto-merge
     complete). Stage H.1 closed.
+  - **Stage H.2 Tech Leader complete** (v6.11, 2026-08-09, post
+    sub-0007-10 squash-merge `1c95096`): sub-task `sub-0007-11`
+    `[GRE-109](https://multica/issues/GRE-109)` (Stage H.2 TL)
+    **DONE**. CI/CD Engineer squash-merge
+    [PR #82](https://github.com/01persen/PersonalFinanceTrackerV2/pull/82)
+    `release/epic-0007 → main` commit
+    `1c95096cce3033b2e2e344ef5a0899769024e979` post-CI hijau
+    (`api quality` PASS 4m35s BE pytest 704/704 + ruff clean +
+    mypy clean + `web quality` PASS 53s lint 0 errors + typecheck
+    clean + build clean Next 16.3.0). `main` HEAD advance
+    `d133333 → 1c95096`. Lint fix commit `06d4f4b` resolve
+    ruff I001 import sort di
+    `apps/api/tests/qa/test_dashboard_cache_invalidation.py:108`
+    (CI caught pre-merge). `release/epic-0007` preserved as
+    protected historical branch per v2.9 SOP (HEAD `06d4f4b`).
+    Tag `v0.9.0` di-cut dari `main` HEAD `1c95096` (Networth &
+    Visualization milestone, sequence setelah `v0.8.0`).
+    4/4 Epic AC cross-checked end-to-end post-merge: (a) perf
+    `<2s @ 5k tx` — `apps/api/tests/qa/test_dashboard_perf.py`
+    p95 ~11 ms di SQLite budget 500 ms + `dashboard-full.spec.ts`
+    desktop render `<2000 ms` di 1280×800 verified; (b) no N+1
+    SQL trace — `apps/api/src/app/api/v1/dashboard.py:184` 1+1
+    batch query per endpoint verified; (c) networth formula
+    sample — 5 asset @ 10jt − 2 liability @ 5jt + transfer
+    pending 5jt = 45jt atau 35jt (saldo-engine subtraction
+    convention — `dashboard-ac3-networth.spec.ts` hand-verify
+    accepts both per Epic Detail Doc §Spec Clarifications)
+    verified; (d) mobile responsive —
+    `dashboard-mobile.spec.ts` 390×844 ringkas view (KPI 2×2 +
+    chart + CTA) + `dashboard-full.spec.ts` 1280×800 full
+    verified. Parent `[GRE-98](https://multica/issues/GRE-98)`
+    flipped `in_progress → done` dengan metadata final dipin
+    (6 keys: `merge_commit`, `pr_url`, `pr_number=82`,
+    `pipeline_status=passed`, `release_branch_tip`,
+    `tracker_version=v6.11`, `stage=H-final`). epic-0007
+    fully shipped — **11/11 sub-task DONE** (sub-0007-01..11).
+    Carry-over non-blocking (informational): CI workflow
+    `ci.yml` `release/*` push trigger (DevOps terpisah,
+    epic-0003 carry-over); pre-existing flaky
+    `test_get_sort_is_stable_for_same_day` di-skip via `-k`
+    (mirror epic-0003 waive).
 - epic **0009** NOT_STARTED (v5.1 stakeholder revert 2026-08-03; histori
   v3.9 sebelumnya sourced 2026-07-29 dengan branch `release/epic-0009` —
   reverted per v5.1). Scope sempit: recurring untuk tagihan tetap
@@ -2143,3 +2235,58 @@ Epic `BLOCKED` menunggu klarifikasi stakeholder atau dependency lain.
     Sub-task progress: **10/11 DONE** (sub-0007-01..10) +
     **1/11 backlog** (sub-0007-11 TL Stage H.2). Stage H.1
     closed; Stage H.2 next.
+- v6.11 (2026-08-09) — Tech Leader: epic-0007 **Stage H.2 finalization
+    post sub-0007-10 squash-merge `1c95096`**. Sub-task `sub-0007-11`
+    `[GRE-109](https://multica/issues/GRE-109)` (Stage H.2 TL: cross-check
+    4/4 Epic AC + flip parent `[GRE-98](https://multica/issues/GRE-98)`
+    `done` + tag `v0.9.0`) **DONE**. CI/CD Engineer squash-merge
+    [PR #82](https://github.com/01persen/PersonalFinanceTrackerV2/pull/82)
+    `release/epic-0007 → main` commit
+    `1c95096cce3033b2e2e344ef5a0899769024e979` post-CI hijau
+    (`api quality` PASS 4m35s BE pytest 704/704 + ruff clean +
+    mypy clean + `web quality` PASS 53s lint 0 errors + typecheck
+    clean + build clean Next 16.3.0). `main` HEAD advance
+    `d133333 → 1c95096`. Lint fix commit `06d4f4b` resolve
+    ruff I001 import sort di
+    `apps/api/tests/qa/test_dashboard_cache_invalidation.py:108`
+    (CI caught pre-merge; reorder `datetime` stdlib ke posisi
+    sebelum `app.*` import — squash-merge landed dengan lint
+    fix included). `release/epic-0007` preserved as protected
+    historical branch per v2.9 SOP (HEAD `06d4f4b`,
+    `--delete-branch=false` mirror epic-0006/0008). Tag
+    `v0.9.0` di-cut dari `main` HEAD `1c95096` (Networth &
+    Visualization milestone, sequence setelah `v0.8.0` Export &
+    Settings). 4/4 Epic AC cross-checked end-to-end post-merge:
+    (a) perf `<2s @ 5k tx` — `apps/api/tests/qa/test_dashboard_perf.py`
+    p95 ~11 ms di SQLite budget 500 ms + `dashboard-full.spec.ts`
+    desktop render `<2000 ms` di 1280×800 verified; (b) no N+1
+    SQL trace — `apps/api/src/app/api/v1/dashboard.py:184` 1+1
+    batch query per endpoint verified; (c) networth formula
+    sample — 5 asset @ 10jt − 2 liability @ 5jt + transfer
+    pending 5jt = 45jt atau 35jt (saldo-engine subtraction
+    convention — `dashboard-ac3-networth.spec.ts` hand-verify
+    accepts both per Epic Detail Doc §Spec Clarifications)
+    verified; (d) mobile responsive — `dashboard-mobile.spec.ts`
+    390×844 ringkas view (KPI 2×2 + chart + CTA) +
+    `dashboard-full.spec.ts` 1280×800 full verified.
+    Parent `[GRE-98](https://multica/issues/GRE-98)` flipped
+    `in_progress → done` dengan metadata final dipin (7 keys:
+    `merge_commit=1c95096cce3033b2e2e344ef5a0899769024e979`,
+    `pr_url=https://github.com/01persen/PersonalFinanceTrackerV2/pull/82`,
+    `pr_number=82`, `pipeline_status=passed`,
+    `release_branch_tip=06d4f4be0c16e66b10e13070c6f25d01cd2370d6`,
+    `tracker_version=v6.11`, `stage=H-final`). Tracker di-bump
+    `v6.10 → v6.11` dengan Status block v6.11 paragraph +
+    table row epic-0007 flipped `IN_PROGRESS → DONE` +
+    Stage Plan Stage 5 entry updated + Catatan entry Stage H.2
+    finalize + Riwayat entry v6.11 (entry ini).
+    **epic-0007 fully shipped** — **11/11 sub-task DONE**
+    (sub-0007-01..11). Carry-over non-blocking (informational):
+    CI workflow `ci.yml` `release/*` push trigger (DevOps
+    terpisah, epic-0003 carry-over, escalate terpisah);
+    pre-existing flaky `test_get_sort_is_stable_for_same_day`
+    di-skip via `-k` (mirror epic-0003 waive — bukan blocker).
+    epic-0009 (Recurring, BLOCKED scope sempit) tetap
+    NOT_STARTED — eligible paralel atas permintaan stakeholder
+    setelah klarifikasi scope. Sub-task `sub-0007-11` flipped
+    `in_progress → done`. Stage H closed.

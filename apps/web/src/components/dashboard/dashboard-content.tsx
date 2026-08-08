@@ -97,6 +97,12 @@ interface DashboardState {
   errorMessage: string | null;
 }
 
+// Re-exported under a more explicit name so the unit test can name
+// the type without going through `DashboardState` directly. The
+// type itself stays local to avoid leaking the internal shell
+// representation outside this module.
+export type { DashboardState };
+
 const INITIAL_STATE: DashboardState = {
   status: "loading",
   summary: null,
@@ -192,6 +198,75 @@ export function hasCategoryLookupFailure(
     (point) =>
       point.categoryName === null || point.categoryName.trim().length === 0,
   );
+}
+
+/**
+ * View enum for `<DashboardContent>`'s render tree. Pulled out so
+ * the unit test (sub-0007-08) can pin the wiring in isolation
+ * without spinning up a React renderer — the CI/CD review of
+ * sub-0007-07 flagged that no test mounts the page-level wiring,
+ * so a future regression that swaps "empty" for "ready" (or shows
+ * the mobile pane for a brand-new user) slipped past every gate.
+ */
+export type DashboardView =
+  | { kind: "loading" }
+  | { kind: "error"; message: string }
+  | { kind: "empty" }
+  | {
+      kind: "ready";
+      hasLookupFailure: boolean;
+      showMobile: boolean;
+      toastVisible: boolean;
+    };
+
+/**
+ * Pure view-selection predicate that the `<DashboardContent>` JSX
+ * consults once per render. The JSX is a thin switch over the
+ * returned enum; the unit test pins every (state × flag) combination
+ * the shell can land in.
+ *
+ * Branches:
+ *
+ *   - `state.status === "loading"`         → `loading`
+ *   - `state.status === "error"`           → `error` (with message)
+ *   - `state.status === "ready"` + brand-new → `empty` (replaces
+ *     KPI/grid AND mobile pane per TL decision sub-0007-08)
+ *   - `state.status === "ready"` + non-brand-new → `ready`
+ *     (`showMobile` carries the `showMobileSummary` prop so the
+ *     `/dashboard/full` route can suppress the mobile pane)
+ *
+ * `toastVisible` is gated by `categoryLookupFailed && !toastDismissed`
+ * so the test can verify the auto-dismiss wiring without spinning
+ * up timers.
+ */
+export function selectDashboardView(
+  state: DashboardState,
+  flags: {
+    isBrandNew: boolean;
+    categoryLookupFailed: boolean;
+    showMobileSummary: boolean;
+    toastDismissed: boolean;
+  },
+): DashboardView {
+  if (state.status === "loading") return { kind: "loading" };
+  if (state.status === "error") {
+    return {
+      kind: "error",
+      message: state.errorMessage ?? "Tidak bisa memuat dashboard.",
+    };
+  }
+  if (state.status === "ready") {
+    if (flags.isBrandNew) return { kind: "empty" };
+    return {
+      kind: "ready",
+      hasLookupFailure: flags.categoryLookupFailed,
+      showMobile: flags.showMobileSummary,
+      toastVisible: flags.categoryLookupFailed && !flags.toastDismissed,
+    };
+  }
+  // Should be unreachable; treat as loading so the user sees the
+  // skeleton instead of a blank shell.
+  return { kind: "loading" };
 }
 
 export function DashboardContent({
@@ -333,7 +408,19 @@ export function DashboardContent({
     };
   }, [categoryLookupFailed, toastDismissed, state.status]);
 
-  const showToast = categoryLookupFailed && !toastDismissed;
+  /**
+   * View-selection per the TL decision (sub-0007-08 #c630d63d):
+   * `isBrandNew` short-circuits the whole tree (no mobile pane, no
+   * desktop pane, no lookup warning). For non-new users the
+   * `showMobileSummary` prop still gates the mobile pane so the
+   * `/dashboard/full` route suppresses it.
+   */
+  const view = selectDashboardView(state, {
+    isBrandNew,
+    categoryLookupFailed,
+    showMobileSummary,
+    toastDismissed,
+  });
 
   const emptyTrend: DashboardNetworthTrend = { data: [] };
 
@@ -348,22 +435,20 @@ export function DashboardContent({
       <DashboardHeader user={user} />
 
       <div className="mt-6 space-y-6">
-        {state.status === "loading" ? <DashboardSkeleton /> : null}
+        {view.kind === "loading" ? <DashboardSkeleton /> : null}
 
-        {state.status === "error" ? (
+        {view.kind === "error" ? (
           <DashboardError
-            message={state.errorMessage}
+            message={view.message}
             onRetry={handleRetry}
           />
         ) : null}
 
-        {state.status === "ready" && state.summary && isBrandNew ? (
-          <DashboardEmptyState />
-        ) : null}
+        {view.kind === "empty" ? <DashboardEmptyState /> : null}
 
-        {state.status === "ready" && state.summary && !isBrandNew ? (
+        {view.kind === "ready" && state.summary ? (
           <>
-            {categoryLookupFailed ? (
+            {view.hasLookupFailure ? (
               <LookupWarning
                 kind="categories"
                 onRetry={handleRetry}
@@ -407,7 +492,7 @@ export function DashboardContent({
               <TopCategoriesSection />
             </div>
 
-            {showMobileSummary ? (
+            {view.showMobile ? (
               <DashboardMobileSummary
                 summary={state.summary}
                 networthTrend={state.networthTrend ?? emptyTrend}
@@ -417,7 +502,7 @@ export function DashboardContent({
         ) : null}
       </div>
 
-      {showToast ? (
+      {view.kind === "ready" && view.toastVisible ? (
         <Toast
           message="Beberapa kategori tidak dapat dimuat. Label diganti 'Tanpa nama' sementara."
           onDismiss={handleToastDismiss}
